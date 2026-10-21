@@ -1,0 +1,117 @@
+site_name: pirilib
+site_description: Demand forecasting and ACO-ABC based line-haul planning with your own objectives and constraints.
+site_author: Muhammet Ozdemir
+repo_url: https://github.com/mr-ozdemir/piriLIB
+repo_name: mr-ozdemir/piriLIB
+edit_uri: edit/main/docs/
+copyright: Copyright Muhammet Ozdemir, Apache-2.0
+
+exclude_docs: |
+  kararlar.md
+  olcumler.md
+  extensions/
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+nav:
+  - Home: index.md
+  - User guide: guide.md
+  - API reference:
+      - pirilib: api/pirilib.md
+      - pirilib.spec: api/spec.md
+      - pirilib.plan: api/plan.md
+      - pirilib.evaluation: api/evaluation.md
+      - pirilib.constraints: api/constraints.md
+      - pirilib.objective: api/objective.md
+      - pirilib.validate: api/validate.md
+      - pirilib.solvers:
+          - api/solvers/index.md
+          - pirilib.solvers.aco: api/solvers/aco.md
+          - pirilib.solvers.base: api/solvers/base.md
+          - pirilib.solvers.decompose: api/solvers/decompose.md
+          - pirilib.solvers.exact: api/solvers/exact.md
+          - pirilib.solvers.local_search: api/solvers/local_search.md
+      - pirilib.tuning: api/tuning.md
+      - pirilib.forecast: api/forecast.md
+      - pirilib.planio: api/planio.md
+      - pirilib.synthetic: api/synthetic.md
+      - pirilib.cli: api/cli.md
+
+theme:
+  name: material
+  language: en
+  icon:
+    logo: material/truck-fast-outline
+    repo: fontawesome/brands/github
+  features:
+    - navigation.indexes
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - toc.follow
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            extensions:
+              - docs/extensions/docstrings.py:DocstringMarkup
+            docstring_style: google
+            docstring_section_style: table
+            show_docstring_attributes: false
+            show_if_no_docstring: true
+            filters:
+              - "!^_"
+              - "^__version__$"
+            heading_level: 1
+            show_root_heading: true
+            show_root_full_path: true
+            show_source: false
+            show_bases: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            group_by_category: false
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            line_length: 88

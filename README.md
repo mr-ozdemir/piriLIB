@@ -120,6 +120,20 @@ models, regenerate the JSON Schema:
 python -m pirilib.spec.schema schemas/linehaul-0.2.schema.json
 ```
 
+### Documentation
+
+The documentation site (the user guide and an API reference generated from the
+docstrings) is built with MkDocs and Material for MkDocs from `mkdocs.yml` and
+`docs/`. `mkdocs serve` shows a live preview at http://127.0.0.1:8000, and
+`mkdocs build --strict` writes the static site to `site/`, failing on any
+warning (as CI does):
+
+```bash
+python -m pip install --group docs
+mkdocs serve
+mkdocs build --strict
+```
+
 ### Releasing
 
 Pushing a version tag such as `v0.1.0` runs `.github/workflows/release.yml`.
