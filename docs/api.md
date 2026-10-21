@@ -1,0 +1,74 @@
+# Public API and stability
+
+pirilib is pre-alpha: everything may still change. This page records which
+names are meant to become the stable 1.0 API, which stay experimental, and what
+has to happen before the API is frozen. It is reviewed together with the
+decision log at the first alpha.
+
+## Rules after 1.0
+
+- Semantic versioning. Breaking changes only in a new major version.
+- A name is public when it is exported by a public module's `__all__` and has
+  no leading underscore. Modules whose names start with `_` are internal.
+- A deprecated name keeps working for at least one minor release and warns with
+  `DeprecationWarning` before it is removed in the next major version.
+- Problem documents carry a schema id (`pirilib/linehaul@0.2`). Every 1.x
+  release reads every schema id that a 1.0 release read.
+- The plan file columns (`pirilib solve -o plan.csv`) and the command line
+  options are part of the API.
+- Every error caused by user input is a `PirilibError` (`SpecError`,
+  `PlanError`).
+- Supported Python versions: the three newest minor versions at release time,
+  at least 3.12.
+
+## Stable at 1.0
+
+| Area | Names |
+|---|---|
+| Problem | `load_spec`, `parse_spec`, `compile_spec`, `LineHaulSpec` and its models (`Calendar`, `Center`, `VehicleType`, `Cost`, `Fleet`, `OwnedVehicles`, `SpotOffer`, `Demand`, `Rules`, `MinFill`, `Stopover`, `HaversineMatrix`, `ExplicitMatrix`, `Arc`, `TableSource`), `SCHEMA_ID`, `UNLIMITED` |
+| Plans | `Plan`, `Dispatch`, `Load`, `planio.read_plan`, `planio.write_plan` |
+| Evaluation | `evaluate`, `Evaluation`, `check_plan`, `constraints.CATALOG`, `Constraint`, `constraint`, `MaxRouteKm`, `MaxDispatchesPerDay` |
+| Objectives | every term factory in `pirilib.objective` (`total_cost`, `dispatch_cost`, `service_cost`, `owned_fixed_cost`, `distance_km`, `dispatches`, `unused_capacity`, `unserved`, `violation`, `violations`), `Term`, `Sum` |
+| Solving | `solve`, `Solver` (protocol), `ACOSolver`, `ACOConfig`, `SolveResult`, `default_objective` |
+| Tuning | `tune`, `Tuner` (protocol), `BeeColony`, `RandomSearch`, `SearchSpace`, `Int`, `Float`, `Choice`, `aco_space`, `TuningResult`, `SearchResult`, `Trace` |
+| Forecasting | `Forecaster` (protocol), `History`, `load_history`, `clean`, `Calendar`, `Forecast`, `SeasonalMean`, `SeasonalNaive`, `Regression`, `Backtester`, `backtest`, `compare`, `report`, `Backtest`, `Fold`, `Scores` |
+| Command line | `generate`, `solve`, `check`, `forecast`, `backtest` |
+
+`LineHaulInstance` is stable as a type. Its array attributes are what custom
+constraints and solvers read; before 1.0 the documented subset becomes
+stable and the rest is renamed with a leading underscore.
+
+## Experimental at 1.0
+
+These keep working but may change in a minor release; they are marked as such
+in their docstrings.
+
+- `pirilib.solvers.exact.ExactSolver` and `ACOConfig.exact_nodes`.
+- Time, service and capacity rules of schema 0.2 in the solvers, until they
+  have been measured on more than synthetic problems.
+- `Regression(scale=True)`, `lightgbm_tweedie`, `PROTOTYPE_TWEEDIE`,
+  `lightgbm_space`, `tune_forecaster`, `tune_lightgbm`, `ForecastTuning`.
+- The forecast-to-plan bridge: `buffer_factors`, `planning_document`,
+  `demand_rows`.
+- `pirilib.synthetic`: generated problems may change between releases; only the
+  function signatures are kept.
+- `objective.linear_form`, `objective.FEATURES`: the contract between objectives
+  and the fast solver path.
+
+## Internal
+
+`pirilib.solvers._colony`, `pirilib.solvers._routing`, `pirilib.solvers.decompose`,
+`pirilib.solvers.local_search`, `pirilib.spec.tables`, `pirilib.spec._format`,
+`pirilib.geo` and `pirilib.cli` beyond `main`.
+
+## Before the freeze
+
+1. Give every public module an `__all__`; today `objective`, `constraints`,
+   `plan`, `evaluation`, `validate`, `planio`, `synthetic`, `geo` and `errors`
+   export their imports (`np`, `dataclass`, ...) as well.
+2. Decide the documented subset of `LineHaulInstance` arrays.
+3. Rename the internal modules listed above with a leading underscore, or say
+   in their docstrings that they are internal.
+4. Mark the experimental names in their docstrings.
+5. Settle the open decisions of the alpha review (`docs/kararlar.md`).
+6. Freeze schema `pirilib/linehaul@1.0` and keep reading 0.1 and 0.2.
