@@ -72,3 +72,9 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   `vehicle_limit`). Plan files have a `start` column.
 - `pirilib.forecast.Backtester` keeps fold settings for repeated backtests and
   comparisons.
+- The ant colony plans with times and center limits: on scheduled problems the
+  subproblems run in urgency order against a ledger of handling capacity and
+  vehicle slots per center and day, routes are timed (hourly costs and
+  lateness in the scores, also in local search), and demand that does not fit
+  waits for the next day within `max_deferral_days`. Objectives with a linear
+  form keep the fast path; whole-plan search keeps a ledger per ant.

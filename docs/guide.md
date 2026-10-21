@@ -244,6 +244,17 @@ The default solver is the ant colony (`pirilib.ACOSolver`):
 - **Local search.** It then changes vehicles, merges, relocates and rebalances
   routes, serves leftover demand and drops routes that cost more than they
   carry.
+- **Times and center limits.** With speeds, hourly costs, due times, deferral,
+  handling capacity or vehicle limits, the subproblems of a day are planned one
+  after another: first the most urgent (earliest due time), then the largest.
+  A ledger keeps what every center can still handle per day; ants only use
+  vehicle types with a slot left and load no more than the handling room, and
+  every finished subproblem is timed and charged to the days its handling
+  starts. Routes start as soon as their loads are ready; hourly costs and
+  lateness are part of the scores. Demand that does not fit and may wait
+  (`max_deferral_days`) joins the next day's subproblem with its due time
+  unchanged; otherwise it stays uncarried. Subproblems that touch no limited
+  center still run side by side.
 
 `ACOConfig` settings:
 
@@ -257,7 +268,7 @@ The default solver is the ant colony (`pirilib.ACOSolver`):
 | `tau_min` | 0.01 | lower pheromone bound (upper bound is 1) |
 | `update` | `iteration_best` | which solution lays pheromone |
 | `local_search` | true | improve the best routes of every subproblem |
-| `exact_nodes` | 0 | solve subproblems with at most this many destinations exactly (needs scipy) |
+| `exact_nodes` | 0 | solve subproblems with at most this many destinations exactly (needs scipy; not with times or center limits) |
 
 `pirilib.solvers.exact.ExactSolver` solves every subproblem to optimality by
 mixed-integer programming. It is meant for small problems and for measuring
@@ -356,10 +367,16 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
 
 - One-way line haul only: no return trips, working hours or driver rules.
 - Costs are fixed, per km and per hour; there are no costs per unit carried.
-- The solvers do not yet plan with times, deferral, handling capacity or
-  vehicle limits: the ant colony then searches whole plans and only the
-  penalties steer it, so handling capacity can be exceeded; the exact solver
-  refuses such problems. The evaluator and the checker measure them all.
+- With times, deferral or center limits the ant colony plans greedily, day by
+  day and subproblem by subproblem: an earlier subproblem never gives up room
+  for a later one, and deferral does not look at the next day's capacity.
+  While building routes it counts all handling on the departure day; the exact
+  days are used only afterwards, so room after midnight is partly left unused
+  and, rarely, a limit is exceeded (the penalty then shows it). Departures are
+  always as early as the loads allow; the solver never sets `start` to wait.
+  Planning one by one is slower: 2 to 2.5x the untimed time on a 10-center
+  problem and 4.5x on 81 centers. The exact solver does not support these
+  problems yet.
 - Local search runs in plain Python, which roughly doubles solve time on large
   problems.
 - The exact solver needs splittable demand and up to about 9 destinations per

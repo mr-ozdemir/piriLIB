@@ -126,3 +126,28 @@ Hiçbir seçenek doğruluğu düşürmeden bias'ı gidermiyor; varsayılan model
 
 - Zamanlı property testi: 2.000 rastgele planda yeni kurallar tetiklendi (araç limiti 951, erteleme 830, hazır olmadan yükleme 520, elleçleme 84 plan; gecikme cezası 1.374 plan); numpy değerlendirici ile saf Python doğrulayıcı arasında 0 uyuşmazlık.
 - ACO, 10 merkez, 2 gün, 80 talep (sentetik): zamansız problem hızlı yolda 0,7 sn, uygun, 855.347. Aynı problem hız, saatlik maliyet, 09:00 / 17:00 hazır saatleri, 24 saat teslim, elleçleme ve bir merkezde 60.000 desi elleçleme kapasitesiyle genel yolda 1,4 sn, 1.059.052 (gecikme 12.230) ve **elleçleme kapasitesi 172.907 desi aşıldı**: koloni henüz kapasiteyi ve ertelemeyi bilmiyor (3b).
+
+## v0.3 adım 3b
+
+3a'daki sentetik problem yeniden kuruldu: `synthetic.generate(centers=10, days=2, demand_per_day=40, seed=3)`, bütün araç tiplerine 70 km/sa, bütün araçlara saatlik 320, çift sıradaki taleplere 17:00, tek sıradakilere 09:00 hazır saati, 24 saat teslim, gecikme cezası 0,5, dakikada 100 desi elleçleme ve M001'e (merkez 0) günlük 60.000 desi elleçleme kapasitesi. Zamansız hali 3a ile aynı sonucu veriyor (855.347); eski genel yolun aşımı birebir aynı (172.907,2 desi), maliyeti 1.058.717 (3a'da 1.059.052; saatlik maliyetin 3a'daki değeri bilinmediği için küçük fark). Süreler 7 çalıştırmanın en kısası (eski kod 3).
+
+| Problem | Kod | Yol | Süre | Toplam maliyet | Gecikme | İhlal |
+|---|---|---|---|---|---|---|
+| Zamansız | main | hızlı | 0,31 sn | 855.347 | - | - |
+| Zamansız | 3b | hızlı | 0,23 sn | 855.347 | - | - |
+| 60.000 desi | main | genel | 1,70 sn | 1.058.717 | 12.230 | elleçleme 172.907 |
+| 60.000 desi | 3b | doğrusal | 0,44 sn | 746.718 | 5.755 | kapsama 204.094 |
+| 60.000 desi, 1 gün erteleme | 3b | doğrusal | 0,47 sn | 763.071 | 5.755 | kapsama 211.616 |
+| 250.000 desi | main | genel | 1,70 sn | 1.070.403 | 5.755 | - |
+| 250.000 desi | 3b | doğrusal | 0,58 sn | 1.032.126 | 5.755 | - |
+| Kapasitesiz | main | genel | 1,68 sn | 1.070.403 | 5.755 | - |
+| Kapasitesiz | 3b | doğrusal | 0,32 sn | 1.032.131 | 5.755 | - |
+
+- 60.000 desi ile uygun plan yok: M001 günde yaklaşık 162.000 desi yükler ve boşaltır (iki günde 324.000). Gece yarısını aşan varışlarla 3. gün de sayılsa en çok 180.000 desi elleçlenebilir, yani en az 144.000 desi taşınamaz. 3b planı elleçleme, araç limiti, hazır olma ve erteleme ihlali olmadan 204.094 desi bırakıyor; M001'de günlere göre elleçlenen 60.000 / 60.000 / 0. Kalan farkın nedeni inşa sırasında her şeyin çıkış gününe yazılması: kapasitesiz planda M001'in 3. gün payı 31.187 desi, 3b bu odayı kullanamıyor.
+- Uygunluk eşiği 230.000 (2.463 desi kalıyor) ile 250.000 arasında. 250.000'de 3b eski genel yoldan %3,6 ucuz ve 2,9 kat hızlı.
+- Süre: 60.000 desi için zamansız hızlı yolun 1,94 katı (aynı kodla; main'in zamansız süresine göre 1,4 kat), 250.000 için 2,5 katı. Zamansız hızlı yol da hızlandı (0,31 sn'den 0,23 sn'ye): karıncalar boş satır kümeleri için artık işlem yapmıyor.
+- Erteleme maliyeti ilk denemede yalnız gecikme ve araç kapasitesi başına sefer payıydı; erteleme her zaman ucuz göründü ve kapasitesiz problemde bile yükler ertesi güne kaydı (1 gün ertelemeyle 1.201.052, gecikme 263.667). Tek başına bir sefer maliyetiyle değiştirildi; şimdi kapasitesiz problemde ertelemeli ve ertelemesiz sonuç aynı (1.032.131).
+- Değişmezlik testi: 150 rastgele zamanlı problemde (hız, saatlik maliyet, hazır saatleri, 4/8/24 saat teslim, 0-2 gün erteleme, merkezlerin %40'ında elleçleme kapasitesi, %30'unda araç limiti) çözücünün iç skoru ile `evaluate` sonucundan hesaplanan amaç arasındaki en büyük göreli fark 3,8e-16. Rota, yük, hazır olma, erteleme, kapasite ve bölme ihlali hiç yok; elleçleme 1, araç limiti 2 problemde kaldı (çıkış günü yaklaşımı; skora dahil).
+- Zamansız gerileme: örnek problem, 40 rastgele problem (yerel aramalı, yerel aramasız, genel yol) ve 6 sentetik problem (`exact_nodes` ile ve olmadan), toplam 134 çalıştırmada planlar, skorlar ve amaç değerleri main ile birebir aynı.
+- Aynı 60 rastgele zamanlı problemde main'in genel yoluna göre: elleçleme ihlali olan plan 0 (main 40), araç limiti ihlali olan plan 0 (main 27); amaç 27 problemde eşit ya da daha iyi. Kalanlarda 3b talebi taşımadan bırakıyor, main ise kapasiteyi aşarak taşıyordu (ikisi de birim başına 1e6 ceza), bir problemde de spot günlük limitini önce gelen çıkışlar tüketiyor (bilinen açgözlü paylaşım). Toplam süre 9,5 sn (main 31,0 sn).
+- 81 merkez, 1 gün, 1.350 talep: zamansız 6,0 sn (main 7,1 sn), plan aynı (16.307.932). Zamanlı (aynı saat ve hız ayarları, en yoğun 5 merkezde toplam yükün %80'i kadar elleçleme kapasitesi): 3b 27,3 sn, 23.438.084, uygun; main genel yol 10,2 sn, 32.369.304, minimum doluluk ihlali 25.583 desi. Alt problemlerin çoğu sınırlı bir merkeze dokunduğu için tek tek çözülüyor (71 parti; zamansızda 5), süre zamansızın 4,5 katı.

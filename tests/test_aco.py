@@ -147,7 +147,7 @@ def test_solve_shortcut(instance: LineHaulInstance) -> None:
     assert repr(result).startswith("SolveResult(objective=")
 
 
-def test_scheduled_problems_use_whole_plans(
+def test_scheduled_problems_are_planned_piece_by_piece(
     document: dict[str, Any], compile_document: Any
 ) -> None:
     document["schema"] = "pirilib/linehaul@0.2"
@@ -158,7 +158,8 @@ def test_scheduled_problems_use_whole_plans(
     instance = compile_document(document)
     assert instance.scheduled
     result = solve(instance, seed=0)
-    assert result.stats["mode"] == "general"
+    assert result.stats["mode"] == "linear"
     for name in ("route", "load_route", "ready", "deferral", "ban", "owned_line", "capacity"):
         assert result.evaluation.violations[name] == 0, name
     assert result.objective == pytest.approx(default_objective()(result.evaluation))
+    assert result.stats["score"] == pytest.approx(result.objective, rel=1e-9)

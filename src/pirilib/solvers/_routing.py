@@ -2,7 +2,8 @@
 
 They mirror :func:`pirilib.solvers._colony.scores` and the evaluator: a route is
 an option and its stops in visiting order; its value is the part of a linear
-objective that the route contributes.
+objective that the route contributes. On scheduled instances the caller times
+the route (see :mod:`pirilib.solvers._timing`) and passes its hours and lateness.
 """
 
 import itertools
@@ -62,10 +63,15 @@ def route_value(
     option: int,
     km: float,
     load: NDArray[np.float64],
+    *,
+    hours: float = 0.0,
+    service: float = 0.0,
 ) -> float:
-    """The route's share of the linear objective."""
+    """The route's share of the linear objective; ``service`` is its lateness penalty."""
     kind = "owned" if problem.kind[option] == OWNED else "spot"
     cost = float(problem.fixed[option] + problem.per_km[option] * km)
+    if hours:
+        cost += float(problem.per_hour[option]) * hours
     capacity = float(problem.capacity[option, shared.primary])
     carried = float(load[shared.primary])
     shortfall = float(shared.min_fill[problem.kind[option]]) * capacity - carried
@@ -77,6 +83,8 @@ def route_value(
     )
     if shortfall > TOLERANCE * capacity:
         value += coefficients.get("violation[min_fill]", 0.0) * shortfall
+    if service:
+        value += coefficients.get("service", 0.0) * service
     return value
 
 
@@ -85,9 +93,30 @@ def unserved_value(
     coefficients: Mapping[str, float],
     shared: Shared,
     remaining: NDArray[np.float64],
+    item_left: NDArray[np.bool_] | None = None,
 ) -> float:
-    """The objective's share for demand left uncarried, ``remaining`` per node and dimension."""
-    value = coefficients.get("unserved", 0.0) * float(remaining.sum())
+    """The objective's share for demand left uncarried, ``remaining`` per node and dimension.
+
+    Items that may wait for the next day (whole items: those in ``item_left``)
+    cost their :attr:`~pirilib.solvers.decompose.Subproblem.defer_cost` under
+    ``service`` instead of counting as unserved.
+    """
+    value = 0.0
+    if problem.deferrable:
+        primary = shared.primary
+        waits = ~problem.item_final
+        quantity = problem.item_quantity
+        if shared.rules.split_demand:
+            safe = np.where(problem.demand > 0, problem.demand, 1.0)
+            share = np.where(problem.demand > 0, remaining / safe, 0.0)
+            waiting = quantity * share[:, None, :] * waits[:, :, None]
+        else:
+            assert item_left is not None
+            waiting = quantity * (waits & item_left)[:, :, None]
+        deferred = float(np.sum(waiting[:, :, primary] * problem.defer_cost))
+        value += coefficients.get("service", 0.0) * deferred
+        remaining = np.clip(remaining - waiting.sum(axis=1), 0.0, None)
+    value += coefficients.get("unserved", 0.0) * float(remaining.sum())
     for column, name in enumerate(shared.dimensions):
         value += coefficients.get(f"unserved[{name}]", 0.0) * float(remaining[:, column].sum())
     threshold = TOLERANCE * np.maximum(problem.demand, 1.0)
