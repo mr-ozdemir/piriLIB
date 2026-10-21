@@ -7,6 +7,7 @@ from pirilib import ACOConfig
 from pirilib import objective as obj
 from pirilib.spec import LineHaulInstance
 from pirilib.tuning import BeeColony, Choice, Float, Int, RandomSearch, SearchSpace, aco_space, tune
+from pirilib.tuning.bee_colony import latin_hypercube
 
 TARGET = np.array([0.3, 0.7, 0.2])
 
@@ -108,3 +109,21 @@ def test_tune_returns_a_valid_config(instance: LineHaulInstance) -> None:
     assert result.score <= 0.0
     with pytest.raises(ValueError, match="at least one training instance"):
         tune([], budget=3)
+
+
+def test_latin_hypercube_fills_every_slice() -> None:
+    points = latin_hypercube(np.random.default_rng(0), 5, 3)
+    assert points.shape == (5, 3)
+    assert ((points >= 0) & (points < 1)).all()
+    for axis in range(3):
+        assert sorted((points[:, axis] * 5).astype(int)) == [0, 1, 2, 3, 4]
+
+
+def test_default_colony_beats_random_search_at_small_budgets() -> None:
+    def sphere(point: Any) -> float:
+        shifted = 10 * (point - 0.3)
+        return float(np.sum(shifted * shifted))
+
+    colony = np.mean([BeeColony().minimize(sphere, 3, 24, seed=s).best_value for s in range(20)])
+    random = np.mean([RandomSearch().minimize(sphere, 3, 24, seed=s).best_value for s in range(20)])
+    assert colony < random

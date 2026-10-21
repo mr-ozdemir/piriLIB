@@ -68,6 +68,25 @@ ACO ayarı, 3 eğitim + 4 test problemi (30 merkez, 400 talep, minimum doluluk %
 
 Küçük problemlerde (temel ayar zaten optimum) eğitim farkı gürültü düzeyindeydi ve ABC'nin seçtiği ayar testte %3,9 kötüleşti; bu yüzden `min_improvement` eşiği eklendi.
 
+### Küçük bütçe düzeltmesi (K149)
+
+Latin hiperküp başlangıç ve bütçeye göre kaynak sayısı (bütçe // 8, 2 ile 4 arası). Test fonksiyonlarında (sphere, Rastrigin, Rosenbrock, Ackley; 3 ve 6 boyut; 40 tohum) ortalama en iyi değerin rastgele aramaya oranı, küçük daha iyi:
+
+| Bütçe | Eski ABC (6 kaynak, düzgün rastgele başlangıç) | Yeni varsayılan |
+|---|---|---|
+| 24 | 0,99 - 1,70 | 0,66 - 1,00 |
+| 60 | 0,50 - 1,10 | 0,35 - 0,82 |
+| 150 | 0,08 - 0,60 | 0,02 - 0,54 |
+
+Aynı ACO ayar deneyi (yukarıdaki tablo, ayarlayıcı tohumu 5):
+
+| Ayarlayıcı | Eğitim | Görülmemiş test | Süre |
+|---|---|---|---|
+| ABC (yeni varsayılan) | -%63,7 | -%67,4 | 152 sn |
+| Rastgele arama | -%67,1 | -%70,0 | 145 sn |
+
+Fark -%24,2'den -%67,4'e kapandı; 24 ayarlık bütçede rastgele arama hâlâ biraz önde (tek tohum, fark gürültü düzeyine yakın). K107'deki öneri (bütçe en az 60 ayar) geçerli.
+
 ## Tahmin motoru (v0.2)
 
 ### Prototip verisiyle denklik

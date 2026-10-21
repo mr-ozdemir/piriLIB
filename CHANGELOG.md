@@ -70,6 +70,8 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   compute the timeline, hourly costs, lateness (`service_cost`, part of
   `total_cost`) and four new constraints (`ready`, `deferral`, `handling`,
   `vehicle_limit`). Plan files have a `start` column.
+- `BeeColony` starts from a Latin hypercube and, unless `sources` is set,
+  sizes the colony by the budget, which helps small tuning budgets.
 - `pirilib.forecast.Backtester` keeps fold settings for repeated backtests and
   comparisons.
 - Time waves in `pirilib.forecast`: `WaveSplitter` learns wave shares per line
