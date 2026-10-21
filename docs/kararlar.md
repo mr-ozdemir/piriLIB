@@ -208,6 +208,9 @@ dağıtım adı.
 | K146 | HiGHS'in C++ tarafından standart çıktıya yazdığı tanı satırları, `milp`/`linprog` çağrıları sırasında dosya tanımlayıcısı boş aygıta yönlendirilerek susturulur | Kütüphane kullanıcının konsolunu kirletmemeli | Çıktıyı bırakmak | `solvers/exact.py` | açık |
 | K147 | Depo kökündeki `test.py` (GitHub düzenleme denemesi) silindi; kütüphane yapısında değil, paketlenmiyor, test içermiyor; `54a46b2`'den geri alınabilir | Kütüphane yapısı kuralı | `tests/` altına taşımak | depo kökü | açık |
 | K148 | `forecast.Backtester(folds, days, calendar, starts)` sınıfı: `.run`, `.compare`, `.starts`; `backtest`/`compare` ona yönlenen ince fonksiyonlar | Ortak ayarlar tek yerde (K144) | Yalnız fonksiyonlar | `forecast/evaluate.py` | açık |
+| K149 | ABC başlangıç besin kaynakları Latin hiperküp; `sources` verilmezse bütçe // 8, 2 ile 4 arası (K101'deki 6 kaynağın yerine). Test fonksiyonlarında 24 değerlendirmede rastgele aramadan iyi ya da eşit, 60 ve 150'de eskisinden iyi (`docs/olcumler.md`) | K107'deki küçük bütçe zayıflığı | Sabit 6 kaynak, küçük bütçede rastgele aramaya düşmek | `tuning/bee_colony.py` | açık |
+| K150 | Yayın hazırlığı: `project.urls` GitHub deposunu gösterir; README bağlantıları PyPI'de de çalışsın diye mutlak GitHub adresi; yayın iş akışı etiketin sürümle aynı olduğunu denetler ve tekerleği kurup `pirilib --help` ile dener | PyPI sayfası ve yanlış etiketle yayın riski | Göreli bağlantılar | `pyproject.toml`, `README.md`, `release.yml` | açık |
+| K151 | API kararlılık kuralları ve 1.0 listesi `docs/api.md`'de: semver, `__all__` ile public, bir küçük sürüm uyarılı kullanımdan kaldırma, 1.x tüm eski şema kimliklerini okur, plan CSV sütunları API'nin parçası; deneysel ve iç adlar ayrı listede | 1.0 dondurmasına hazırlık | Kuralları 1.0'da yazmak | `docs/api.md` | açık |
 
 ## Sana sorulacaklar
 
@@ -222,3 +225,4 @@ Kendi başıma yapamadığım ya da senin hesabınla yapılması gereken işler.
 | S05 | Depo özel; belge sitesi (GitHub Pages) özel depoda ücretli plan ister. Siteyi şimdilik yalnız yerelde mi tutalım? | Hesap planı | Depo açılana kadar yerelde `mkdocs serve` | bekliyor |
 | S06 | Kararlar listesinin (K01...) alfa incelemesi | Senin kararın | İnceleme belgesinden sırayla | bekliyor |
 | S07 | Senin eklediğin `test.py` silindi (K147). Başka bir amacı varsa geri getiririm | Dosya senindi | Silinmiş kalsın | bekliyor |
+| S08 | README ve `project.urls` GitHub'a bağlı; depo özel kalırsa PyPI sayfasındaki bağlantılar açılmaz. Yayında depo açık mı olacak? | Depo görünürlüğü | İlk PyPI yayınında depoyu açmak; o zamana kadar yalnız TestPyPI | bekliyor |
