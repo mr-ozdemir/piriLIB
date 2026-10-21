@@ -70,3 +70,5 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   compute the timeline, hourly costs, lateness (`service_cost`, part of
   `total_cost`) and four new constraints (`ready`, `deferral`, `handling`,
   `vehicle_limit`). Plan files have a `start` column.
+- `pirilib.forecast.Backtester` keeps fold settings for repeated backtests and
+  comparisons.

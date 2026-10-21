@@ -309,7 +309,8 @@ week = fc.lightgbm_tweedie().forecast(history, start, 7, calendar)
 - **Presence.** Lines are forecast only on weekdays on which they had a record
   in the last 35 days.
 - **Backtest.** `backtest` and `compare` run walk-forward folds and pool WMAPE
-  over them. `tune_forecaster` and `tune_lightgbm` tune with the bee colony on
+  over them. `Backtester(folds, days, calendar)` keeps the fold settings for
+  repeated runs: `.run(history, model)`, `.compare(history, models)`. `tune_forecaster` and `tune_lightgbm` tune with the bee colony on
   validation folds.
 - **To planning.** `planning_document(network, forecast, factors=...)` turns
   a network (centers, fleet, rules) plus the forecast into a problem. With
@@ -342,6 +343,14 @@ Plan files have one row per load. The columns are `dispatch`, `date`, `kind`,
 (separated by `|`), `route_km`, `dispatch_cost`, `demand`, `destination` and one
 column per quantity dimension. `pirilib check` reads them back, so plans made
 elsewhere can be audited too.
+
+## Library structure
+
+Classes own state and settings: solvers, tuners, forecasters, backtesters,
+plans, evaluations and the specification models. A public function is either a
+stateless transformation (`load_spec`, `read_plan`, `synthetic.generate`) or a
+thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
+`backtest`). Extension points are protocols: `Solver`, `Tuner`, `Forecaster`.
 
 ## Known limits
 

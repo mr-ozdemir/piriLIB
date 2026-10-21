@@ -6,7 +6,16 @@ need ``pip install "pirilib[forecast]"``.
 """
 
 from pirilib.forecast.bridge import buffer_factors, demand_rows, planning_document
-from pirilib.forecast.evaluate import Backtest, Fold, Scores, backtest, compare, fold_starts, report
+from pirilib.forecast.evaluate import (
+    Backtest,
+    Backtester,
+    Fold,
+    Scores,
+    backtest,
+    compare,
+    fold_starts,
+    report,
+)
 from pirilib.forecast.history import History, load_history
 from pirilib.forecast.models import (
     PROTOTYPE_TWEEDIE,
@@ -24,6 +33,7 @@ __all__ = [
     "FEATURES",
     "PROTOTYPE_TWEEDIE",
     "Backtest",
+    "Backtester",
     "Calendar",
     "Fold",
     "Forecast",

@@ -203,9 +203,11 @@ dağıtım adı.
 | # | Karar | Neden | Alternatif | Yer | Durum |
 |---|---|---|---|---|---|
 | K143 | Kodda ve yapılandırma dosyalarında `#` yorum satırı yok; satır sonu alan açıklamaları sınıf docstring'lerinin "Attributes" bölümüne taşındı; docstring'ler yorum sayılmadı ve kaldı (kütüphanenin API belgesi) | Kullanıcı kuralı | Docstring'leri de kaldırmak | tüm repo | açık |
-| K144 | "OOP ve kütüphane yapısı" yorumu: motorlar ve veriler sınıf (çözücüler, ayarlayıcılar, tahminciler, plan, değerlendirme, spec modelleri); `evaluate`, `solve`, `load_spec`, `backtest` gibi ince modül fonksiyonları numpy/scikit-learn tarzı giriş noktası olarak kaldı | Python kütüphane alışkanlığı | Her şeyi sınıf metodu yapmak | tüm repo | açık |
+| K144 | "OOP ve kütüphane yapısı" yorumu: durum ya da ayar taşıyan her şey sınıf (çözücüler, ayarlayıcılar, tahminciler, `Backtester`, plan, değerlendirme, spec modelleri); public fonksiyon ya durumsuz dönüşüm (`load_spec`, `read_plan`) ya da bir sınıfı kurup çağıran ince giriş noktası (`solve`, `evaluate`, `backtest`); kural `docs/guide.md` "Library structure" bölümünde; `instance.solve()` gibi metot takmaları yok (döngüsel import, tek `evaluate`) | Python kütüphane alışkanlığı | Her şeyi sınıf metodu yapmak | tüm repo | açık |
 | K145 | Commit'ler yerelde atılır, push'u depo sahibi yapar | Kullanıcı kuralı | - | git | açık |
 | K146 | HiGHS'in C++ tarafından standart çıktıya yazdığı tanı satırları, `milp`/`linprog` çağrıları sırasında dosya tanımlayıcısı boş aygıta yönlendirilerek susturulur | Kütüphane kullanıcının konsolunu kirletmemeli | Çıktıyı bırakmak | `solvers/exact.py` | açık |
+| K147 | Depo kökündeki `test.py` (GitHub düzenleme denemesi) silindi; kütüphane yapısında değil, paketlenmiyor, test içermiyor; `54a46b2`'den geri alınabilir | Kütüphane yapısı kuralı | `tests/` altına taşımak | depo kökü | açık |
+| K148 | `forecast.Backtester(folds, days, calendar, starts)` sınıfı: `.run`, `.compare`, `.starts`; `backtest`/`compare` ona yönlenen ince fonksiyonlar | Ortak ayarlar tek yerde (K144) | Yalnız fonksiyonlar | `forecast/evaluate.py` | açık |
 
 ## Sana sorulacaklar
 
@@ -219,3 +221,4 @@ Kendi başıma yapamadığım ya da senin hesabınla yapılması gereken işler.
 | S04 | İlk yayın: sürümü `0.1.0`'a mı (ya da `0.1.0a1`'e mi) çekelim, etiketi ne zaman atalım? | Yayın kararı senin | `0.1.0a1` ile TestPyPI'de alfa | bekliyor |
 | S05 | Depo özel; belge sitesi (GitHub Pages) özel depoda ücretli plan ister. Siteyi şimdilik yalnız yerelde mi tutalım? | Hesap planı | Depo açılana kadar yerelde `mkdocs serve` | bekliyor |
 | S06 | Kararlar listesinin (K01...) alfa incelemesi | Senin kararın | İnceleme belgesinden sırayla | bekliyor |
+| S07 | Senin eklediğin `test.py` silindi (K147). Başka bir amacı varsa geri getiririm | Dosya senindi | Silinmiş kalsın | bekliyor |

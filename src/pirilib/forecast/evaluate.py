@@ -115,6 +115,75 @@ def _before(history: History, cut: int) -> History:
     )
 
 
+class Backtester:
+    """Walk-forward backtests with one set of fold settings.
+
+    Attributes:
+        folds: number of back-to-back windows ending with the history, used when
+            ``starts`` is not given.
+        days: length of each window, in days.
+        calendar: holidays and unusual days; unusual days are not scored.
+        starts: explicit fold start dates, instead of ``folds`` windows.
+    """
+
+    def __init__(
+        self,
+        folds: int = 8,
+        days: int = 7,
+        calendar: Calendar | None = None,
+        starts: Sequence[dt.date] | None = None,
+    ) -> None:
+        self.folds = folds
+        self.days = days
+        self.calendar = Calendar() if calendar is None else calendar
+        self.starts_given = None if starts is None else tuple(starts)
+
+    def starts(self, history: History) -> list[dt.date]:
+        """The fold start dates used on ``history``."""
+        if self.starts_given is not None:
+            return list(self.starts_given)
+        return fold_starts(history, self.folds, self.days)
+
+    def run(self, history: History, forecaster: Forecaster, name: str | None = None) -> Backtest:
+        """Backtest ``forecaster`` on ``history``."""
+        results = []
+        unusual = unusual_days(history, self.calendar, history.length)
+        for start in self.starts(history):
+            cut = history.day(start)
+            if not 1 <= cut < history.length:
+                raise ValueError(f"fold start {start} is not inside the history")
+            forecast = forecaster.forecast(_before(history, cut), start, self.days, self.calendar)
+            end = min(cut + self.days, history.length)
+            actual = history.values[:, cut:end]
+            scored = ~np.isnan(actual) & ~unusual[None, cut:end]
+            lines, offsets = np.nonzero(scored)
+            results.append(
+                Fold(
+                    start=start,
+                    lines=lines.astype(np.int64),
+                    offsets=offsets.astype(np.int64),
+                    actual=actual[lines, offsets],
+                    predicted=forecast.values[lines, offsets],
+                )
+            )
+        label = name if name is not None else getattr(forecaster, "name", type(forecaster).__name__)
+        return Backtest(str(label), tuple(results))
+
+    def compare(
+        self,
+        history: History,
+        forecasters: Mapping[str, Forecaster],
+        baselines: bool = True,
+    ) -> list[Backtest]:
+        """Backtest every forecaster (and the seasonal baselines), best pooled WMAPE first."""
+        every: dict[str, Forecaster] = dict(forecasters)
+        if baselines:
+            every.setdefault("seasonal_mean_4", SeasonalMean(4))
+            every.setdefault("seasonal_naive", SeasonalNaive())
+        results = [self.run(history, model, name) for name, model in every.items()]
+        return sorted(results, key=lambda result: result.scores.wmape)
+
+
 def backtest(
     history: History,
     forecaster: Forecaster,
@@ -126,30 +195,7 @@ def backtest(
     name: str | None = None,
 ) -> Backtest:
     """Walk-forward backtest of ``forecaster``; by default 8 weekly folds ending the history."""
-    calendar = Calendar() if calendar is None else calendar
-    chosen = list(starts) if starts is not None else fold_starts(history, folds, days)
-    results = []
-    unusual = unusual_days(history, calendar, history.length)
-    for start in chosen:
-        cut = history.day(start)
-        if not 1 <= cut < history.length:
-            raise ValueError(f"fold start {start} is not inside the history")
-        forecast = forecaster.forecast(_before(history, cut), start, days, calendar)
-        end = min(cut + days, history.length)
-        actual = history.values[:, cut:end]
-        scored = ~np.isnan(actual) & ~unusual[None, cut:end]
-        lines, offsets = np.nonzero(scored)
-        results.append(
-            Fold(
-                start=start,
-                lines=lines.astype(np.int64),
-                offsets=offsets.astype(np.int64),
-                actual=actual[lines, offsets],
-                predicted=forecast.values[lines, offsets],
-            )
-        )
-    label = name if name is not None else getattr(forecaster, "name", type(forecaster).__name__)
-    return Backtest(str(label), tuple(results))
+    return Backtester(folds, days, calendar, starts).run(history, forecaster, name)
 
 
 def compare(
@@ -163,17 +209,7 @@ def compare(
     calendar: Calendar | None = None,
 ) -> list[Backtest]:
     """Backtest every forecaster (and the seasonal baselines), best pooled WMAPE first."""
-    every: dict[str, Forecaster] = dict(forecasters)
-    if baselines:
-        every.setdefault("seasonal_mean_4", SeasonalMean(4))
-        every.setdefault("seasonal_naive", SeasonalNaive())
-    results = [
-        backtest(
-            history, model, starts=starts, folds=folds, days=days, calendar=calendar, name=name
-        )
-        for name, model in every.items()
-    ]
-    return sorted(results, key=lambda result: result.scores.wmape)
+    return Backtester(folds, days, calendar, starts).compare(history, forecasters, baselines)
 
 
 def report(results: Sequence[Backtest], baseline: str = "seasonal_mean_4") -> str:

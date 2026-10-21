@@ -8,6 +8,7 @@ import pytest
 from pirilib import synthetic
 from pirilib.forecast import (
     FEATURES,
+    Backtester,
     Calendar,
     History,
     Regression,
@@ -217,6 +218,19 @@ def test_compare_always_runs_the_baselines(sample: tuple[History, Calendar]) -> 
     assert "+0.0%" in next(
         line for line in table.splitlines() if line.startswith("seasonal_mean_4")
     )
+
+
+def test_backtester_matches_the_functions(sample: tuple[History, Calendar]) -> None:
+    history, calendar = sample
+    tester = Backtester(folds=2, calendar=calendar)
+    model = SeasonalMean(4)
+    direct = backtest(history, model, folds=2, calendar=calendar)
+    again = tester.run(history, model)
+    assert tester.starts(history) == [fold.start for fold in direct.folds]
+    assert again.scores == direct.scores
+    assert [r.name for r in tester.compare(history, {})] == [
+        r.name for r in compare(history, {}, folds=2, calendar=calendar)
+    ]
 
 
 def test_tune_forecaster(sample: tuple[History, Calendar]) -> None:
