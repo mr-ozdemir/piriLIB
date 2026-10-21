@@ -70,3 +70,7 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   compute the timeline, hourly costs, lateness (`service_cost`, part of
   `total_cost`) and four new constraints (`ready`, `deferral`, `handling`,
   `vehicle_limit`). Plan files have a `start` column.
+- Time waves in `pirilib.forecast`: `WaveSplitter` learns wave shares per line
+  and weekday from a wave-level history (`load_wave_history`) without
+  look-ahead, `planning_document(..., waves=...)` makes demand rows ready at
+  the wave times, and `pirilib forecast --waves` splits from the command line.

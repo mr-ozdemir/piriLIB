@@ -10,6 +10,7 @@ import codecs
 import csv
 import datetime as dt
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +24,7 @@ from pirilib.spec._format import Loc, bullets, validation_problems
 LIST_SEPARATOR: Final = "|"
 """Separator of list values inside one CSV cell, for example ``tir|kamyon``."""
 
+_TIME: Final = re.compile(r"(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?")
 _DIGIT_GROUP_SPACES: Final = str.maketrans("", "", " \N{NO-BREAK SPACE}\N{NARROW NO-BREAK SPACE}")
 
 
@@ -69,13 +71,14 @@ class _Layout:
     text: tuple[str, ...] = ()
     numbers: tuple[str, ...] = ()
     dates: tuple[str, ...] = ()
+    times: tuple[str, ...] = ()
     lists: tuple[str, ...] = ()
     required: tuple[str, ...] = ()
     has_quantity: bool = False
 
     @property
     def fields(self) -> tuple[str, ...]:
-        return self.text + self.numbers + self.dates + self.lists
+        return self.text + self.numbers + self.dates + self.times + self.lists
 
 
 _LAYOUTS: Final[Mapping[Loc, _Layout]] = {
@@ -89,6 +92,13 @@ _LAYOUTS: Final[Mapping[Loc, _Layout]] = {
         text=("id", "origin", "destination"),
         dates=("date",),
         required=("origin", "destination", "date"),
+        has_quantity=True,
+    ),
+    ("waves",): _Layout(
+        text=("id", "origin", "destination"),
+        dates=("date",),
+        times=("wave",),
+        required=("origin", "destination", "date", "wave"),
         has_quantity=True,
     ),
     ("matrix", "arcs"): _Layout(
@@ -146,6 +156,20 @@ def read_demand_table(reference: Mapping[str, Any], base_dir: Path) -> list[dict
     :class:`~pirilib.SpecError` listing every problem, with file and line.
     """
     result = _read_table(reference, base_dir, ("demand",))
+    if result.problems:
+        raise SpecError(bullets(result.problems))
+    return result.rows
+
+
+def read_wave_table(reference: Mapping[str, Any], base_dir: Path) -> list[dict[str, Any]]:
+    """Read demand-shaped rows with a ``wave`` time column from CSV.
+
+    The wave cell is a time of day: ``09:00``, ``9:00``, ``09:00:00`` or an
+    hour such as ``9``; it is read as :class:`datetime.time`. ``reference`` has
+    the fields of :class:`TableSource`. Raises :class:`~pirilib.SpecError`
+    listing every problem, with file and line.
+    """
+    result = _read_table(reference, base_dir, ("waves",))
     if result.problems:
         raise SpecError(bullets(result.problems))
     return result.rows
@@ -250,6 +274,8 @@ def _convert(
                 row[target] = _number(text, source.decimal)
             elif target in layout.dates:
                 row[target] = _date(text, source.date_format)
+            elif target in layout.times:
+                row[target] = _time(text)
             elif target in layout.lists:
                 row[target] = [item.strip() for item in text.split(LIST_SEPARATOR) if item.strip()]
             else:
@@ -286,3 +312,13 @@ def _date(text: str, date_format: str | None) -> dt.date:
         return dt.datetime.strptime(text, date_format).date()
     except ValueError:
         raise ValueError(f"'{text}' does not match the date format '{date_format}'") from None
+
+
+def _time(text: str) -> dt.time:
+    match = _TIME.fullmatch(text)
+    hour, minute, second = (
+        (int(match[1]), int(match[2] or 0), int(match[3] or 0)) if match else (-1, 0, 0)
+    )
+    if not (0 <= hour <= 23 and minute <= 59 and second <= 59):
+        raise ValueError(f"'{text}' is not a time of day (HH:MM, or an hour such as 9)")
+    return dt.time(hour, minute, second)

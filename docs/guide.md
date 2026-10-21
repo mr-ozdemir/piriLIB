@@ -317,6 +317,28 @@ week = fc.lightgbm_tweedie().forecast(history, start, 7, calendar)
   80 % quantile of its past actual/forecast ratio. In tests the buffer covered
   the actual demand on about 80 % of unseen days.
 
+**Time waves.** When demand becomes ready in waves (for example at 09:00 and
+17:00), `WaveSplitter` learns the share of each wave per line and weekday from
+a wave-level history (a CSV like the history with a `wave` column holding
+`09:00`, `9:00` or an hour such as `9`). It uses the last 4 usual same weekdays
+before the forecast start; a line-weekday with fewer than 2 such days falls
+back to the line over all weekdays, and a line with fewer than 2 days to the
+share of all lines. Passed to `planning_document`, every line and day becomes
+one demand row per wave, with `ready` set to the wave time, so
+`rules.service.due_hours` counts from the wave. Pieces below `minimum` (0.5)
+are dropped; the rest add up to the daily forecast. `stability()` tells how
+many shares fell back and how much they move from week to week.
+
+```python
+waves = fc.load_wave_history("waves.csv", wave="saat", delimiter=";", decimal=",")
+shares = fc.WaveSplitter(weeks=4).fit(waves, start, calendar)
+print(shares.stability().describe())
+document = fc.planning_document(network, week, waves=shares)
+```
+
+The daily history may come from the same file: `load_history` adds up the
+waves of a day.
+
 ## 7. Command line
 
 ```bash
@@ -331,6 +353,7 @@ pirilib schema linehaul.schema.json
 pirilib backtest history.csv --holidays holidays.txt --models seasonal,naive,lightgbm
 pirilib forecast history.csv --holidays holidays.txt -o forecast.csv \
     --network network.yaml --problem problem.yaml --quantile 0.8
+pirilib forecast waves.csv --waves waves.csv --network network.yaml
 pirilib solve problem.yaml -o plan.csv               # plan the forecast week
 ```
 

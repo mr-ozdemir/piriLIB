@@ -9,6 +9,7 @@ Commands::
     pirilib generate folder --centers 20 --days 5
     pirilib backtest history.csv --models seasonal,lightgbm
     pirilib forecast history.csv -o forecast.csv --network network.yaml --problem problem.yaml
+    pirilib forecast history.csv --waves waves.csv --network network.yaml
     pirilib schema linehaul.schema.json
 
 Exit status: 0 on success, 1 when an input is invalid or a plan breaks a rule
@@ -25,7 +26,6 @@ from dataclasses import asdict, fields
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import yaml
 
 from pirilib import objective as obj
@@ -128,6 +128,16 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument(
         "--buffer-folds", type=int, default=4, help="backtest folds for the buffer"
     )
+    command.add_argument(
+        "--waves",
+        help="CSV with origin, destination, date, wave and quantity, to split days into waves",
+    )
+    command.add_argument(
+        "--wave-column", default="wave", help="wave time column of --waves (default wave)"
+    )
+    command.add_argument(
+        "--wave-weeks", type=int, default=4, help="recent weeks to learn wave shares from"
+    )
     command.set_defaults(run=_forecast)
 
     command = commands.add_parser("schema", help="print or write the JSON Schema of problem files")
@@ -165,12 +175,17 @@ def _dates(path: str | None) -> list[dt.date]:
     ]
 
 
-def _load_history(arguments: argparse.Namespace) -> tuple[Any, Any]:
-    from pirilib.forecast import Calendar, load_history
-
+def _csv_options(arguments: argparse.Namespace) -> dict[str, Any]:
     options: dict[str, Any] = {"delimiter": arguments.delimiter, "decimal": arguments.decimal}
     if arguments.date_format:
         options["date_format"] = arguments.date_format
+    return options
+
+
+def _load_history(arguments: argparse.Namespace) -> tuple[Any, Any]:
+    from pirilib.forecast import Calendar, load_history
+
+    options = _csv_options(arguments)
     history = load_history(arguments.history, dimension=arguments.column, **options)
     holidays = _dates(arguments.holidays)
     calendar = Calendar.of(unusual=[*_dates(arguments.unusual), *holidays], holidays=holidays)
@@ -209,7 +224,14 @@ def _backtest(arguments: argparse.Namespace) -> int:
 
 
 def _forecast(arguments: argparse.Namespace) -> int:
-    from pirilib.forecast import backtest, buffer_factors, planning_document
+    from pirilib.forecast import (
+        Forecast,
+        WaveSplitter,
+        backtest,
+        buffer_factors,
+        load_wave_history,
+        planning_document,
+    )
     from pirilib.spec import parse_spec
     from pirilib.spec.tables import materialize_tables
 
@@ -232,27 +254,46 @@ def _forecast(arguments: argparse.Namespace) -> int:
         print(
             f"buffered to quantile {arguments.quantile}: total {lifted:,.1f} {forecast.dimension}"
         )
+    shares = None
+    if arguments.waves:
+        waves = load_wave_history(
+            arguments.waves,
+            dimension=arguments.column,
+            wave=arguments.wave_column,
+            **_csv_options(arguments),
+        )
+        shares = WaveSplitter(weeks=arguments.wave_weeks).fit(waves, start, calendar)
+        print(f"{shares!r}")
+        print(shares.stability().describe())
     if arguments.output:
         values = forecast.values if factors is None else forecast.values * factors[:, None]
+        planned = Forecast(
+            forecast.origins, forecast.destinations, forecast.start, values, forecast.dimension
+        )
         with Path(arguments.output).open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["origin", "destination", "date", forecast.dimension])
-            for line, column in zip(*np.nonzero(values >= 0.5), strict=True):
-                date = forecast.start + dt.timedelta(days=int(column))
-                writer.writerow(
-                    [
-                        forecast.origins[line],
-                        forecast.destinations[line],
-                        date.isoformat(),
-                        round(float(values[line, column]), 3),
-                    ]
-                )
+            if shares is None:
+                writer.writerow(["origin", "destination", "date", forecast.dimension])
+                for origin, destination, date, quantity in planned.rows(0.5):
+                    writer.writerow([origin, destination, date.isoformat(), round(quantity, 3)])
+            else:
+                writer.writerow(["origin", "destination", "date", "wave", forecast.dimension])
+                for origin, destination, date, wave, quantity in shares.split(planned).rows(0.5):
+                    writer.writerow(
+                        [
+                            origin,
+                            destination,
+                            date.isoformat(),
+                            wave.isoformat("minutes"),
+                            round(quantity, 3),
+                        ]
+                    )
         print(f"forecast written to {arguments.output}")
     if arguments.network:
         network_path = Path(arguments.network)
         network = yaml.safe_load(network_path.read_text(encoding="utf-8"))
         network, _ = materialize_tables(network, network_path.parent)
-        document = planning_document(network, forecast, factors=factors)
+        document = planning_document(network, forecast, factors=factors, waves=shares)
         parse_spec(document, source=str(network_path))
         target = Path(arguments.problem or network_path.with_name("problem.yaml"))
         target.write_text(yaml.safe_dump(document, allow_unicode=True, sort_keys=False), "utf-8")

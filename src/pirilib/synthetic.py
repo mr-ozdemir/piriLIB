@@ -21,6 +21,7 @@ from pirilib.spec.tables import LIST_SEPARATOR
 if TYPE_CHECKING:
     from pirilib.forecast.history import History
     from pirilib.forecast.prepare import Calendar
+    from pirilib.forecast.waves import WaveHistory
 
 VEHICLE_TYPES: tuple[dict[str, Any], ...] = (
     {"name": "tir", "capacity": {"desi": 22000.0}},
@@ -207,6 +208,67 @@ def history(
         values=values,
     )
     return result, calendar
+
+
+def wave_history(
+    *,
+    lines: int = 30,
+    days: int = 168,
+    start: dt.date = dt.date(2026, 1, 5),
+    waves: tuple[dt.time, ...] = (dt.time(9), dt.time(17)),
+    holidays: tuple[dt.date, ...] = (
+        dt.date(2026, 3, 20),
+        dt.date(2026, 4, 23),
+        dt.date(2026, 5, 19),
+    ),
+    seed: int = 0,
+) -> tuple["WaveHistory", "Calendar"]:
+    """A synthetic wave-level history: :func:`history` split into time waves.
+
+    Every line has its own share of each wave, shifted a little by weekday and
+    from day to day. The days add up to the history of :func:`history` with
+    the same arguments (up to rounding to 0.1). Returns the wave history and
+    the calendar of :func:`history`.
+    """
+    from pirilib.forecast.waves import WaveHistory
+
+    daily, calendar = history(lines=lines, days=days, start=start, holidays=holidays, seed=seed)
+    ordered = tuple(sorted(set(waves)))
+    rng = np.random.default_rng([seed, 1])
+    count = len(ordered)
+    base = rng.dirichlet(np.full(count, 4.0), lines)
+    by_weekday = np.exp(rng.normal(0.0, 0.15, (lines, 7, count)))
+    by_day = np.exp(rng.normal(0.0, 0.1, (lines, days, count)))
+    weekday = np.array([(start + dt.timedelta(days=day)).weekday() for day in range(days)])
+    weights = base[:, None, :] * by_weekday[:, weekday, :] * by_day
+    shares = weights / weights.sum(axis=2, keepdims=True)
+    values = np.round(daily.values[:, :, None] * shares, 1)
+    rest = daily.values - values[:, :, :-1].sum(axis=2)
+    values[:, :, -1] = np.maximum(np.round(rest, 1), 0.0)
+    result = WaveHistory(daily.origins, daily.destinations, start, ordered, values)
+    return result, calendar
+
+
+def write_wave_history(data: "WaveHistory", path: str | os.PathLike[str]) -> Path:
+    """Write a wave history as a CSV file with origin, destination, date, wave and desi columns.
+
+    Only positive quantities are written; waves are written as ``HH:MM``.
+    """
+    target = Path(path)
+    with target.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["origin", "destination", "date", "wave", data.dimension])
+        for line, day, wave in zip(*np.nonzero(data.values > 0), strict=True):
+            writer.writerow(
+                [
+                    data.origins[line],
+                    data.destinations[line],
+                    data.date(int(day)).isoformat(),
+                    data.waves[wave].isoformat("minutes"),
+                    data.values[line, day, wave],
+                ]
+            )
+    return target
 
 
 def write_history(data: "History", path: str | os.PathLike[str]) -> Path:
