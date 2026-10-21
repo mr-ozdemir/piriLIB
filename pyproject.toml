@@ -39,6 +39,12 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/mr-ozdemir/piriLIB"
+Documentation = "https://github.com/mr-ozdemir/piriLIB/blob/main/docs/guide.md"
+Changelog = "https://github.com/mr-ozdemir/piriLIB/blob/main/CHANGELOG.md"
+Issues = "https://github.com/mr-ozdemir/piriLIB/issues"
+
 [project.optional-dependencies]
 exact = ["scipy>=1.14"]
 excel = ["openpyxl>=3.1"]

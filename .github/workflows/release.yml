@@ -16,7 +16,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip build
+      - name: Check that the tag matches the package version
+        run: |
+          version=$(python -c "import runpy; print(runpy.run_path('src/pirilib/_version.py')['__version__'])")
+          test "v$version" = "$GITHUB_REF_NAME"
       - run: python -m build
+      - name: Smoke test the wheel
+        run: |
+          python -m pip install dist/*.whl
+          pirilib --help
+          python -c "import pirilib; print(pirilib.__version__)"
       - uses: actions/upload-artifact@v4
         with:
           name: dist
