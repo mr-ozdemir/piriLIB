@@ -153,7 +153,7 @@ the first release:
 | 0.1 | Problem specification, evaluator, constraint catalog, numpy ACO, local search, decomposition with an exact oracle, validator, ABC tuner, CLI |
 | 0.2 | Forecast engine and the forecast-to-plan bridge |
 | 0.3 | Time waves, service-level penalties, shared hub resources, deferral |
-| 0.4 | Benchmark suite and baseline adapters (PyVRP, OR-Tools) |
+| 0.4 | Benchmark suite and baseline adapters (PyVRP, OR-Tools); in progress |
 | 1.0 | Stable API |
 
 ## License

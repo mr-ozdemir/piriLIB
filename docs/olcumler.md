@@ -159,3 +159,31 @@ Sentetik `wave_history(lines=30, days=168, seed=0)`, 8 haftalık ileri yürüyen
 | Yalnız küresel pay, son hafta | %28,43 |
 
 `fit` yaklaşık 1,7 ms. Son katta 194 hat x hafta günü, hepsi kendi payıyla; haftadan haftaya sapma ortalama 0,025, medyan 0,024, p90 0,041. Veri sentetik ve günlük gürültülü, bu yüzden daha çok hafta hep yardım ediyor; gerçek veride farklı olabilir.
+
+## v0.4: Kıyas paketi
+
+Varsayılan amaç (maliyet + 1e6 x ihlaller), tek tohum. Fark, örnek başına en iyi bilinen değere göre.
+
+`small` ailesi (10 örnek, 6-10 merkez, 2 gün, minimum doluluk 0 ya da 0,1, stretch 1,3 ya da sınırsız):
+
+| Çözücü | Ortalama fark | Medyan fark | En iyi | Uygun | Ortalama sn |
+|---|---|---|---|---|---|
+| direct | %7840,10 | %15,95 | %0 | %80 | 0,00 |
+| aco | %0,63 | %0,78 | %30 | %90 | 0,16 |
+| aco-exact (`exact_nodes=9`) | %0,00 | %0,00 | %100 | %90 | 0,66 |
+| exact | %0,00 | %0,00 | %100 | %90 | 0,61 |
+
+Doğrudan gönderimin ortalama farkı iki örnekteki minimum doluluk cezalarından. 001 örneği tüm çözücüler için uygunsuz (taşınamayan talep).
+
+`routing` ailesi (10 örnek, 6-12 merkez, 1-2 gün, minimum doluluk yok; adaptörlerin kabul ettiği sınıf):
+
+| Çözücü | Ortalama fark | Medyan fark | En iyi | Uygun | Ortalama sn |
+|---|---|---|---|---|---|
+| direct | %20,52 | %19,98 | %0 | %100 | 0,00 |
+| aco | %0,26 | %0,00 | %70 | %100 | 0,18 |
+| aco-exact | %0,00 | %0,00 | %100 | %100 | 1,10 |
+| exact | %0,00 | %0,00 | %100 | %100 | 1,09 |
+| pyvrp (alt problem başına 1000 iterasyon) | %0,62 | %0,00 | %60 | %100 | 0,23 |
+| ortools (açgözlü iniş) | %3,22 | %2,87 | %20 | %100 | 0,04 |
+
+80 rastgele belgede (minimum doluluk 0, bölme açık) iki adaptör ve doğrudan gönderim, spot limiti olan yerlerdeki kapsama dışında hiçbir kuralı bozmadı; `check_plan` maliyette aynı sonucu verdi. Bu örneklerde adaptörler kesin çözücüyü hiç geçmedi. PyVRP 0.14.1, OR-Tools 9.15.6755, Python 3.14.3, Windows.

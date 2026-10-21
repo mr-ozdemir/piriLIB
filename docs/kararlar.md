@@ -228,6 +228,25 @@ dağıtım adı.
 | K170 | Tema: teal/amber, açık/koyu geçişi, `repo_url` GitHub deposu, `site_url` boş (Pages kararı S05'e bağlı) | Varsayılana yakın, sade | - | `mkdocs.yml` | açık |
 | K171 | `docs/kararlar.md` ve `docs/olcumler.md` siteye girmez; API kararlılık sayfası `docs/stability.md` adını aldı (`docs/api/` klasörüyle karışmasın) | Türkçe iç notlar ayrı | Hepsini yayımlamak | `mkdocs.yml`, `docs/` | açık |
 
+## v0.4: Kıyas paketi ve dış çözücü adaptörleri
+
+| # | Karar | Neden | Alternatif | Yer | Durum |
+|---|---|---|---|---|---|
+| K172 | Örnek aileleri (`tiny`, `small`, `routing`, `medium`, `no-split`, `spot-limits`, `mixed`) `synthetic.generate` çıktısı düzenlenerek kurulur; örnek i'nin ayarları crc32(aile adı), aile tohumu ve i ile tohumlanır; adlar `small/003` | Tekrarlanabilir, üreteç değişmeden | `generate`'e yeni parametreler | `bench/families.py` | açık |
+| K173 | Bölünmez ailede hiçbir spot araca sığmayan talep eşit parçalara (0,1 desiye aşağı yuvarlanır) bölünür | Aksi halde belge doğrulamadan geçmiyor | Miktarı kırpmak | `bench/families.py` | açık |
+| K174 | Spot limiti teklif başına `ceil(pay x günlük talep)`, pay {0,2, 0,3, 0,5} | Bağlayıcı ama çözülebilir | Sabit sayı | `bench/families.py` | açık |
+| K175 | Koşucu süreyi kendisi ölçer ve her planı aynı amaçla yeniden değerlendirir; `ValueError`/`ImportError` "atlandı" sayılır, başka hata koşuyu durdurur | Tüm çözücüler aynı terazide | `SolveResult`'a güvenmek | `bench/runner.py` | açık |
+| K176 | Özet: fark = (amaç - en iyi) / max(\|en iyi\|, 1), en iyi tablodaki tüm koşulardan; "en iyi payı" paydasında atlananlar da var; uygunluk ve farklar yalnız çözülenlerden | Basit, açık tanım | Bilinen optimuma göre fark | `bench/results.py` | açık |
+| K177 | `DirectShipping` temel çözücü: her (gün, çıkış, varış) hattı doğrudan; bölünebilirse taşınan pay başına en ucuz tipte dolu araçlar + kalan için en ucuz uygun araç; bölünemezse azalan ilk sığan paketleme; araç seçimi amaçtan bağımsız sefer maliyetiyle; talep doluluk altında da taşınır | Her çözücünün geçmesi gereken alt çizgi | Amaca göre seçim | `solvers/direct.py` | açık |
+| K178 | `SequentialSolver` taban sınıfı alt problem sırasını ve gün içi açgözlü spot limitini `DirectShipping` ve adaptörler için ortaklar; `ExactSolver` paralel iş yüzünden yeniden düzenlenmedi | Tekrarı önlemek | Her çözücüde ayrı | `solvers/_sequential.py` | açık |
+| K179 | PyVRP ve OR-Tools adaptörleri ortak `RoutingAdapter` indirgemesiyle: tek yön için araç tipi başına bitiş deposu; yasaklar, özmal hat, ileri yön ve durak kuralları matristen çıkarılan yaylar; stretch süre sınırıyla tam kodlanır; `max_stops` ek yük boyutu (özmalda tutucu); spot limiti araç sayısı; isteğe bağlı müşteri ödülü en pahalı doğrudan seferin 100 katıyla sınırlı | Tek indirgeme, iki motor | Motor başına ayrı model | `solvers/adapters/` | açık |
+| K180 | Adaptörlerde bölünmüş teslim yalnız dolu doğrudan seferlerle (önce gönderilir), kalan tek müşteri; bölünmez talep, 0'dan büyük minimum doluluk, zamanlı problem, doğrusal biçimi olmayan amaç, boş kapasite terimi, negatif ağırlık ve kendi kısıtlar `ValueError` ile reddedilir | Dürüst kapsam | Yaklaşık kodlamak | `solvers/adapters/base.py` | açık |
+| K181 | OR-Tools varsayılanı en ucuz yay + açgözlü iniş (deterministik, tohumu yok sayar); PyVRP varsayılanı alt problem başına 1000 iterasyon, tohumlu; PyVRP'nin uygunsuz rotaları atılır, `stats["infeasible"]`'da sayılır | Kendiliğinden durur, tekrarlanabilir | Zaman sınırlı metasezgisel | `solvers/adapters/` | açık |
+| K182 | OR-Tools Python 3.14'te uyarılar hata iken içe aktarmada çöküyor; adaptör `DeprecationWarning`'i susturarak içe aktarır, testler `find_spec` ile atlar | pytest `filterwarnings=error` | - | `solvers/adapters/ortools_solver.py` | açık |
+| K183 | Ekstralar `pyvrp>=0.14`, `ortools>=9.15` (denenmiş sürümler); `test` grubunda değiller, CI adaptörleri koşmuyor | Ağır bağımlılıklar (matplotlib, pandas, protobuf) | CI'da koşmak | `pyproject.toml` | açık |
+| K184 | `pirilib bench` komutu; bench ve adaptörler 1.0'da deneysel | Yeni ve ölçümü sınırlı | Kararlı API | `cli.py`, `docs/stability.md` | açık |
+| K185 | Belge eklentisi standart kütüphane ve yerleşik adları (`ValueError`, `datetime.time`) bağlantı yerine kod olarak gösterir; dış envanter yok (K168) | Strict derleme bu adlarda düşüyordu | Python envanteri (ağ gerekir) | `docs/extensions/docstrings.py` | açık |
+
 ## Depo kuralları
 
 | # | Karar | Neden | Alternatif | Yer | Durum |
@@ -258,3 +277,4 @@ Kendi başıma yapamadığım ya da senin hesabınla yapılması gereken işler.
 | S08 | README ve `project.urls` GitHub'a bağlı; depo özel kalırsa PyPI sayfasındaki bağlantılar açılmaz. Yayında depo açık mı olacak? | Depo görünürlüğü | İlk PyPI yayınında depoyu açmak; o zamana kadar yalnız TestPyPI | bekliyor |
 | S09 | MkDocs 2.0 Material ve mkdocstrings ile uyumsuz olacak; şimdilik `<2` ile sabit. İleride başka araca (ör. Zensical) geçilsin mi? | Uzun vadeli araç seçimi | 2.0 çıkıp eklenti durumu netleşince bakmak | bekliyor |
 | S10 | Kural "yorum satırı yok" kod ve yapılandırmaya uygulandı; README ve kılavuzdaki kod örneklerinde (`pip install ...   # açıklama` gibi) `#` açıklamalar duruyor. Belgelerdeki örnekler de temizlensin mi? | Kuralın kapsamı senin | Örneklerde kalsın (okuru yönlendiriyor); kod dosyalarında hiç yok | bekliyor |
+| S11 | PyVRP ve OR-Tools adaptörleri CI'da koşmuyor (ağır bağımlılıklar). Ayrı, haftalık bir CI işi açalım mı? | CI süresi ve dakika kotası | Haftalık ayrı iş | bekliyor |

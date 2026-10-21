@@ -5,7 +5,8 @@ renders Markdown. Once the package is loaded, every docstring is rewritten:
 
 - ``:class:`~pirilib.Plan``` and the other Python roles become cross-references
   to the object that defines the name, looked up from the scope of the
-  docstring as Sphinx does. Names that live in private modules become code.
+  docstring as Sphinx does. Names that live in private modules, and names
+  of the standard library, become code.
 - A paragraph that ends in ``::`` ends in ``:``; its indented block stays code.
 - Definition lists become Markdown definition lists (the ``def_list``
   extension).
@@ -15,7 +16,9 @@ attributes they describe, so that every attribute is documented once, next to
 its type and default, and can be linked to.
 """
 
+import builtins
 import re
+import sys
 from collections.abc import Iterator
 from typing import Any
 
@@ -87,6 +90,8 @@ class DocstringRewriter:
         title = name.rsplit(".", 1)[-1] if short else name
         path = self._resolver.resolve(name, self._scope)
         if path is None:
+            if _standard(name):
+                return f"`{title}`"
             return f"[`{title}`][{name}]"
         if any(_private(part) for part in path.split(".")):
             return f"`{title}`"
@@ -146,6 +151,12 @@ def _objects(obj: griffe.Object) -> Iterator[griffe.Object]:
     for member in obj.members.values():
         if not isinstance(member, griffe.Alias):
             yield from _objects(member)
+
+
+def _standard(name: str) -> bool:
+    """Whether ``name`` is a builtin or lives in a standard library module."""
+    root = name.split(".", 1)[0]
+    return hasattr(builtins, root) or root in sys.stdlib_module_names
 
 
 def _private(name: str) -> bool:

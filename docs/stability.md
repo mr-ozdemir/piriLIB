@@ -52,6 +52,8 @@ in their docstrings.
   `demand_rows`.
 - `pirilib.synthetic`: generated problems may change between releases; only the
   function signatures are kept.
+- `pirilib.bench`, `pirilib bench`, `pirilib.solvers.direct.DirectShipping` and the
+  adapters in `pirilib.solvers.adapters`.
 - `objective.linear_form`, `objective.FEATURES`: the contract between objectives
   and the fast solver path.
 
