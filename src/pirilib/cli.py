@@ -10,6 +10,7 @@ Commands::
     pirilib backtest history.csv --models seasonal,lightgbm
     pirilib forecast history.csv -o forecast.csv --network network.yaml --problem problem.yaml
     pirilib schema linehaul.schema.json
+    pirilib bench small --solvers direct,aco,exact -o results.csv --summary summary.csv
 
 Exit status: 0 on success, 1 when an input is invalid or a plan breaks a rule
 (``check``), 2 for wrong usage.
@@ -133,6 +134,17 @@ def _parser() -> argparse.ArgumentParser:
     command = commands.add_parser("schema", help="print or write the JSON Schema of problem files")
     command.add_argument("path", nargs="?")
     command.set_defaults(run=_schema)
+
+    command = commands.add_parser("bench", help="benchmark solvers on a synthetic instance family")
+    command.add_argument("family", nargs="?", help="leave out to list the families and solvers")
+    command.add_argument("--solvers", default="direct,aco", help="comma-separated solver names")
+    command.add_argument("--count", type=int, help="instances (default: the family's size)")
+    command.add_argument("--start", type=int, default=0, help="index of the first instance")
+    command.add_argument("--seeds", type=int, default=1, help="runs per instance and solver")
+    command.add_argument("--penalty", type=float, default=DEFAULT_PENALTY)
+    command.add_argument("-o", "--output", help="write one row per run as CSV")
+    command.add_argument("--summary", help="write the summary per solver as CSV")
+    command.set_defaults(run=_bench)
     return parser
 
 
@@ -372,6 +384,49 @@ def _generate(arguments: argparse.Namespace) -> int:
         seed=arguments.seed,
     )
     print(f"written {write(document, arguments.folder)}")
+    return 0
+
+
+def _bench(arguments: argparse.Namespace) -> int:
+    from pirilib.bench import FAMILIES, SOLVERS, Benchmark, Record
+
+    if not arguments.family:
+        print("families:")
+        for family in FAMILIES:
+            print(f"  {family.name:<12} {family.size:>3} instances  {family.description}")
+        print("solvers:")
+        for name in SOLVERS.names():
+            print(f"  {name:<12} {SOLVERS.descriptions.get(name, '')}")
+        return 0
+    if arguments.seeds < 1:
+        raise ValueError("--seeds must be at least 1")
+    family = FAMILIES.get(arguments.family)
+    names = [name.strip() for name in arguments.solvers.split(",") if name.strip()]
+    benchmark = Benchmark(
+        SOLVERS.make(names),
+        objective=_goal(arguments.penalty),
+        seeds=tuple(range(arguments.seeds)),
+    )
+
+    def report(record: Record) -> None:
+        head = f"{record.instance}  {record.solver:<10} seed {record.seed}"
+        if not record.solved:
+            print(f"{head}  skipped: {record.message}")
+            return
+        state = "feasible" if record.feasible else "violated " + ",".join(record.violated)
+        print(
+            f"{head}  objective {record.objective:,.2f}  {state}  {record.seconds:.2f} s",
+            flush=True,
+        )
+
+    table = benchmark.run(family.instances(arguments.count, start=arguments.start), report)
+    summary = table.summary()
+    print()
+    print(summary)
+    if arguments.output:
+        print(f"results written to {table.to_csv(arguments.output)}")
+    if arguments.summary:
+        print(f"summary written to {summary.to_csv(arguments.summary)}")
     return 0
 
 

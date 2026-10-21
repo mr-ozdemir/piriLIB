@@ -70,3 +70,4 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   compute the timeline, hourly costs, lateness (`service_cost`, part of
   `total_cost`) and four new constraints (`ready`, `deferral`, `handling`,
   `vehicle_limit`). Plan files have a `start` column.
+- `pirilib.bench` and `pirilib bench`: reproducible synthetic instance families, a benchmark runner with CSV results and per-solver summaries, the `DirectShipping` baseline, and optional `PyVRPSolver` and `ORToolsSolver` adapters (extras `pirilib[pyvrp]`, `pirilib[ortools]`).
