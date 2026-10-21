@@ -198,6 +198,21 @@ dağıtım adı.
 | K141 | Plan dosyasında `start` sütunu `HH:MM` (24 saati geçebilir), okurken isteğe bağlı | Excel'de okunur | Dakika sayısı | `planio.py` | açık |
 | K142 | Modellenmeyenler: kiralık araçların zorunlu çıkışı (prototip K7), çalışma saatleri, sürücü kuralları, bacaklar arası bekleme | Kapsam | - | - | açık |
 
+## v0.3 adım 3c: Tahmini zaman dalgalarına bölmek
+
+| # | Karar | Neden | Alternatif | Yer | Durum |
+|---|---|---|---|---|---|
+| K152 | Dalga payı penceresi: her hat ve haftanın günü için o günün toplamı pozitif olan son `weeks` (varsayılan 4) olağan gün | Prototipin "veri olan son 4 hafta"sı ve `SeasonalMean` ile aynı | Katı `[start - 28 gün, start)` penceresi | `forecast/waves.py` | açık |
+| K153 | Pay formülü havuzlanmış oran: kullanılan günlerde dalga toplamı / tüm dalgaların toplamı | Prototipteki haftalık payların ağırlıksız ortalaması küçük günlere büyükler kadar ağırlık veriyordu | Ağırlıksız ortalama | `forecast/waves.py` | açık |
+| K154 | Geri düşme: kendi hafta günü verisi `min_days=2`'den azsa hattın tüm günleri, o da yoksa tüm hatlar (küresel pay); dalga geçmişinde olmayan hatlar küresel payı alır; başlangıçtan önce hiç kayıt yoksa hata | Prototipin `min_weeks=2`'si | Sabit eşit paylar | `forecast/waves.py` | açık |
+| K155 | `Calendar`'ın olağandışı saydığı günlerden pay öğrenilmez; CLI `--holidays`/`--unusual` takvimini bölücüye de verir | Prototipin kötü gün listesi | Tüm günleri kullanmak | `forecast/waves.py`, `cli.py` | açık |
+| K156 | Dosyadaki tüm dalgalar tutulur; yalnız başlangıçtan sonra görülen dalganın payı 0 olur ve parçaları alt sınırla düşer | Geleceğe bakmamak | Böyle dalgaları paylardan çıkarmak | `forecast/waves.py` | açık |
+| K157 | Kararlılık ölçüsü: hat x hafta günü için günlük payın standart sapması (ddof=0), yalnız kendi verisinden ve en az 2 günle; hücre dalgalar üstündeki en büyük değeri raporlar (iki dalgada prototipin `std09`'u) | Prototiple karşılaştırılabilir | Dalga başına ayrı rapor | `forecast/waves.py` | açık |
+| K158 | API: durumsuz `WaveSplitter.fit` değişmez `WaveShares` döndürür; `planning_document(waves=...)` onu alır | Durumsuz tahminci kuralı (K121) | Durumlu bölücü | `forecast/waves.py`, `forecast/bridge.py` | açık |
+| K159 | Dalga satırlarında `ready` `"HH:MM"` yazılır; şema kimliği değişmez (0.1 belgeleri de alanı kabul ediyor); `due` yazılmaz, `rules.service.due_hours` `ready`'den sayılır | Ağ belgesini bozmamak | Şemayı 0.2'ye zorlamak | `forecast/bridge.py` | açık |
+| K160 | Dalga sütunu `spec/tables.py`'de yeni bir tablo düzeni ile okunur (dosya:satır hataları); saat `09:00`, `9:00`, `09:00:00` ya da `9` olabilir; sütun adı varsayılan `wave` | Hata raporlamasını yeniden kullanmak | Ayrı ayrıştırıcı | `spec/tables.py` | açık |
+| K161 | CLI: `--waves` ayrı dosya, `--wave-column`, `--wave-weeks`; günlük geçmiş aynı dosya olabilir (`load_history` dalgaları toplar); dalgalı çıktıda `-o` CSV'ye `wave` sütunu eklenir | Mevcut seçenekler değişmesin | Tek dosya zorunluluğu | `cli.py` | açık |
+
 ## Depo kuralları
 
 | # | Karar | Neden | Alternatif | Yer | Durum |

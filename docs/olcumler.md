@@ -145,3 +145,17 @@ Hiçbir seçenek doğruluğu düşürmeden bias'ı gidermiyor; varsayılan model
 
 - Zamanlı property testi: 2.000 rastgele planda yeni kurallar tetiklendi (araç limiti 951, erteleme 830, hazır olmadan yükleme 520, elleçleme 84 plan; gecikme cezası 1.374 plan); numpy değerlendirici ile saf Python doğrulayıcı arasında 0 uyuşmazlık.
 - ACO, 10 merkez, 2 gün, 80 talep (sentetik): zamansız problem hızlı yolda 0,7 sn, uygun, 855.347. Aynı problem hız, saatlik maliyet, 09:00 / 17:00 hazır saatleri, 24 saat teslim, elleçleme ve bir merkezde 60.000 desi elleçleme kapasitesiyle genel yolda 1,4 sn, 1.059.052 (gecikme 12.230) ve **elleçleme kapasitesi 172.907 desi aşıldı**: koloni henüz kapasiteyi ve ertelemeyi bilmiyor (3b).
+
+## v0.3 adım 3c: Dalga bölme
+
+Sentetik `wave_history(lines=30, days=168, seed=0)`, 8 haftalık ileri yürüyen kat (gün 112-167). Hata, gerçek günlük toplamlar bölünerek dalga düzeyinde WMAPE; yalnız bölmenin hatası ölçülür:
+
+| Ayar | Dalga WMAPE |
+|---|---|
+| `weeks=1` (`min_days=2` yüzünden hep hatta düşer) | %8,66 |
+| `weeks=2` | %6,10 |
+| `weeks=4` (varsayılan) | %5,46 |
+| `weeks=8` | %5,17 |
+| Yalnız küresel pay, son hafta | %28,43 |
+
+`fit` yaklaşık 1,7 ms. Son katta 194 hat x hafta günü, hepsi kendi payıyla; haftadan haftaya sapma ortalama 0,025, medyan 0,024, p90 0,041. Veri sentetik ve günlük gürültülü, bu yüzden daha çok hafta hep yardım ediyor; gerçek veride farklı olabilir.
