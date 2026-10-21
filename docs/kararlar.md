@@ -24,7 +24,7 @@ dağıtım adı.
 | K07 | Sürüm `0.0.1.dev0`, tek kaynak `_version.py` | Ön-alfa; git etiketine bağlı değil | hatch-vcs ile git etiketinden | `src/pirilib/_version.py` | açık |
 | K08 | ruff (satır 100, kurallar E W F I B UP SIM NPY PT RUF), mypy strict, pytest'te uyarılar hata | Erken aşamada sıkı kalite | Daha gevşek kurallar | `pyproject.toml` | açık |
 | K09 | Kod, docstring ve dokümanlar İngilizce; README'de Türkçe bölüm | PyPI/GitHub kitlesi uluslararası | Tamamen Türkçe ya da iki dilli dokümantasyon | Tüm repo | açık |
-| K10 | Hiçbir şey commit edilmedi; ana dal `main` | Kullanıcı commit istemedi | Her adım sonunda commit | git | açık |
+| K10 | Hiçbir şey commit edilmedi; ana dal `main` (**Güncel:** K145 ile değişti: commit'ler yerelde atılıyor) | Kullanıcı commit istemedi | Her adım sonunda commit | git | açık |
 | K11 | Paketi import etmek hiçbir şey yazdırmaz; yalnız `pirilib` logger'ına NullHandler eklenir | Kütüphane iyi pratiği | - | `src/pirilib/__init__.py` | açık |
 | K12 | ABC modülü `tuning/bee_colony.py` olacak (`abc.py` değil) | `abc` standart kütüphane modülüyle çakışır | `abc_tuner.py` | (planlı) | açık |
 | K13 | Örnek veriler tamamen sentetik ve CC0; yarışma verisi ve maliyetleri yok | Üçüncü taraf verisi dağıtılamaz | - | `examples/` | açık |
@@ -35,7 +35,7 @@ dağıtım adı.
 
 | # | Karar | Neden | Alternatif | Yer | Durum |
 |---|---|---|---|---|---|
-| K16 | İlk problem paketi "linehaul"; şema kimliği `pirilib/linehaul@0.1` ve belgede zorunlu `schema:` alanı | Sürümlü şema, ileride geçiş yapılabilir | Sürümsüz belge | `spec/models.py` | açık |
+| K16 | İlk problem paketi "linehaul"; şema kimliği `pirilib/linehaul@0.1` ve belgede zorunlu `schema:` alanı (**Güncel:** K130 ile güncel kimlik `pirilib/linehaul@0.2`) | Sürümlü şema, ileride geçiş yapılabilir | Sürümsüz belge | `spec/models.py` | açık |
 | K17 | Kimlikler (merkez, araç tipi, boyut) baş/son boşluk kırpılıp Unicode NFC'ye çevrilir; büyük/küçük harf duyarlı, benzer ad eşlemesi yok | Sessiz yanlış eşleme olmasın | Harf duyarsız eşleme | `spec/models.py` (`Name`) | açık |
 | K18 | Sıkı doğrulama: bilinmeyen alan hata, inf/NaN hata, modeller değiştirilemez (frozen) | Yazım hataları sessizce yutulmasın | Bilinmeyen alanları yok saymak | `spec/models.py` | açık |
 | K19 | Talep her kapasite boyutunu vermek zorunda; eksik boyut 0 sayılmaz | Sessiz varsayım yanlış plan üretebilir | Eksik boyutu 0 kabul etmek | `spec/models.py` | açık |
@@ -47,9 +47,9 @@ dağıtım adı.
 | K25 | Talep bölme varsayılan açık | Prototip de bölüyordu | Varsayılan kapalı | `spec/models.py` | açık |
 | K26 | Özmal araç: bir hatta bağlı, `count` günlük araç sayısı, tek yön; `mandatory` varsayılan açık (sabit maliyet her gün ödenir), `stopovers` varsayılan kapalı | Hepsiburada özmal filosunun yapısı | Dönüş seferlerini modellemek | `spec/models.py` (`OwnedVehicles`) | açık |
 | K27 | Spot teklif: araç tipi başına tek teklif (tekrar hata), `available` günlük sayı, boş = sınırsız | Basit ve açık | Aynı tip için birden çok fiyat kademesi | `spec/models.py` (`SpotOffer`) | açık |
-| K28 | Maliyet modeli sefer başına sabit + km başı; birim (desi) başı maliyet, köprü/otoyol ücreti yok | Prototip maliyet yapısı | Birim başı ve sabit ek kalemler | `spec/models.py` (`Cost`) | açık |
+| K28 | Maliyet modeli sefer başına sabit + km başı; birim (desi) başı maliyet, köprü/otoyol ücreti yok (**Güncel:** K134 ile saat başı maliyet de var) | Prototip maliyet yapısı | Birim başı ve sabit ek kalemler | `spec/models.py` (`Cost`) | açık |
 | K29 | Merkez yasağı aracın o merkezden çıkmasını, orada durmasını ve varmasını kapsar | En güvenli yorum | Yalnız varışı yasaklamak | `spec/models.py` (`Center`) | açık |
-| K30 | Talep kendi gününde gönderilir; bekletme/erteleme yok (0.3 sürümünde) | Yol haritası | - | `spec/models.py` (`Demand`) | açık |
+| K30 | Talep kendi gününde gönderilir; bekletme/erteleme yok (0.3 sürümünde) (**Güncel:** K136 ile `max_deferral_days` geldi) | Yol haritası | - | `spec/models.py` (`Demand`) | açık |
 | K31 | Takvim iki ucu dahil; takvim dışı talep hata | Açık tanım | Takvim dışını yok saymak | `spec/models.py` (`Calendar`) | açık |
 | K32 | Talep kimliği verilmezse sıra numarasından üretilir (`D000001`, ...); kullanıcı kimliğiyle çakışırsa "duplicate" hatası | Basit, tekrarlanabilir | UUID, satır numarası | `spec/models.py` | açık |
 | K33 | "Bu talebe izinli araç var mı" kontrolü yalnız gerekli koşul; stretch ve minimum doluluk yüzünden imkânsız olanları değerlendirici bulur | Doğrulamada tam fizibilite çözmek pahalı | Doğrulamada ön çözüm | `spec/models.py` (`_demand_issues`) | açık |
@@ -67,7 +67,7 @@ dağıtım adı.
 | K45 | Problem belgesine isteğe bağlı `name` alanı eklendi | Raporlarda etiket | - | `spec/models.py` | açık |
 | K46 | Dizi formu: int64/float64/bool, salt okunur; spot limitsizse `UNLIMITED = -1` | Motorlarda kopyasız ve güvenli | float NaN ile sınırsız | `spec/instance.py` | açık |
 | K47 | JSON Schema dosyası repoda (`schemas/`), wheel'e girmez; `python -m pirilib.spec.schema` ile üretilir; `pirilib.spec` onu dışa aktarmaz | runpy uyarısını önlemek için | Şemayı paket verisi yapmak | `spec/schema.py` | açık |
-| K48 | Üst seviye `pirilib` yalnız `load_spec`, `PirilibError`, `SpecError`, `__version__` verir | Küçük ve kararlı yüzey | Her şeyi üstte vermek | `src/pirilib/__init__.py` | açık |
+| K48 | Üst seviye `pirilib` yalnız `load_spec`, `PirilibError`, `SpecError`, `__version__` verir (**Güncel:** K70 ve K88 ile genişledi; üst seviye bugün 15 ad) | Küçük ve kararlı yüzey | Her şeyi üstte vermek | `src/pirilib/__init__.py` | açık |
 | K49 | Şema testi için `jsonschema` test bağımlılığı | Yayınlanan şema gerçekten doğrulanıyor | Elle kontrol | `pyproject.toml` | açık |
 | K50 | ruff'ta Türkçe `ı` harfine izin | Testlerde ve örneklerde Türkçe metin | Kaçış dizileri | `pyproject.toml` | açık |
 
@@ -91,7 +91,7 @@ dağıtım adı.
 | K64 | Talepten fazla taşımak ihlal (`overdelivery`) | Prototipteki "hayalet talep" (574 desi) dersi | Fazlaya izin vermek | `evaluation.py` | açık |
 | K65 | Uygun (feasible) = tüm ihlaller (kendi kısıtların dahil) sıfır; değerlendiricide sert/yumuşak ayrımı yok, çözücü karar verir | Tek ölçüm kaynağı | Kısıt başına sert/yumuşak bayrağı | `evaluation.py` | açık |
 | K66 | Kendi kısıtın: `name` + `violation(evaluation)`; ad katalogla çakışamaz; miktar sonlu ve >= 0 olmalı, yoksa `ValueError` | Sessiz hata olmasın | Çakışan adı ezmek | `evaluation.py`, `constraints.py` | açık |
-| K67 | Amaç: `Evaluation -> float` olan her çağrılabilir; `Term` ve `Sum` ile ağırlıklı toplama; birçok planı aynı anda değerlendiren toplu (batch) amaç katmanı Adım 3'e ertelendi | Önce sade API | Baştan toplu API | `objective.py` | açık |
+| K67 | Amaç: `Evaluation -> float` olan her çağrılabilir; `Term` ve `Sum` ile ağırlıklı toplama; birçok planı aynı anda değerlendiren toplu (batch) amaç katmanı Adım 3'e ertelendi (**Güncel:** toplu katman K82'deki doğrusal biçimle kapandı) | Önce sade API | Baştan toplu API | `objective.py` | açık |
 | K68 | Hazır örnek kısıtlar `MaxRouteKm`, `MaxDispatchesPerDay`; kendi kısıtların şimdilik yalnız Python API ile, YAML ile değil | Kapsamı dar tutmak | YAML'da kısıt tanımı | `constraints.py` | açık |
 | K69 | Bağımsız, saf Python doğrulayıcı `check_plan`; property testlerde değerlendiriciyle karşılaştırılır; yaklaşık 50 kat yavaş | Değerlendiricideki hataları yakalar | Tek uygulama | `validate.py` | açık |
 | K70 | Üst seviye API genişledi: `evaluate`, `Evaluation`, `Plan`, `Dispatch`, `Load`, `check_plan`, `PlanError`; `objective` ve `constraints` modül olarak | Sık kullanılanlar üstte | - | `src/pirilib/__init__.py` | açık |
@@ -107,11 +107,11 @@ dağıtım adı.
 | K75 | Bölünebilir talepte bir durağın yükü, o varıştaki her talep satırına aynı oranda dağıtılır | Kapsama tam ve basit | İlk satırları önce doldurmak | `solvers/decompose.py` | açık |
 | K76 | Karınca kararı: önce (araç seçeneği, ilk durak) birlikte, sonra "sonraki durak ya da bitir"; özmal rota bitince hat sonuna gider | Heterojen filo ve özmal hat kuralı tek akışta | Önce rota, sonra araç | `solvers/_colony.py` | açık |
 | K77 | Sezgisel (heuristic): ilk seçimde "taşınan miktar / sefer maliyeti"; sonraki durakta "kendi aracıyla gitse maliyeti / sapmanın ek maliyeti x doldurduğu pay"; bitirme 1, minimum doluluk altında 0.1 | Clarke-Wright tasarruf fikri | Yalnız mesafe tabanlı sezgisel | `solvers/_colony.py` | açık |
-| K78 | Minimum doluluk ve kapsama dışındaki tüm yerleşik kurallar kurulum gereği sağlanır (500 rastgele problemde doğrulandı) | Çözücü uygun plan üretsin | Ceza ile düzeltmek | `solvers/_colony.py`, `tests/test_aco.py` | açık |
+| K78 | Minimum doluluk ve kapsama dışındaki tüm yerleşik kurallar kurulum gereği sağlanır (500 rastgele problemde doğrulandı) (**Güncel:** testte 40 tohum; 500 problem tek seferlik ölçüm) | Çözücü uygun plan üretsin | Ceza ile düzeltmek | `solvers/_colony.py`, `tests/test_aco.py` | açık |
 | K79 | Stretch, her uzatmada yeni son durağa göre kontrol edilir; ara durumda aşan ama sonra düzelecek rotalara izin verilmez (biraz daha katı) | Basit ve güvenli | Yalnız rota sonunda kontrol | `solvers/_colony.py` | açık |
 | K80 | Feromon: MAX-MIN hypercube; değerler [tau_min, 1], güncelleme ölçekten bağımsız; varsayılan iterasyon-en-iyisi ile güncelleme | Amaç ölçeğinden bağımsız (Birattari) | Klasik AS/ACS birikimi | `solvers/_colony.py` | açık |
 | K81 | Varsayılan ayarlar: 16 karınca, 60 iterasyon, sabır 20, alpha 1, beta 2, rho 0.1, q0 0, tau_min 0.01 | Literatürde yaygın başlangıç; ABC ayarlayacak | - | `solvers/aco.py` | açık |
-| K82 | Doğrusal biçimi olan amaç ve kendi kısıtın yoksa hızlı yol (her alt problem kendi başına); aksi halde genel yol (her karınca tüm planı kurar, `evaluate` + amaç) | Hız ile genelliği birlikte sunmak | Yalnız genel yol | `solvers/aco.py` | açık |
+| K82 | Doğrusal biçimi olan amaç ve kendi kısıtın yoksa hızlı yol (her alt problem kendi başına); aksi halde genel yol (her karınca tüm planı kurar, `evaluate` + amaç) (**Güncel:** K140'tan beri `scheduled` problemlerde de genel yol) | Hız ile genelliği birlikte sunmak | Yalnız genel yol | `solvers/aco.py` | açık |
 | K83 | Varsayılan amaç: toplam maliyet + 1e6 x tüm yerleşik ihlaller | İhlaller pratikte sert kısıt gibi davranır | Sert kısıt filtresi | `solvers/base.py` | açık |
 | K84 | Hız için benzer boyuttaki alt problemler dolgulu dizilerde yan yana çalıştırılır (boyut kovaları 4, 8, 16, ...); bellek için en çok 40.000 satır ve 2 milyon ağırlık hücresi | numpy çağrı başı ek yükü baskındı (9 kat hızlanma) | numba ile JIT | `solvers/_colony.py`, `solvers/aco.py` | açık |
 | K85 | Spot limiti varsa bir grupta bir günden en çok bir alt problem olur; aynı günün alt problemleri spot araçları sırayla tüketir (açgözlü) | Günlük limit doğru paylaşılsın | Limitleri baştan bölüştürmek | `solvers/aco.py` | açık |
@@ -131,7 +131,7 @@ dağıtım adı.
 | K94 | Kesin çözücü sınırları: alt problem başına en çok 9 varış (varsayılan); bölünemez talep desteklenmez; spot limitleri çıkışlar arasında sırayla paylaşılır (limit varsa plan bütünü için optimum garanti değil) | Rota sayısı üstel büyüyor | Daha büyük sınır, sütun üretimi | `solvers/exact.py` | açık |
 | K95 | Melez mod `ACOConfig(exact_nodes=N)`: en çok N varışlı alt problemler kesin çözülür; varsayılan 0 (kapalı) | scipy zorunlu olmasın | Varsayılan açık | `solvers/aco.py` | açık |
 | K96 | Rota sıralama: `forward_only` açıkken her alt küme için tek sıra (çıkıştan uzaklığa göre); kapalıyken tüm permütasyonlar | Yalnız geçerli sıraları üretmek | - | `solvers/exact.py` | açık |
-| K97 | Bazı çözümlerde HiGHS "HighsMipSolverData::transformNewIntegerFeasibleSolution" satırı basıyor (scipy 1.18.1 içindeki HiGHS); bastırılmadı | C seviyesinde çıktı | Alt süreçte çözmek | - | açık |
+| K97 | Bazı çözümlerde HiGHS "HighsMipSolverData::transformNewIntegerFeasibleSolution" satırı basıyor (scipy 1.18.1 içindeki HiGHS); bastırılmadı (**Güncel:** K146 ile değişti: HiGHS çıktısı susturuluyor) | C seviyesinde çıktı | Alt süreçte çözmek | - | açık |
 
 ## Adım 5: ABC ayarlayıcı
 
@@ -140,19 +140,19 @@ dağıtım adı.
 | K98 | Ayarlayıcı birim küpte arar; `SearchSpace` parametreleri (ondalık, log ölçekli ondalık, tamsayı, seçenek) küpe çevirir | Ayarlayıcı problemden bağımsız kalır | Her tip için ayrı operatör | `tuning/space.py` | açık |
 | K99 | Varsayılan ACO arama uzayı: ants 4-40, alpha 0-4, beta 0-6, rho 0.01-0.6 (log), q0 0-0.9, tau_min 1e-4-0.2 (log), update {iteration_best, best_so_far}; `iterations` ve `patience` ayarlanmaz | Süreyi kullanıcı belirlesin | Süreyi de ayarlamak | `tuning/space.py` | açık |
 | K100 | ABC düzeltmeleri: sıra tabanlı gözcü seçimi, katı kabul (`<`), değişim oranı 0.5 (en az bir boyut), döngü başına en çok bir izci, sınır = kaynak x boyut, bütçe = amaç değerlendirme sayısı | Prototip denetiminde bulunan hatalar | Klasik Karaboga ABC | `tuning/bee_colony.py` | açık |
-| K101 | Varsayılan 6 besin kaynağı | Küçük bütçeler için | 10-20 kaynak | `tuning/bee_colony.py` | açık |
+| K101 | Varsayılan 6 besin kaynağı (**Güncel:** K149 ile değişti) | Küçük bütçeler için | 10-20 kaynak | `tuning/bee_colony.py` | açık |
 | K102 | Ayar skoru: temel ayara göre göreli fark, tüm eğitim problemleri ve tohumlar üzerinden ortalama; tohumlar sabit (ortak rastgele sayılar) | Ölçekten bağımsız ve adil karşılaştırma | Ham amaç değeri | `tuning/tune.py` | açık |
 | K103 | Temel ayar ilk denenen noktadır; yeni ayar temeli en az %0,1 (`min_improvement`) geçmezse temel korunur | Gürültüye aşırı uyumu önlemek (ölçümde görüldü) | Her zaman en iyiyi döndürmek | `tuning/tune.py` | açık |
 | K104 | Ayarlanan çözüm süresi amaca katılmaz | Kullanıcı iterasyonla süreyi kontrol eder | Süre cezası | `tuning/tune.py` | açık |
 | K105 | Optuna karşılaştırması yapılmadı (bağımlılık eklenmedi); kıyas çizgisi rastgele arama | Bağımlılığı az tutmak | Optuna TPE | - | açık |
 | K106 | Ayarlayıcı `pirilib.tuning` altında; üst seviyede değil | Ayrı kullanım alanı | `pirilib.tune` | `tuning/__init__.py` | açık |
-| K107 | Bulgu: 24 ayarlık küçük bütçede rastgele arama ABC'den iyi çıktı; ABC 150 değerlendirmeli test fonksiyonlarında açıkça önde. Öneri: bütçe en az 60 ayar | Ölçüm sonucu | Küçük bütçe için daha az kaynak | `docs/olcumler.md` | açık |
+| K107 | Bulgu: 24 ayarlık küçük bütçede rastgele arama ABC'den iyi çıktı; ABC 150 değerlendirmeli test fonksiyonlarında açıkça önde. Öneri: bütçe en az 60 ayar (**Güncel:** K149 ölçümüyle güncellendi: 24 ayarda fark kapandı, öneri hâlâ en az 60) | Ölçüm sonucu | Küçük bütçe için daha az kaynak | `docs/olcumler.md` | açık |
 
 ## Adım 6: Komut satırı, plan dosyaları, sentetik üreteç, belgeler
 
 | # | Karar | Neden | Alternatif | Yer | Durum |
 |---|---|---|---|---|---|
-| K108 | CLI stdlib `argparse` ile; komutlar `validate`, `solve`, `check`, `tune`, `generate`, `schema`; çıkış kodu 0 başarı, 1 geçersiz girdi ya da kural ihlali (`check`), 2 yanlış kullanım | Ek bağımlılık yok | click, typer | `cli.py` | açık |
+| K108 | CLI stdlib `argparse` ile; komutlar `validate`, `solve`, `check`, `tune`, `generate`, `schema`; çıkış kodu 0 başarı, 1 geçersiz girdi ya da kural ihlali (`check`), 2 yanlış kullanım (**Güncel:** komutlar bugün 8: validate, solve, check, tune, generate, backtest, forecast, schema) | Ek bağımlılık yok | click, typer | `cli.py` | açık |
 | K109 | CLI amaç fonksiyonu: maliyet + `--penalty` (varsayılan 1e6) x ihlaller; CLI'dan özel amaç verilemez | Basit tutmak; özel amaç Python API ile | Amaç için ifade dili | `cli.py` | açık |
 | K110 | Plan dosyası: yük başına bir satır, isimlerle; kaynak `fleet.spot[1]` gibi problem dosyasındaki konumla; boş sefer tek satır | Excel'de okunur, geri okunabilir | Sefer ve yük için iki ayrı tablo | `planio.py` | açık |
 | K111 | Plan sayıları tam hassasiyetle yazılır (`repr`); `route_km` ve `dispatch_cost` okunurken yok sayılır, yeniden hesaplanır | Yuvarlama sahte ihlal yaratıyordu | 6 haneye yuvarlamak | `planio.py` | açık |
@@ -175,7 +175,7 @@ dağıtım adı.
 | K123 | Adaptör `Regression(make, target)`: fit/predict olan her model; log1p hedefte Duan smearing; varsayılan şampiyon LightGBM-Tweedie prototipin ABC ile ayarlanmış parametreleriyle (vp=1,3), ekstra `pirilib[forecast]` | Prototip kararı (kullanıcı: v1 prototip gibi) | Tek model | `forecast/models.py` | açık |
 | K124 | Varlık filtresi: son 35 günde o haftanın gününde kaydı olmayan hat için tahmin 0 | Prototipteki gibi | Filtre yok | `forecast/models.py` | açık |
 | K125 | Plana köprü: tahmin + ağ (merkez, filo, kurallar) = problem belgesi; isteğe bağlı kantil tamponu (backtest gerçek/tahmin oranlarının hat başına kantili, az veride genel kantil) | Plan beklenen değere göre yapılırsa günlerin yarısı açık kalır | Sabit yüzde tampon | `forecast/bridge.py` | açık |
-| K126 | Dalga (09:00/17:00) bölme ve senaryo değerlendirmesi v0.2 dışında; zaman dalgaları v0.3 | Kapsam | Hemen eklemek | - | açık |
+| K126 | Dalga (09:00/17:00) bölme ve senaryo değerlendirmesi v0.2 dışında; zaman dalgaları v0.3 (**Güncel:** dalga bölme 3c'de geldi (K152-K161)) | Kapsam | Hemen eklemek | - | açık |
 | K127 | CLI `forecast` tahmini ağ dosyasıyla birleştirir; ağdaki CSV tabloları satır olarak gömülür, çıkan problem doğrulanmadan yazılmaz; tampon için varsayılan 4 katlamalık backtest | Bağımsız, taşınabilir problem dosyası | Ağı dosya referansıyla bırakmak | `cli.py` | açık |
 | K128 | Bulgu: prototip verisinde walk-forward tahminler yaklaşık %6 düşük (bias -5,8); düzeltme (örneğin bias çarpanı) henüz yok | Ölçüm sonucu | Otomatik bias düzeltmesi | `docs/olcumler.md` | açık |
 | K129 | Bias incelemesi sonucu varsayılan tahmin modeli değiştirilmedi; ölçekli hedef `Regression(scale=True)` deneysel ve isteğe bağlı eklendi; planlamada eksik tahmin kantil tamponuyla karşılanır (0,8 önerilir) | Ölçüm: hiçbir düzeltme doğruluğu bozmadan bias'ı gidermiyor | Kayan kalibrasyonu varsayılan yapmak (bias -0,7, WMAPE +0,8) | `forecast/models.py`, `docs/olcumler.md` | açık |
@@ -257,3 +257,4 @@ Kendi başıma yapamadığım ya da senin hesabınla yapılması gereken işler.
 | S07 | Senin eklediğin `test.py` silindi (K147). Başka bir amacı varsa geri getiririm | Dosya senindi | Silinmiş kalsın | bekliyor |
 | S08 | README ve `project.urls` GitHub'a bağlı; depo özel kalırsa PyPI sayfasındaki bağlantılar açılmaz. Yayında depo açık mı olacak? | Depo görünürlüğü | İlk PyPI yayınında depoyu açmak; o zamana kadar yalnız TestPyPI | bekliyor |
 | S09 | MkDocs 2.0 Material ve mkdocstrings ile uyumsuz olacak; şimdilik `<2` ile sabit. İleride başka araca (ör. Zensical) geçilsin mi? | Uzun vadeli araç seçimi | 2.0 çıkıp eklenti durumu netleşince bakmak | bekliyor |
+| S10 | Kural "yorum satırı yok" kod ve yapılandırmaya uygulandı; README ve kılavuzdaki kod örneklerinde (`pip install ...   # açıklama` gibi) `#` açıklamalar duruyor. Belgelerdeki örnekler de temizlensin mi? | Kuralın kapsamı senin | Örneklerde kalsın (okuru yönlendiriyor); kod dosyalarında hiç yok | bekliyor |

@@ -25,14 +25,14 @@ decision log at the first alpha.
 
 | Area | Names |
 |---|---|
-| Problem | `load_spec`, `parse_spec`, `compile_spec`, `LineHaulSpec` and its models (`Calendar`, `Center`, `VehicleType`, `Cost`, `Fleet`, `OwnedVehicles`, `SpotOffer`, `Demand`, `Rules`, `MinFill`, `Stopover`, `HaversineMatrix`, `ExplicitMatrix`, `Arc`, `TableSource`), `SCHEMA_ID`, `UNLIMITED` |
+| Problem | `load_spec`, `parse_spec`, `compile_spec`, `LineHaulSpec` and its models (`Calendar`, `Center`, `VehicleType`, `Cost`, `Fleet`, `OwnedVehicles`, `SpotOffer`, `Demand`, `Rules`, `MinFill`, `Stopover`, `Service`, `Handling`, `HaversineMatrix`, `ExplicitMatrix`, `Arc`, `TableSource`), `SCHEMA_ID`, `UNLIMITED` |
 | Plans | `Plan`, `Dispatch`, `Load`, `planio.read_plan`, `planio.write_plan` |
 | Evaluation | `evaluate`, `Evaluation`, `check_plan`, `constraints.CATALOG`, `Constraint`, `constraint`, `MaxRouteKm`, `MaxDispatchesPerDay` |
 | Objectives | every term factory in `pirilib.objective` (`total_cost`, `dispatch_cost`, `service_cost`, `owned_fixed_cost`, `distance_km`, `dispatches`, `unused_capacity`, `unserved`, `violation`, `violations`), `Term`, `Sum` |
 | Solving | `solve`, `Solver` (protocol), `ACOSolver`, `ACOConfig`, `SolveResult`, `default_objective` |
 | Tuning | `tune`, `Tuner` (protocol), `BeeColony`, `RandomSearch`, `SearchSpace`, `Int`, `Float`, `Choice`, `aco_space`, `TuningResult`, `SearchResult`, `Trace` |
 | Forecasting | `Forecaster` (protocol), `History`, `load_history`, `clean`, `Calendar`, `Forecast`, `SeasonalMean`, `SeasonalNaive`, `Regression`, `Backtester`, `backtest`, `compare`, `report`, `Backtest`, `Fold`, `Scores` |
-| Command line | `generate`, `solve`, `check`, `forecast`, `backtest` |
+| Command line | `validate`, `solve`, `check`, `tune`, `generate`, `backtest`, `forecast`, `schema` and their options |
 
 `LineHaulInstance` is stable as a type. Its array attributes are what custom
 constraints and solvers read; before 1.0 the documented subset becomes
@@ -69,6 +69,8 @@ in their docstrings.
 2. Decide the documented subset of `LineHaulInstance` arrays.
 3. Rename the internal modules listed above with a leading underscore, or say
    in their docstrings that they are internal.
-4. Mark the experimental names in their docstrings.
+4. Mark the experimental names in their docstrings, and give the public
+   methods that have none a docstring (`ACOSolver.solve`, `Plan.dispatches`,
+   `cli.main` and others shown without text on the reference pages).
 5. Settle the open decisions of the alpha review (`docs/kararlar.md`).
 6. Freeze schema `pirilib/linehaul@1.0` and keep reading 0.1 and 0.2.

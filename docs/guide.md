@@ -179,7 +179,7 @@ Every rule has a violation amount that is zero when the rule holds:
 | Constraint | Amount |
 |---|---|
 | `route` | dispatches without stops, stops at the origin, centers visited twice |
-| `load_route` | loads whose demand does not match the dispatch's origin, day or stops |
+| `load_route` | loads whose demand does not match the dispatch's origin or stops |
 | `ban` | origins and stops where the vehicle type is banned |
 | `owned_line` | owned dispatches off their line |
 | `owned_availability`, `spot_availability` | vehicles used beyond the daily count |
@@ -190,6 +190,10 @@ Every rule has a violation amount that is zero when the rule holds:
 | `forward_only` | stops not farther than the one before |
 | `split` | extra loads of demands that may not be split |
 | `coverage`, `overdelivery` | quantity not carried, quantity carried beyond the demand |
+| `ready` | loads that start loading before their demand is ready |
+| `deferral` | loads that leave before their demand day or after `max_deferral_days` |
+| `handling` | quantity handled at a center on a day beyond `handling_capacity` |
+| `vehicle_limit` | vehicles of a type at a center on a day beyond `vehicle_limits` |
 
 Constraints of your own are objects with a `name` and a
 `violation(evaluation)` method. `MaxRouteKm`, `MaxDispatchesPerDay` and
@@ -275,8 +279,9 @@ better = pirilib.ACOSolver(result.config)
 The artificial bee colony searches the space of ACO settings (`aco_space()`).
 Each setting is scored by its mean relative difference to the base setting
 over the training instances and seeds. A setting replaces the base only if it
-is at least 0.1 % better. `RandomSearch` is the baseline tuner. Budgets below
-about 60 settings favour random search. Check tuned settings on instances you
+is at least 0.1 % better. `RandomSearch` is the baseline tuner. With about 24
+settings the bee colony and random search were close in our measurements;
+give it 60 or more. Check tuned settings on instances you
 did not tune on.
 
 ## 6. Forecast demand
@@ -389,8 +394,8 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
   subproblem.
 - When spot offers have daily limits, origins of a day take vehicles one after
   another, greedily.
-- Forecasts cover one quantity dimension, up to 7 days ahead, per day (no time
-  waves). On the prototype data, walk-forward forecasts ran about 6 % low
+- Forecasts cover one quantity dimension, up to 7 days ahead, per day; time
+  waves come from shares learned per line and weekday, not from a model. On the prototype data, walk-forward forecasts ran about 6 % low
   because of week-to-week swings around holidays. None of the corrections
   tried kept the accuracy (see `docs/olcumler.md`), so plan with a quantile
   buffer, for example 0.8. `Regression(scale=True)` (learning shapes relative
