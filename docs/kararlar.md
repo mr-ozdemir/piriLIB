@@ -205,3 +205,17 @@ dağıtım adı.
 | K143 | Kodda ve yapılandırma dosyalarında `#` yorum satırı yok; satır sonu alan açıklamaları sınıf docstring'lerinin "Attributes" bölümüne taşındı; docstring'ler yorum sayılmadı ve kaldı (kütüphanenin API belgesi) | Kullanıcı kuralı | Docstring'leri de kaldırmak | tüm repo | açık |
 | K144 | "OOP ve kütüphane yapısı" yorumu: motorlar ve veriler sınıf (çözücüler, ayarlayıcılar, tahminciler, plan, değerlendirme, spec modelleri); `evaluate`, `solve`, `load_spec`, `backtest` gibi ince modül fonksiyonları numpy/scikit-learn tarzı giriş noktası olarak kaldı | Python kütüphane alışkanlığı | Her şeyi sınıf metodu yapmak | tüm repo | açık |
 | K145 | Commit'ler yerelde atılır, push'u depo sahibi yapar | Kullanıcı kuralı | - | git | açık |
+| K146 | HiGHS'in C++ tarafından standart çıktıya yazdığı tanı satırları, `milp`/`linprog` çağrıları sırasında dosya tanımlayıcısı boş aygıta yönlendirilerek susturulur | Kütüphane kullanıcının konsolunu kirletmemeli | Çıktıyı bırakmak | `solvers/exact.py` | açık |
+
+## Sana sorulacaklar
+
+Kendi başıma yapamadığım ya da senin hesabınla yapılması gereken işler. Bakıp karar verdiğinde ilgili satırı güncelleyeceğim.
+
+| # | Soru / yapılacak iş | Neden sende | Önerim | Durum |
+|---|---|---|---|---|
+| S01 | GitHub "Contributors" listesi eski commit'leri önbellekten gösterebilir. Beklemek mi, yoksa depoyu silip boş açıp yeniden push'lamak mı? | Depo ayarı senin hesabında | Birkaç gün beklemek; düzelmezse depoyu silip boş açmak ve `main`'i yeniden push'lamak | bekliyor |
+| S02 | test.pypi.org ve pypi.org'da `pirilib` için trusted publisher eklemek (depo `mr-ozdemir/piriLIB`, iş akışı `release.yml`, ortamlar `testpypi` ve `pypi`) | PyPI hesabı sende | Önce yalnız TestPyPI | bekliyor |
+| S03 | GitHub'da `testpypi` ve `pypi` ortamlarını açmak, `pypi` ortamına onaylayıcı olarak kendini eklemek | Depo ayarı | Onaylayıcı zorunlu olsun | bekliyor |
+| S04 | İlk yayın: sürümü `0.1.0`'a mı (ya da `0.1.0a1`'e mi) çekelim, etiketi ne zaman atalım? | Yayın kararı senin | `0.1.0a1` ile TestPyPI'de alfa | bekliyor |
+| S05 | Depo özel; belge sitesi (GitHub Pages) özel depoda ücretli plan ister. Siteyi şimdilik yalnız yerelde mi tutalım? | Hesap planı | Depo açılana kadar yerelde `mkdocs serve` | bekliyor |
+| S06 | Kararlar listesinin (K01...) alfa incelemesi | Senin kararın | İnceleme belgesinden sırayla | bekliyor |
