@@ -215,3 +215,46 @@ def test_forecast_with_unknown_centers(
     assert code == 1
     assert "unknown center" in err
     assert not (tmp_path / "problem.yaml").exists()
+
+
+def test_forecast_split_into_waves(
+    capsys: pytest.CaptureFixture[str], history_files: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    import yaml
+
+    from pirilib import synthetic
+
+    _, holidays, network = history_files
+    waves, _ = synthetic.wave_history(lines=8, days=84, seed=1)
+    path = synthetic.write_wave_history(waves, tmp_path / "waves.csv")
+    forecast, problem = tmp_path / "forecast.csv", tmp_path / "problem.yaml"
+    code, out, _ = run(
+        capsys,
+        "forecast",
+        str(path),
+        "--holidays",
+        str(holidays),
+        "--model",
+        "seasonal",
+        "--waves",
+        str(path),
+        "--wave-weeks",
+        "3",
+        "-o",
+        str(forecast),
+        "--network",
+        str(network),
+        "--problem",
+        str(problem),
+    )
+    assert code == 0
+    assert "wave shares of" in out
+    lines = forecast.read_text("utf-8").splitlines()
+    assert lines[0] == "origin,destination,date,wave,desi"
+    assert {line.split(",")[3] for line in lines[1:]} == {"09:00", "17:00"}
+    document = yaml.safe_load(problem.read_text("utf-8"))
+    assert {row["ready"] for row in document["demand"]} == {"09:00", "17:00"}
+    assert len(document["demand"]) == len(lines) - 1
+    code, out, _ = run(capsys, "validate", str(problem))
+    assert code == 0
+    assert "valid" in out

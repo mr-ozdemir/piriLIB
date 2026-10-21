@@ -72,3 +72,7 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   `vehicle_limit`). Plan files have a `start` column.
 - `pirilib.forecast.Backtester` keeps fold settings for repeated backtests and
   comparisons.
+- Time waves in `pirilib.forecast`: `WaveSplitter` learns wave shares per line
+  and weekday from a wave-level history (`load_wave_history`) without
+  look-ahead, `planning_document(..., waves=...)` makes demand rows ready at
+  the wave times, and `pirilib forecast --waves` splits from the command line.
