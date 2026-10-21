@@ -59,7 +59,8 @@ in their docstrings.
 
 ## Internal
 
-`pirilib.solvers._colony`, `pirilib.solvers._routing`, `pirilib.solvers.decompose`,
+`pirilib.solvers._colony`, `pirilib.solvers._routing`, `pirilib.solvers._timing`,
+`pirilib.solvers.ledger`, `pirilib.solvers.decompose`,
 `pirilib.solvers.local_search`, `pirilib.spec.tables`, `pirilib.spec._format`,
 `pirilib.geo` and `pirilib.cli` beyond `main`.
 

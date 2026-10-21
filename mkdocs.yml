@@ -38,6 +38,7 @@ nav:
           - pirilib.solvers.decompose: api/solvers/decompose.md
           - pirilib.solvers.direct: api/solvers/direct.md
           - pirilib.solvers.exact: api/solvers/exact.md
+          - pirilib.solvers.ledger: api/solvers/ledger.md
           - pirilib.solvers.local_search: api/solvers/local_search.md
       - pirilib.tuning: api/tuning.md
       - pirilib.forecast: api/forecast.md
