@@ -1,0 +1,845 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Arc": {
+      "additionalProperties": false,
+      "description": "The distance from one center to another.",
+      "properties": {
+        "origin": {
+          "minLength": 1,
+          "title": "Origin",
+          "type": "string"
+        },
+        "destination": {
+          "minLength": 1,
+          "title": "Destination",
+          "type": "string"
+        },
+        "km": {
+          "minimum": 0,
+          "title": "Km",
+          "type": "number"
+        }
+      },
+      "required": [
+        "origin",
+        "destination",
+        "km"
+      ],
+      "title": "Arc",
+      "type": "object"
+    },
+    "Calendar": {
+      "additionalProperties": false,
+      "description": "The planning horizon; both ends are included.",
+      "properties": {
+        "start": {
+          "format": "date",
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "format": "date",
+          "title": "End",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "Calendar",
+      "type": "object"
+    },
+    "Center": {
+      "additionalProperties": false,
+      "description": "A transfer center: a depot, hub or city that loads leave from or arrive at.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "lat": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lat"
+        },
+        "lon": {
+          "anyOf": [
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lon"
+        },
+        "banned_vehicle_types": {
+          "default": [],
+          "description": "Vehicle types that may not depart from, stop at or arrive at this center.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Banned Vehicle Types",
+          "type": "array"
+        },
+        "handling_capacity": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Primary quantity the center can load and unload per day, both counted; null means no limit.",
+          "title": "Handling Capacity"
+        },
+        "vehicle_limits": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "description": "Vehicle type -> most vehicles of that type that may leave from, stop at or arrive at the center per day.",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Vehicle Limits",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Center",
+      "type": "object"
+    },
+    "Cost": {
+      "additionalProperties": false,
+      "description": "Cost of one vehicle dispatch: a fixed part, a part per km and a part per hour.\n\nHours run from the start of loading at the origin to the end of unloading at\nthe last stop.",
+      "properties": {
+        "fixed": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Fixed",
+          "type": "number"
+        },
+        "per_km": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Per Km",
+          "type": "number"
+        },
+        "per_hour": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Per Hour",
+          "type": "number"
+        }
+      },
+      "title": "Cost",
+      "type": "object"
+    },
+    "Demand": {
+      "additionalProperties": false,
+      "description": "A quantity to move from one center to another, shipped on its date.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Generated from the row position (D000001 for the first row) when omitted.",
+          "title": "Id"
+        },
+        "origin": {
+          "minLength": 1,
+          "title": "Origin",
+          "type": "string"
+        },
+        "destination": {
+          "minLength": 1,
+          "title": "Destination",
+          "type": "string"
+        },
+        "date": {
+          "format": "date",
+          "title": "Date",
+          "type": "string"
+        },
+        "quantity": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Quantity per dimension; every capacity dimension is required.",
+          "minProperties": 1,
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Quantity",
+          "type": "object"
+        },
+        "ready": {
+          "anyOf": [
+            {
+              "format": "time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Time of day the demand can be loaded; null means 00:00.",
+          "title": "Ready"
+        },
+        "due": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When it must be unloaded; null means rules.service.due_hours after it is ready, or no due time.",
+          "title": "Due"
+        }
+      },
+      "required": [
+        "origin",
+        "destination",
+        "date",
+        "quantity"
+      ],
+      "title": "Demand",
+      "type": "object"
+    },
+    "ExplicitMatrix": {
+      "additionalProperties": false,
+      "description": "Distances given arc by arc.",
+      "properties": {
+        "source": {
+          "const": "explicit",
+          "title": "Source",
+          "type": "string"
+        },
+        "arcs": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Arc"
+              },
+              "title": "Arcs",
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/TableSource"
+            }
+          ]
+        },
+        "symmetric": {
+          "default": false,
+          "description": "Use the distance of A->B for B->A when B->A is not given.",
+          "title": "Symmetric",
+          "type": "boolean"
+        },
+        "factor": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Factor",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "arcs"
+      ],
+      "title": "ExplicitMatrix",
+      "type": "object"
+    },
+    "Fleet": {
+      "additionalProperties": false,
+      "description": "The vehicles that can be dispatched.",
+      "properties": {
+        "owned": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/OwnedVehicles"
+          },
+          "title": "Owned",
+          "type": "array"
+        },
+        "spot": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SpotOffer"
+          },
+          "title": "Spot",
+          "type": "array"
+        }
+      },
+      "title": "Fleet",
+      "type": "object"
+    },
+    "Handling": {
+      "additionalProperties": false,
+      "description": "Loading and unloading at centers.",
+      "properties": {
+        "minutes_per_unit": {
+          "default": 0.0,
+          "description": "Minutes to load or unload one primary unit, for example 0.01 per desi.",
+          "minimum": 0,
+          "title": "Minutes Per Unit",
+          "type": "number"
+        }
+      },
+      "title": "Handling",
+      "type": "object"
+    },
+    "HaversineMatrix": {
+      "additionalProperties": false,
+      "description": "Distances along the great circle, computed from center coordinates.",
+      "properties": {
+        "source": {
+          "const": "haversine",
+          "title": "Source",
+          "type": "string"
+        },
+        "factor": {
+          "default": 1.0,
+          "description": "Multiplier applied to every distance (1.0 means as the crow flies).",
+          "exclusiveMinimum": 0,
+          "title": "Factor",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "HaversineMatrix",
+      "type": "object"
+    },
+    "MinFill": {
+      "additionalProperties": false,
+      "description": "Minimum share of capacity (primary dimension) a vehicle must carry when it departs.",
+      "properties": {
+        "spot": {
+          "default": 0.0,
+          "exclusiveMaximum": 1.0,
+          "minimum": 0.0,
+          "title": "Spot",
+          "type": "number"
+        },
+        "owned": {
+          "default": 0.0,
+          "exclusiveMaximum": 1.0,
+          "minimum": 0.0,
+          "title": "Owned",
+          "type": "number"
+        }
+      },
+      "title": "MinFill",
+      "type": "object"
+    },
+    "OwnedVehicles": {
+      "additionalProperties": false,
+      "description": "Identical owned or long-term rented vehicles bound to one line.",
+      "properties": {
+        "type": {
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "origin": {
+          "minLength": 1,
+          "title": "Origin",
+          "type": "string"
+        },
+        "destination": {
+          "minLength": 1,
+          "title": "Destination",
+          "type": "string"
+        },
+        "count": {
+          "description": "Vehicles available on the line every day.",
+          "exclusiveMinimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "cost": {
+          "$ref": "#/$defs/Cost"
+        },
+        "mandatory": {
+          "default": true,
+          "description": "The fixed cost is paid every day, even when the vehicle is idle.",
+          "title": "Mandatory",
+          "type": "boolean"
+        },
+        "stopovers": {
+          "default": false,
+          "description": "The vehicles may also drop loads at centers on the way.",
+          "title": "Stopovers",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "origin",
+        "destination",
+        "count",
+        "cost"
+      ],
+      "title": "OwnedVehicles",
+      "type": "object"
+    },
+    "Rules": {
+      "additionalProperties": false,
+      "description": "Business rules every solver and the validator must respect.",
+      "properties": {
+        "primary_dimension": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Quantity used by fill rules; defaults to the first capacity dimension.",
+          "title": "Primary Dimension"
+        },
+        "min_fill": {
+          "$ref": "#/$defs/MinFill",
+          "default": {
+            "spot": 0.0,
+            "owned": 0.0
+          }
+        },
+        "stopover": {
+          "$ref": "#/$defs/Stopover",
+          "default": {
+            "enabled": true,
+            "max_stretch": null,
+            "forward_only": true,
+            "max_stops": null
+          }
+        },
+        "split_demand": {
+          "default": true,
+          "description": "A demand may be carried by several vehicles.",
+          "title": "Split Demand",
+          "type": "boolean"
+        },
+        "service": {
+          "$ref": "#/$defs/Service",
+          "default": {
+            "due_hours": null,
+            "penalty": 0.0,
+            "max_deferral_days": 0
+          }
+        },
+        "handling": {
+          "$ref": "#/$defs/Handling",
+          "default": {
+            "minutes_per_unit": 0.0
+          }
+        }
+      },
+      "title": "Rules",
+      "type": "object"
+    },
+    "Service": {
+      "additionalProperties": false,
+      "description": "Due times, the cost of lateness and how long demand may wait.",
+      "properties": {
+        "due_hours": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Due time of demand without one, in hours after it is ready; null: none.",
+          "title": "Due Hours"
+        },
+        "penalty": {
+          "default": 0.0,
+          "description": "Cost per primary unit for every started hour of lateness.",
+          "minimum": 0,
+          "title": "Penalty",
+          "type": "number"
+        },
+        "max_deferral_days": {
+          "default": 0,
+          "description": "Days after its date a demand may still leave.",
+          "minimum": 0,
+          "title": "Max Deferral Days",
+          "type": "integer"
+        }
+      },
+      "title": "Service",
+      "type": "object"
+    },
+    "SpotOffer": {
+      "additionalProperties": false,
+      "description": "On-demand vehicles of one type, hired per dispatch.",
+      "properties": {
+        "type": {
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "cost": {
+          "$ref": "#/$defs/Cost"
+        },
+        "available": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Vehicles per day; null means unlimited.",
+          "title": "Available"
+        }
+      },
+      "required": [
+        "type",
+        "cost"
+      ],
+      "title": "SpotOffer",
+      "type": "object"
+    },
+    "Stopover": {
+      "additionalProperties": false,
+      "description": "Whether, and how, one vehicle may serve several destinations on one route.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "max_stretch": {
+          "anyOf": [
+            {
+              "minimum": 1.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upper bound on route length divided by the direct distance to the last stop; null means no bound.",
+          "title": "Max Stretch"
+        },
+        "forward_only": {
+          "default": true,
+          "description": "Each stop is farther from the origin than the one before it.",
+          "title": "Forward Only",
+          "type": "boolean"
+        },
+        "max_stops": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Destinations per vehicle; null means no limit.",
+          "title": "Max Stops"
+        }
+      },
+      "title": "Stopover",
+      "type": "object"
+    },
+    "VehicleType": {
+      "additionalProperties": false,
+      "description": "Physical properties of a vehicle type. Costs belong to fleet entries.",
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "capacity": {
+          "additionalProperties": {
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "description": "Capacity per quantity dimension, for example {desi: 22400}.",
+          "minProperties": 1,
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Capacity",
+          "type": "object"
+        },
+        "speed_kmh": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Average speed; needed for travel times (hourly costs, due times).",
+          "title": "Speed Kmh"
+        }
+      },
+      "required": [
+        "name",
+        "capacity"
+      ],
+      "title": "VehicleType",
+      "type": "object"
+    },
+    "TableSource": {
+      "additionalProperties": false,
+      "description": "A CSV file that supplies the rows of a table field.",
+      "properties": {
+        "file": {
+          "description": "CSV path, relative to the problem file.",
+          "minLength": 1,
+          "title": "File",
+          "type": "string"
+        },
+        "delimiter": {
+          "default": ",",
+          "maxLength": 1,
+          "minLength": 1,
+          "title": "Delimiter",
+          "type": "string"
+        },
+        "encoding": {
+          "default": "utf-8-sig",
+          "description": "Text encoding, for example utf-8-sig or cp1254.",
+          "title": "Encoding",
+          "type": "string"
+        },
+        "decimal": {
+          "default": ".",
+          "description": "Decimal separator. With ',' a '.' is read as a thousands separator.",
+          "enum": [
+            ".",
+            ","
+          ],
+          "title": "Decimal",
+          "type": "string"
+        },
+        "date_format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "strptime format of dates, for example '%d.%m.%Y'; ISO dates need none.",
+          "title": "Date Format"
+        },
+        "columns": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Field -> CSV column; other fields are read from the column of the same name.",
+          "title": "Columns",
+          "type": "object"
+        },
+        "quantity": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Demand only: quantity dimension -> CSV column.",
+          "title": "Quantity",
+          "type": "object"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "title": "TableSource",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A complete, validated line-haul planning problem.",
+  "properties": {
+    "schema": {
+      "enum": [
+        "pirilib/linehaul@0.1",
+        "pirilib/linehaul@0.2"
+      ],
+      "title": "Schema",
+      "type": "string"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "A label used in reports.",
+      "title": "Name"
+    },
+    "calendar": {
+      "$ref": "#/$defs/Calendar"
+    },
+    "centers": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Center"
+          },
+          "minItems": 2,
+          "title": "Centers",
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/TableSource"
+        }
+      ]
+    },
+    "matrix": {
+      "discriminator": {
+        "mapping": {
+          "explicit": "#/$defs/ExplicitMatrix",
+          "haversine": "#/$defs/HaversineMatrix"
+        },
+        "propertyName": "source"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/HaversineMatrix"
+        },
+        {
+          "$ref": "#/$defs/ExplicitMatrix"
+        }
+      ],
+      "title": "Matrix"
+    },
+    "vehicle_types": {
+      "items": {
+        "$ref": "#/$defs/VehicleType"
+      },
+      "minItems": 1,
+      "title": "Vehicle Types",
+      "type": "array"
+    },
+    "fleet": {
+      "$ref": "#/$defs/Fleet"
+    },
+    "demand": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Demand"
+          },
+          "title": "Demand",
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/TableSource"
+        }
+      ]
+    },
+    "rules": {
+      "$ref": "#/$defs/Rules",
+      "default": {
+        "primary_dimension": null,
+        "min_fill": {
+          "owned": 0.0,
+          "spot": 0.0
+        },
+        "stopover": {
+          "enabled": true,
+          "forward_only": true,
+          "max_stops": null,
+          "max_stretch": null
+        },
+        "split_demand": true,
+        "service": {
+          "due_hours": null,
+          "max_deferral_days": 0,
+          "penalty": 0.0
+        },
+        "handling": {
+          "minutes_per_unit": 0.0
+        }
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "calendar",
+    "centers",
+    "matrix",
+    "vehicle_types",
+    "fleet",
+    "demand"
+  ],
+  "title": "pirilib/linehaul@0.2 problem document",
+  "type": "object"
+}

@@ -1,0 +1,103 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pirilib"
+dynamic = ["version"]
+description = "Demand forecasting and ACO-ABC based distribution optimization with user-defined objectives and constraints."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Muhammet Ozdemir" }]
+keywords = [
+    "ant colony optimization",
+    "artificial bee colony",
+    "vehicle routing",
+    "fleet planning",
+    "logistics",
+    "demand forecasting",
+    "metaheuristics",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Typing :: Typed",
+]
+dependencies = [
+    "numpy>=2.0",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+exact = ["scipy>=1.14"]
+excel = ["openpyxl>=3.1"]
+forecast = ["lightgbm>=4.0", "scikit-learn>=1.4"]
+
+[project.scripts]
+pirilib = "pirilib.cli:main"
+
+[dependency-groups]
+test = ["pytest>=8.0", "hypothesis>=6.100", "jsonschema>=4.23", "scipy>=1.14", "openpyxl>=3.1", "lightgbm>=4.0", "scikit-learn>=1.4"]
+lint = ["ruff>=0.8", "mypy>=1.13", "types-PyYAML>=6.0"]
+dev = [{ include-group = "test" }, { include-group = "lint" }]
+
+[tool.hatch.version]
+path = "src/pirilib/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pirilib"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/pirilib",
+    "tests",
+    "schemas",
+    "examples",
+    "docs/guide.md",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "NPY", "PT", "RUF"]
+allowed-confusables = ["ı"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["scipy", "scipy.*", "openpyxl", "openpyxl.*", "lightgbm", "lightgbm.*", "sklearn", "sklearn.*"]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true

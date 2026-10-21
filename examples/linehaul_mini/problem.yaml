@@ -1,0 +1,59 @@
+schema: pirilib/linehaul@0.2
+name: Marmara mini
+
+calendar:
+  start: 2026-05-11
+  end: 2026-05-12
+
+centers:
+  file: centers.csv
+  columns:
+    id: Merkez
+    lat: Enlem
+    lon: Boylam
+    banned_vehicle_types: Yasak
+
+matrix:
+  source: haversine
+  factor: 1.25
+
+vehicle_types:
+  - name: tir
+    capacity: { desi: 22000 }
+  - name: kamyon
+    capacity: { desi: 12000 }
+  - name: kamyonet
+    capacity: { desi: 5500 }
+
+fleet:
+  owned:
+    - type: tir
+      origin: İstanbul
+      destination: Eskişehir
+      count: 2
+      cost: { fixed: 7500, per_km: 12 }
+  spot:
+    - type: tir
+      cost: { fixed: 12000, per_km: 24 }
+    - type: kamyon
+      cost: { fixed: 8000, per_km: 20 }
+    - type: kamyonet
+      cost: { fixed: 5000, per_km: 17 }
+
+demand:
+  file: demand.csv
+  delimiter: ";"
+  decimal: ","
+  date_format: "%d.%m.%Y"
+  columns:
+    origin: Çıkış
+    destination: Varış
+    date: Tarih
+  quantity:
+    desi: Desi
+
+rules:
+  min_fill:
+    spot: 0.10
+  stopover:
+    max_stretch: 1.3
