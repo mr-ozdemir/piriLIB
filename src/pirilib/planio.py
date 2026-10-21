@@ -36,6 +36,14 @@ from pirilib.spec._format import bullets
 from pirilib.spec.instance import LineHaulInstance
 from pirilib.spec.tables import LIST_SEPARATOR
 
+__all__ = [
+    "columns",
+    "read_plan",
+    "rows",
+    "summary",
+    "write_plan",
+]
+
 _FIXED = ("dispatch", "date", "start", "kind", "vehicle_type", "source", "origin", "stops")
 _OPTIONAL = ("start",)
 _CLOCK = re.compile(r"(\d+):(\d{2})(?::(\d{2}(?:\.\d+)?))?")

@@ -65,9 +65,8 @@ in their docstrings.
 
 ## Before the freeze
 
-1. Give every public module an `__all__`; today `objective`, `constraints`,
-   `plan`, `evaluation`, `validate`, `planio`, `synthetic`, `geo` and `errors`
-   export their imports (`np`, `dataclass`, ...) as well.
+1. Done: every public module has an `__all__`, so imports such as `np` or
+   `dataclass` are no longer part of the API.
 2. Decide the documented subset of `LineHaulInstance` arrays.
 3. Rename the internal modules listed above with a leading underscore, or say
    in their docstrings that they are internal.

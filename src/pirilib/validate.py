@@ -15,6 +15,12 @@ from pirilib.evaluation import TOLERANCE
 from pirilib.plan import Dispatch, Plan
 from pirilib.spec.instance import UNLIMITED, LineHaulInstance
 
+__all__ = [
+    "PlanReport",
+    "Violation",
+    "check_plan",
+]
+
 
 @dataclass(frozen=True, slots=True)
 class Violation:

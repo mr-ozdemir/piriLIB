@@ -30,6 +30,25 @@ from numpy.typing import NDArray
 from pirilib.constraints import CATALOG
 from pirilib.plan import OWNED, SPOT, Kind
 
+__all__ = [
+    "FEATURES",
+    "LinearForm",
+    "Objective",
+    "Sum",
+    "Term",
+    "dispatch_cost",
+    "dispatches",
+    "distance_km",
+    "linear_form",
+    "owned_fixed_cost",
+    "service_cost",
+    "total_cost",
+    "unserved",
+    "unused_capacity",
+    "violation",
+    "violations",
+]
+
 if TYPE_CHECKING:
     from pirilib.evaluation import Evaluation
 

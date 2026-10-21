@@ -3,6 +3,11 @@
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+__all__ = [
+    "EARTH_RADIUS_KM",
+    "haversine_matrix",
+]
+
 EARTH_RADIUS_KM = 6371.0
 
 

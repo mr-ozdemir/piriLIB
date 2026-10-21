@@ -1,5 +1,11 @@
 """Exception types raised by pirilib."""
 
+__all__ = [
+    "PirilibError",
+    "PlanError",
+    "SpecError",
+]
+
 
 class PirilibError(Exception):
     """Base class for every error raised by pirilib."""

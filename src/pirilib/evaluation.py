@@ -19,6 +19,12 @@ from pirilib.constraints import CATALOG, Constraint
 from pirilib.plan import SPOT, Plan
 from pirilib.spec.instance import UNLIMITED, LineHaulInstance
 
+__all__ = [
+    "TOLERANCE",
+    "Evaluation",
+    "evaluate",
+]
+
 TOLERANCE: Final = 1e-9
 """Relative tolerance of capacity, fill, stretch and coverage comparisons."""
 

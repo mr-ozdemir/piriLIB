@@ -16,6 +16,15 @@ import numpy as np
 
 from pirilib.plan import OWNED, SPOT, Kind
 
+__all__ = [
+    "CATALOG",
+    "Constraint",
+    "FunctionConstraint",
+    "MaxDispatchesPerDay",
+    "MaxRouteKm",
+    "constraint",
+]
+
 if TYPE_CHECKING:
     from pirilib.evaluation import Evaluation
 
