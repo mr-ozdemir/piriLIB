@@ -81,7 +81,7 @@ Birlikte okunması gerekenler: K83 + K90 + K109 (ceza ağırlıkları), K55 + K2
 **Soru.** Zamanlı problemde ACO genel yola düşüyor ve yalnız ceza yönlendiriyor (ölçümde elleçleme kapasitesi 172.907 desi aşıldı); kesin çözücü hata veriyor. Alfa bu haliyle mi çıkacak, yoksa 3b önce mi?
 **Öneri.** Alfayı zamansız kapsamla duyur, 0.2 şema alanlarını "ölçülür ama planlanmaz" diye işaretle; 3b alfadan sonra.
 **Değiştirecek durum.** Alfa kullanıcısı dalga/teslim saati senaryosu test edecekse 3b önce gelmeli.
-**Durum.** 3b şu an yazılıyor (ayrı dalda); birleşince bu madde "3b ile alfaya girer" diye güncellenecek.
+**Durum.** 3b birleşti (K186–K199): ACO zamanı, elleçleme kapasitesini, araç limitlerini ve ertelemeyi planlıyor; kesin çözücü zamanlı problemi hâlâ reddediyor. Soru artık "3b alfaya deneysel olarak girsin mi?"; öneri: girsin, `docs/stability.md`'deki gibi deneysel etiketle.
 
 ### 15. K142 — Modellenmeyenler: kiralık araçların zorunlu çıkışı (prototip K7), çalışma saatleri, sürücü kuralları, bacaklar arası bekleme
 **Soru.** Prototipin K7 kuralı iş kuralıydı; genel kütüphanede yok. Diğerleri kapsam dışı sayılabilir.
@@ -218,6 +218,8 @@ K10, K11, K12, K13, K15, K30, K45, K46, K49, K50, K53, K59, K61, K69, K71, K74, 
 
 - **K152–K161 (dalga bölme):** B. Yalnız K152 (pencere: veri olan son 4 olağan gün) ve K153 (havuzlanmış oran, prototipteki ağırlıksız ortalamadan sapma) bir kez okunmalı.
 - **K162–K171 (belge sitesi):** C. Sitenin yayımlanması S05'e bağlı.
+- **K172–K185 (kıyas paketi, adaptörler):** B. K177 (doğrudan gönderim alt çizgisi) ve K180 (adaptörlerin reddettiği problemler) bir kez okunmalı.
+- **K186–K199 (3b):** A-14 ile birlikte. K188 Fable'ın tanımından sapıyor (erteleme maliyetine sefer maliyeti de eklendi, ölçümle); K199 kabul koşulunun neden 250.000 desiyle ölçüldüğünü anlatıyor.
 
 ## Tutarsızlıklar
 

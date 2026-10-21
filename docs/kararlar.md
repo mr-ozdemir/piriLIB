@@ -194,9 +194,28 @@ dağıtım adı.
 | K137 | Elleçleme kapasitesi merkez başına günlük birincil miktar; yükleme ve boşaltma birlikte sayılır; işlemin başladığı güne yazılır (prototip gece yarısını aşan işlemi dakikayla bölüyordu) | Basit ve tutarlı | Dakikayla bölmek | `evaluation.py`, `validate.py` | açık |
 | K138 | Araç limiti merkez x tip başına günlük: merkezde yüklemeye başlayan ya da oraya varan farklı araç sayısı; prototipteki tır kapasitesinin genellemesi; limit 0 ile yasak ayrı kavramlar | Her araç tipi için aynı kural | Yalnız tır için | `evaluation.py`, `validate.py` | açık |
 | K139 | `load_route` artık günü kontrol etmiyor; gün penceresi yeni `deferral` kısıtında | Erteleme izin verilebilir hale geldi | - | `evaluation.py` | açık |
-| K140 | ACO'nun hızlı yolu ve kesin çözücü zamanlı kuralları henüz bilmiyor: ACO genel yola düşer (ölçümde elleçleme kapasitesi aşıldı), kesin çözücü hata verir; 3b'de çözülecek | Önce doğru ölçüm, sonra arama | Hemen arama tarafını yazmak | `solvers/aco.py`, `solvers/exact.py` | açık |
+| K140 | ACO'nun hızlı yolu ve kesin çözücü zamanlı kuralları henüz bilmiyor: ACO genel yola düşer (ölçümde elleçleme kapasitesi aşıldı), kesin çözücü hata verir; 3b'de çözülecek (**Güncel:** K186-K199 ile ACO zamanlı kuralları planlıyor; kesin çözücü hâlâ reddediyor) | Önce doğru ölçüm, sonra arama | Hemen arama tarafını yazmak | `solvers/aco.py`, `solvers/exact.py` | açık |
 | K141 | Plan dosyasında `start` sütunu `HH:MM` (24 saati geçebilir), okurken isteğe bağlı | Excel'de okunur | Dakika sayısı | `planio.py` | açık |
 | K142 | Modellenmeyenler: kiralık araçların zorunlu çıkışı (prototip K7), çalışma saatleri, sürücü kuralları, bacaklar arası bekleme | Kapsam | - | - | açık |
+
+## v0.3 adım 3b: Çözücüler zamanı ve merkez sınırlarını planlıyor
+
+| # | Karar | Neden | Alternatif | Yer | Durum |
+|---|---|---|---|---|---|
+| K186 | Mimari (Fable kararı): zamanlı problemde sıralı açgözlü defter (`Ledger`: merkez x gün elleçleme, merkez x gün x tip araç yeri); `Coordinator` günleri tembel kurar, sıra (en az bolluk, -talep, merkez); kalkış en erken hazır saatte, `Plan.start` boş; saatlik maliyet ve gecikme vektörel skorda `service` altında, `linear_form` değişmedi; kesin çözücü zamanlı problemi hâlâ reddeder | Prototipin defteri kurulum gereği uygundu; fiyat/Lagrange koordinasyonu çok tur ve onarım ister | Fiyatla koordinasyon | `solvers/ledger.py`, `decompose.py`, `_colony.py`, `aco.py` | açık |
+| K187 | Sınırlı merkeze (elleçleme kapasitesi ya da araç limiti olan) hiç dokunmayan alt problemler, spot günlük limiti yoksa aynı gün yan yana çözülür; diğerleri koordinatör sırasıyla tek tek | Birbirlerini etkileyemezler; tek tek çözüm 2 kat süre hedefini aşıyordu (0,70 sn -> 0,44 sn) | Hepsini tek tek | `solvers/aco.py` | açık |
+| K188 | Erteleme maliyeti (birincil birim başına) = ertesi gün 00:00'da doğrudan seferle gecikme cezası + o seferin tam maliyeti / kalem miktarı (en ucuz izinli spot); `service` altında | Yalnız gecikmeyle erteleme hep ucuz görünüyor, kapasitesiz problemde bile yük kayıyordu (1.201.052'ye karşı 1.032.131) | Yalnız gecikme cezası (Fable tanımı) | `solvers/decompose.py` | açık |
+| K189 | Skor elleçleme ve araç limiti aşımını gerçek zaman çizelgesiyle alt problemin odasına göre artımlı yazar; iç skor `evaluate` ile birebir (150 problemde en kötü fark 3,8e-16) | İnşadaki kalkış günü yaklaşımı nadiren aşım bırakıyor | Aşımı skora katmamak | `solvers/_colony.py`, `solvers/ledger.py` | açık |
+| K190 | Alt problem toplam skoruna ertelenen talep katılmaz; aramada ertelenebilir artık `defer_cost`, son günü gelmiş artık kapsama ihlali | Ertelenen talep ertesi gün sayılıyor; iki kez sayılmasın | Tahmini erteleme maliyetini toplama katmak | `solvers/aco.py` | açık |
+| K191 | Çıkış merkezinin elleçlemesi de odada: yüklenen miktar min(durak odası, çıkış odası); özmal araç başlarken hat sonundaki yeri ayırır | Değerlendirici çıkıştaki yüklemeyi de sayıyor | Yalnız durak odası | `solvers/_colony.py` | açık |
+| K192 | Yerel arama araç değiştirme, birleştirme, taşıma ve talep ekleme hamlelerinde tip başına yer ve elleçleme odasını denetler | Tip değişince yer de değişiyor | Yalnız yeni durak | `solvers/local_search.py` | açık |
+| K193 | `Ledger.charge(problem, timeline)`: rotalar `Timeline` içinde taşınır | Genel yolda karınca başına satırlar tek çağrıda | Ayrı `routes` argümanı | `solvers/ledger.py` | açık |
+| K194 | Defter takvimden sonra 3 gün daha tutar; daha geç varışlar son sütuna | Gece yarısını aşan varışlar takvim dışına taşabiliyor | Dinamik büyütmek | `solvers/ledger.py` | açık |
+| K195 | Bölünebilir talepte artık düğümün kalemlerine orantılı dağılır; son günü gelmiş kalemi olan düğüm pratikte tamamen taşınmalı | Plan yükleri durak miktarını orantılı paylaştırıyor | Aciliyet sırasıyla | `solvers/decompose.py`, `_colony.py` | açık |
+| K196 | Koordinatör eşitlikte artan merkez sırası; zamansız yol eski sırayı korur, sonuçlar birebir (134 koşu) | Zamansız sonuçlar değişmesin | Zamansızda da koordinatör | `solvers/decompose.py` | açık |
+| K197 | Boş satır kümelerinde inşa adımları erken döner; sınır yoksa oda işleri atlanır (81 merkezde 7,1 sn -> 6,0 sn, plan aynı) | Hız | - | `solvers/_colony.py` | açık |
+| K198 | `synthetic.generate` araç tiplerini ve spot tekliflerini derin kopyalar (gizli hata: bir belgede `cost` düzenlemek sonrakileri bozuyordu) | Hata düzeltmesi | - | `synthetic.py` | açık |
+| K199 | 3a ölçüm problemi yeniden kuruldu (betik yoktu); 60.000 desi kapasitede uygun plan fiziksel olarak yok (merkez günde ~162.000 desi elleçliyor), uygunluk 250.000 ile ölçüldü | Kabul koşulu bu kapasiteyle sağlanamaz | - | `docs/olcumler.md`, `tests/test_schedule.py` | açık |
 
 ## v0.3 adım 3c: Tahmini zaman dalgalarına bölmek
 
