@@ -11,11 +11,16 @@ offers one after another, so with such limits the whole plan may not be
 optimal. Demand that may not be split is not supported.
 """
 
+import ctypes
+import ctypes.util
 import itertools
 import math
+import os
+import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from types import TracebackType
 
 import numpy as np
 from numpy.typing import NDArray
@@ -29,6 +34,53 @@ from pirilib.solvers._routing import route_km, route_ok, route_value
 from pirilib.solvers.base import SolveResult, default_objective, linear_coefficients
 from pirilib.solvers.decompose import UNBOUNDED, PlanBuilder, Routes, Subproblem, subproblems
 from pirilib.spec.instance import UNLIMITED, LineHaulInstance
+
+
+def _flush_c_streams() -> None:
+    """Flush the C runtime's buffered output, so it lands where it was written."""
+    for name in ("ucrtbase", "msvcrt", None):
+        try:
+            library = ctypes.CDLL(name) if name else ctypes.CDLL(ctypes.util.find_library("c"))
+            library.fflush(None)
+        except (OSError, AttributeError, TypeError):
+            continue
+
+
+class QuietNative:
+    """Sends what native code writes to standard output to the null device while active.
+
+    HiGHS prints diagnostic lines from C++ in some versions; they bypass Python's
+    ``sys.stdout``, so the file descriptor itself is redirected.
+    """
+
+    def __init__(self) -> None:
+        self._saved: int | None = None
+        self._descriptor = 1
+
+    def __enter__(self) -> "QuietNative":
+        try:
+            sys.stdout.flush()
+            descriptor = sys.stdout.fileno()
+        except (AttributeError, OSError, ValueError):
+            return self
+        self._saved = os.dup(descriptor)
+        sink = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(sink, descriptor)
+        os.close(sink)
+        self._descriptor = descriptor
+        return self
+
+    def __exit__(
+        self,
+        kind: type[BaseException] | None,
+        error: BaseException | None,
+        trace: TracebackType | None,
+    ) -> None:
+        if self._saved is not None:
+            _flush_c_streams()
+            os.dup2(self._saved, self._descriptor)
+            os.close(self._saved)
+            self._saved = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,13 +298,14 @@ def solve_subproblem(
     options: dict[str, float] = {"mip_rel_gap": 1e-9}
     if time_limit is not None:
         options["time_limit"] = time_limit
-    result = milp(
-        cost,
-        constraints=LinearConstraint(matrix, lower_bounds, upper_bounds),
-        integrality=integrality,
-        bounds=Bounds(np.zeros(size), upper),
-        options=options,
-    )
+    with QuietNative():
+        result = milp(
+            cost,
+            constraints=LinearConstraint(matrix, lower_bounds, upper_bounds),
+            integrality=integrality,
+            bounds=Bounds(np.zeros(size), upper),
+            options=options,
+        )
     if result.x is None:
         raise RuntimeError(f"no solution for subproblem (day {problem.day}): {result.message}")
     vehicles = np.rint(result.x[:x_count]).astype(np.int64)
@@ -263,16 +316,17 @@ def solve_subproblem(
     lower[:x_count] = vehicles
     fixed_upper = upper.copy()
     fixed_upper[:x_count] = vehicles
-    polished = linprog(
-        cost,
-        A_ub=matrix[~equal],
-        b_ub=high[~equal],
-        A_eq=matrix[equal],
-        b_eq=high[equal],
-        bounds=np.column_stack([lower, fixed_upper]),
-        method="highs",
-        options={"primal_feasibility_tolerance": 1e-10, "dual_feasibility_tolerance": 1e-10},
-    )
+    with QuietNative():
+        polished = linprog(
+            cost,
+            A_ub=matrix[~equal],
+            b_ub=high[~equal],
+            A_eq=matrix[equal],
+            b_eq=high[equal],
+            bounds=np.column_stack([lower, fixed_upper]),
+            method="highs",
+            options={"primal_feasibility_tolerance": 1e-10, "dual_feasibility_tolerance": 1e-10},
+        )
     solution = polished.x if polished.status == 0 else result.x
     option_list, counts, nodes, amounts = [], [], [], []
     for r, (option, stops) in enumerate(routes):
