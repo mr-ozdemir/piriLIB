@@ -118,6 +118,7 @@ def test_spot_limits_are_shared_by_the_origins_of_a_day(
     for result in (solve(instance, seed=0), solve(instance, objective=lambda e: e.total_cost)):
         assert result.evaluation.violations["spot_availability"] == 0
         assert result.evaluation.violations["coverage"] == 300.0
+        assert result.stats["spot_limits_reached"] == 1
 
 
 def test_unknown_linear_features_are_rejected(instance: LineHaulInstance) -> None:

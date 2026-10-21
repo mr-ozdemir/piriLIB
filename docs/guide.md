@@ -452,7 +452,9 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
 - The exact solver needs splittable demand and up to about 9 destinations per
   subproblem.
 - When spot offers have daily limits, origins of a day take vehicles one after
-  another, greedily.
+  another, greedily. `result.stats["spot_limits_reached"]` counts the (day,
+  offer) pairs whose limit was used up; above zero, the greedy sharing may have
+  bound the plan.
 - Forecasts cover one quantity dimension, up to 7 days ahead, per day; time
   waves come from shares learned per line and weekday, not from a model. On the prototype data, walk-forward forecasts ran about 6 % low
   because of week-to-week swings around holidays. None of the corrections

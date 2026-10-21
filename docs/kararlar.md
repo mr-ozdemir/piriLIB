@@ -216,6 +216,7 @@ dağıtım adı.
 | K197 | Boş satır kümelerinde inşa adımları erken döner; sınır yoksa oda işleri atlanır (81 merkezde 7,1 sn -> 6,0 sn, plan aynı) | Hız | - | `solvers/_colony.py` | açık |
 | K198 | `synthetic.generate` araç tiplerini ve spot tekliflerini derin kopyalar (gizli hata: bir belgede `cost` düzenlemek sonrakileri bozuyordu) | Hata düzeltmesi | - | `synthetic.py` | açık |
 | K199 | 3a ölçüm problemi yeniden kuruldu (betik yoktu); 60.000 desi kapasitede uygun plan fiziksel olarak yok (merkez günde ~162.000 desi elleçliyor), uygunluk 250.000 ile ölçüldü | Kabul koşulu bu kapasiteyle sağlanamaz | - | `docs/olcumler.md`, `tests/test_schedule.py` | açık |
+| K200 | ACO, spot günlük limiti olan problemlerde `stats["spot_limits_reached"]` verir: limiti tükenen (gün, teklif) çifti sayısı; sıfırdan büyükse açgözlü paylaşım planı bağlamış olabilir (alfa inceleme A-9 önerisi); paylaşımın kendisi değişmedi (K85) | Kullanıcı açgözlü sınırın etkisini görsün | İkinci bir yeniden dağıtım turu | `solvers/aco.py` | açık |
 
 ## v0.3 adım 3c: Tahmini zaman dalgalarına bölmek
 

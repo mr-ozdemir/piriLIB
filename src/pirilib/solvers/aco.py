@@ -46,7 +46,7 @@ from numpy.typing import NDArray
 from pirilib.constraints import Constraint
 from pirilib.evaluation import evaluate
 from pirilib.objective import Objective, linear_form
-from pirilib.plan import SPOT
+from pirilib.plan import SPOT, Plan
 from pirilib.solvers._colony import Batch, Build, Colony, Pheromone, Shared, scores
 from pirilib.solvers._timing import timeline
 from pirilib.solvers.base import SolveResult, default_objective, linear_coefficients
@@ -145,6 +145,8 @@ class ACOSolver:
             builder = search.general(goal, constraints)
         plan = builder.build()
         evaluation = evaluate(instance, plan, constraints)
+        if search.limited:
+            search.stats["spot_limits_reached"] = _limits_reached(instance, plan)
         return SolveResult(
             plan=plan,
             evaluation=evaluation,
@@ -152,6 +154,19 @@ class ACOSolver:
             seconds=time.perf_counter() - started,
             stats=search.stats,
         )
+
+
+def _limits_reached(instance: LineHaulInstance, plan: Plan) -> int:
+    """How many (day, spot offer) pairs with a daily limit used every vehicle allowed.
+
+    A count above zero means the greedy sharing of daily limits across origins
+    may have bound the plan.
+    """
+    used = np.zeros((len(instance.days), instance.spot_available.size), dtype=np.int64)
+    spot = plan.kind == SPOT
+    np.add.at(used, (plan.day[spot], plan.source[spot]), 1)
+    limited = instance.spot_available != UNLIMITED
+    return int(np.count_nonzero(limited[None, :] & (used >= instance.spot_available[None, :])))
 
 
 def _improves(value: NDArray[np.float64], best: NDArray[np.float64]) -> NDArray[np.bool_]:
