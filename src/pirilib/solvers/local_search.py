@@ -12,7 +12,10 @@ Moves are applied until none of them improves the objective:
 - *drop*: remove a route whose cost is higher than leaving its load uncarried.
 
 Every route keeps the rules (capacity, bans, owned lines, availability,
-stopovers, stops, stretch, forward-only); loads are never carried twice.
+stopovers, stops, stretch, forward-only); loads are never carried twice. On
+scheduled instances routes are timed, so hourly costs and lateness count, and a
+move is only taken if the subproblem's :class:`~pirilib.solvers.ledger.Room`
+still has the vehicle slots and handling capacity it needs on the day.
 """
 
 from collections.abc import Mapping
@@ -25,7 +28,9 @@ from pirilib.evaluation import TOLERANCE
 from pirilib.plan import OWNED
 from pirilib.solvers._colony import Shared
 from pirilib.solvers._routing import fits, route_km, route_ok, route_value, unserved_value
+from pirilib.solvers._timing import route_lateness, route_timing
 from pirilib.solvers.decompose import Routes, Subproblem
+from pirilib.solvers.ledger import MIN_ROOM, Room
 
 _EPSILON = 1e-9
 
@@ -60,7 +65,11 @@ class _Route:
 
 
 class _Search:
-    """Applies the local search moves to the routes of one subproblem."""
+    """Applies the local search moves to the routes of one subproblem.
+
+    Attributes:
+        item_left: (k, I) items nobody carries, when demand may not be split
+    """
 
     def __init__(
         self,
@@ -69,19 +78,78 @@ class _Search:
         shared: Shared,
         available: NDArray[np.int64],
         remaining: NDArray[np.float64],
+        room: Room | None = None,
+        item_left: NDArray[np.bool_] | None = None,
     ) -> None:
         self.p, self.coefficients, self.shared = problem, coefficients, shared
         self.available = available
         self.remaining = remaining.copy()
         self.split = shared.rules.split_demand
         self.order = problem.origin_km
+        self.room = room
+        self.timed = shared.scheduled
+        self.item_left = None if item_left is None else item_left.copy()
 
     def value(self, route: _Route) -> float:
         km = route_km(self.p, route.nodes)
-        return route_value(self.p, self.coefficients, self.shared, route.option, km, route.load)
+        if not self.timed:
+            return route_value(self.p, self.coefficients, self.shared, route.option, km, route.load)
+        primary = self.shared.primary
+        nodes = route.nodes
+        unloads = [float(stop.amount[primary]) for stop in route.stops]
+        if self.split:
+            ready = [self.p.node_ready[s.node] for s in route.stops if s.amount.max() > 0]
+        else:
+            ready = [self.p.item_ready[s.node, slot] for s in route.stops for slot in s.items]
+        start, finishes = route_timing(
+            self.p, self.shared, route.option, nodes, unloads, float(max(ready, default=-np.inf))
+        )
+        items = [stop.items for stop in route.stops]
+        service = route_lateness(self.p, self.shared, nodes, unloads, items, finishes)
+        return route_value(
+            self.p,
+            self.coefficients,
+            self.shared,
+            route.option,
+            km,
+            route.load,
+            hours=(finishes[-1] - start) / 60.0,
+            service=service,
+        )
 
-    def uncarried(self, remaining: NDArray[np.float64]) -> float:
-        return unserved_value(self.p, self.coefficients, self.shared, remaining)
+    def uncarried(
+        self, remaining: NDArray[np.float64], item_left: NDArray[np.bool_] | None = None
+    ) -> float:
+        left = self.item_left if item_left is None else item_left
+        return unserved_value(self.p, self.coefficients, self.shared, remaining, left)
+
+    def roomy(self, routes: list[_Route]) -> bool:
+        """True if ``routes`` fit the vehicle slots and handling room of the day."""
+        if self.room is None:
+            return True
+        room, primary = self.room, self.shared.primary
+        kinds = self.p.vehicle_type
+        types = room.slots.shape[3]
+        origin = np.bincount([kinds[route.option] for route in routes], minlength=types)
+        if np.any(origin > room.origin_slots[0]):
+            return False
+        nodes = np.zeros((self.p.size, types), dtype=np.int64)
+        handled = np.zeros(self.p.size)
+        for route in routes:
+            for stop in route.stops:
+                nodes[stop.node, kinds[route.option]] += 1
+                handled[stop.node] += float(stop.amount[primary])
+        if np.any(nodes > room.node_slots[0]):
+            return False
+        limit = room.node_handling[0] * (1 + TOLERANCE) + MIN_ROOM
+        if np.any(handled > limit):
+            return False
+        return bool(handled.sum() <= room.origin_handling[0] * (1 + TOLERANCE) + MIN_ROOM)
+
+    def _with(self, routes: list[_Route], changes: dict[int, _Route | None]) -> list[_Route]:
+        """``routes`` with some replaced (or removed, for None)."""
+        trial = [changes.get(index, route) for index, route in enumerate(routes)]
+        return [route for route in trial if route is not None]
 
     def valid(self, route: _Route) -> bool:
         return route_ok(self.p, self.shared, route.option, route.nodes) and fits(
@@ -156,7 +224,9 @@ class _Search:
                     if not self.valid(candidate):
                         continue
                     value = self.value(candidate)
-                    if self._better(value, values[index]):
+                    if self._better(value, values[index]) and self.roomy(
+                        self._with(routes, {index: candidate})
+                    ):
                         routes[index], values[index] = candidate, value
                         return True
         return False
@@ -176,7 +246,9 @@ class _Search:
                         if not self.valid(candidate):
                             continue
                         value = self.value(candidate)
-                        if self._better(value, old):
+                        if self._better(value, old) and self.roomy(
+                            self._with(routes, {first: candidate, second: None})
+                        ):
                             routes[first], values[first] = candidate, value
                             del routes[second], values[second]
                             return True
@@ -205,7 +277,9 @@ class _Search:
                             continue
                         value = self.value(candidate)
                         old = values[source] + values[target]
-                        if self._better(shrunk_value + value, old):
+                        if self._better(shrunk_value + value, old) and self.roomy(
+                            self._with(routes, {target: candidate, source: shrunk})
+                        ):
                             routes[target], values[target] = candidate, value
                             if shrunk is None:
                                 del routes[source], values[source]
@@ -275,7 +349,9 @@ class _Search:
                     after[node] = np.where(left - part > TOLERANCE * left, left - part, 0.0)
                     value = self.value(candidate)
                     old = values[index] + self.uncarried(self.remaining)
-                    if self._better(value + self.uncarried(after), old):
+                    if self._better(value + self.uncarried(after), old) and self.roomy(
+                        self._with(routes, {index: candidate})
+                    ):
                         routes[index], values[index] = candidate, value
                         self.remaining = after
                         return True
@@ -285,11 +361,15 @@ class _Search:
         before = self.uncarried(self.remaining)
         for index, route in enumerate(routes):
             after = self.remaining.copy()
+            left = None if self.item_left is None else self.item_left.copy()
             for stop in route.stops:
                 after[stop.node] += stop.amount
-            if self._better(self.uncarried(after), values[index] + before):
+                if left is not None:
+                    left[stop.node, stop.items] = True
+            if self._better(self.uncarried(after, left), values[index] + before):
                 del routes[index], values[index]
                 self.remaining = after
+                self.item_left = left
                 return True
         return False
 
@@ -301,13 +381,18 @@ def improve(
     shared: Shared,
     available: NDArray[np.int64],
     remaining: NDArray[np.float64],
+    room: Room | None = None,
+    item_left: NDArray[np.bool_] | None = None,
 ) -> tuple[Routes, float]:
     """Improve ``routes``; return them with the change of the objective (never positive).
 
-    ``remaining`` is the demand per node that the routes leave uncarried.
+    ``remaining`` is the demand per node that the routes leave uncarried, and
+    ``item_left`` the items they leave (needed when demand may not be split and
+    items may wait for the next day). ``room`` limits the moves on scheduled
+    instances.
     """
     current = _unpack(routes)
-    search = _Search(problem, coefficients, shared, available, remaining)
+    search = _Search(problem, coefficients, shared, available, remaining, room, item_left)
     better, change = search.run(current)
     return _pack(better, problem.demand.shape[1]), change
 

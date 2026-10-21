@@ -25,6 +25,14 @@ With an objective that has a linear form (see :mod:`pirilib.objective`) and no
 constraints of your own, every subproblem is optimized on its own, which is
 fast. Otherwise each ant builds a whole plan, and plans are compared with
 :func:`~pirilib.evaluate` and your objective.
+
+On scheduled instances (times, deferral, handling capacity or vehicle limits)
+subproblems are planned one after another, in the order of
+:class:`~pirilib.solvers.decompose.Coordinator`, against a
+:class:`~pirilib.solvers.ledger.Ledger` of what the centers can still handle:
+ants keep within it, routes are timed (hourly costs, lateness), and demand left
+uncarried that may wait joins the subproblem of the next day. Every route starts
+as soon as its loads are ready.
 """
 
 import time
@@ -40,8 +48,17 @@ from pirilib.evaluation import evaluate
 from pirilib.objective import Objective, linear_form
 from pirilib.plan import SPOT
 from pirilib.solvers._colony import Batch, Build, Colony, Pheromone, Shared, scores
+from pirilib.solvers._timing import timeline
 from pirilib.solvers.base import SolveResult, default_objective, linear_coefficients
-from pirilib.solvers.decompose import UNBOUNDED, PlanBuilder, Routes, Subproblem, subproblems
+from pirilib.solvers.decompose import (
+    UNBOUNDED,
+    Coordinator,
+    PlanBuilder,
+    Routes,
+    Subproblem,
+    subproblems,
+)
+from pirilib.solvers.ledger import Ledger, Room
 from pirilib.solvers.local_search import improve
 from pirilib.spec.instance import UNLIMITED, LineHaulInstance
 
@@ -64,7 +81,8 @@ class ACOConfig:
         exploitation: Q0: chance of taking the best choice instead of sampling
         tau_min: Lower pheromone bound; the upper bound is 1
         local_search: Improve the best routes of every subproblem (linear objectives)
-        exact_nodes: Solve subproblems with at most this many destinations exactly (scipy)
+        exact_nodes: Solve subproblems with at most this many destinations exactly
+            (scipy); ignored on scheduled instances
     """
 
     ants: int = 16
@@ -121,7 +139,7 @@ class ACOSolver:
         started = time.perf_counter()
         search = _Search(instance, self.config, seed)
         form = linear_form(goal)
-        if form is not None and not constraints and not instance.scheduled:
+        if form is not None and not constraints:
             builder = search.linear(linear_coefficients(instance, form))
         else:
             builder = search.general(goal, constraints)
@@ -143,18 +161,36 @@ def _improves(value: NDArray[np.float64], best: NDArray[np.float64]) -> NDArray[
     return np.asarray(value < best - margin)
 
 
+@dataclass(slots=True)
+class _Outcome:
+    """The best solution the colony found for every subproblem of a batch.
+
+    Attributes:
+        value: (subproblems,) linear objective, without constants
+        usage: (subproblems, options) vehicles used
+    """
+
+    value: NDArray[np.float64]
+    routes: list[Routes]
+    remaining: list[NDArray[np.float64]]
+    item_left: list[NDArray[np.bool_]]
+    usage: NDArray[np.int64]
+
+
 class _Search:
     """Runs the colonies of one solve; shared by both search modes."""
 
     def __init__(self, instance: LineHaulInstance, config: ACOConfig, seed: int) -> None:
         self.instance, self.config, self.seed = instance, config, seed
         self.shared = Shared.of(instance)
-        self.pieces = subproblems(instance)
+        self.scheduled = instance.scheduled
+        self.pieces = [] if self.scheduled else subproblems(instance)
         self.limits = np.where(
             instance.spot_available == UNLIMITED, UNBOUNDED, instance.spot_available
         ).astype(np.int64)
         self.limited = bool(np.any(instance.spot_available != UNLIMITED))
         self.stats: dict[str, float | int | str] = {"subproblems": len(self.pieces)}
+        self.iterations = self.constructions = 0
 
     def _batches(self, pieces: list[Subproblem]) -> list[Batch]:
         batches = [Batch(group, self.shared) for group in self._groups(pieces)]
@@ -204,6 +240,7 @@ class _Search:
         available: NDArray[np.int64],
         active: NDArray[np.bool_],
         rng: np.random.Generator,
+        room: Room | None = None,
     ) -> Colony:
         config = self.config
         return Build(
@@ -217,6 +254,7 @@ class _Search:
             rng=rng,
             available=available,
             active=active,
+            room=room,
         ).run()
 
     def _spot_rows(
@@ -232,10 +270,36 @@ class _Search:
 
     def linear(self, coefficients: Mapping[str, float]) -> PlanBuilder:
         """Optimize every subproblem on its own, with the linear objective."""
-        config, ants = self.config, self.config.ants
         builder = PlanBuilder(self.instance)
         spot_left = {day: self.limits.copy() for day in range(len(self.instance.days))}
-        constructions = iterations = 0
+        if self.scheduled:
+            score = self._one_by_one(coefficients, spot_left, builder)
+        else:
+            score = self._side_by_side(coefficients, spot_left, builder)
+        owned_fixed = float(
+            np.sum(
+                self.instance.owned_count
+                * self.instance.owned_fixed
+                * self.instance.owned_mandatory
+            )
+            * len(self.instance.days)
+        )
+        self.stats |= {
+            "mode": "linear",
+            "iterations": self.iterations,
+            "constructions": self.constructions,
+            "score": score + coefficients.get("owned_fixed", 0.0) * owned_fixed,
+        }
+        return builder
+
+    def _side_by_side(
+        self,
+        coefficients: Mapping[str, float],
+        spot_left: dict[int, NDArray[np.int64]],
+        builder: PlanBuilder,
+    ) -> float:
+        """Subproblems of similar size in batches; return the summed objective."""
+        config = self.config
         score = 0.0
         pieces = self.pieces
         if config.exact_nodes and self.instance.rules.split_demand:
@@ -247,7 +311,6 @@ class _Search:
             score += self._exact(small, coefficients, spot_left, builder)
             pieces = [p for p in pieces if p not in small]
         for index, batch in enumerate(self._batches(pieces)):
-            count = batch.count
             available = batch.available.copy()
             which, option, offers = self._spot_rows(batch)
             days = np.array([problem.day for problem in batch.problems])
@@ -255,46 +318,9 @@ class _Search:
                 [spot_left[day][offer] for day, offer in zip(days[which], offers, strict=True)]
             )
             available[which, option] = np.minimum(available[which, option], left)
-            rng = np.random.default_rng([self.seed, index])
-            pheromone = Pheromone.filled(batch, 1.0)
-            best_used = Pheromone.filled(batch, 0.0)
-            best = np.full(count, np.inf)
-            best_routes: list[Routes | None] = [None] * count
-            best_remaining: list[NDArray[np.float64] | None] = [None] * count
-            best_usage = np.zeros((count, batch.n), dtype=np.int64)
-            stale = np.zeros(count, dtype=np.int64)
-            active = np.ones(count, dtype=np.bool_)
-            for _ in range(config.iterations):
-                iterations += 1
-                constructions += int(active.sum()) * ants
-                colony = self._build(
-                    batch, pheromone, np.repeat(available, ants, axis=0), active, rng
-                )
-                values = scores(batch, colony, coefficients, self.shared)
-                winner = values.argmin(axis=1)
-                value = values[np.arange(count), winner]
-                rows = np.arange(count) * ants + winner
-                improved = active & _improves(value, best)
-                usage = colony.usage(batch.n)
-                for position in np.flatnonzero(improved):
-                    best_routes[position] = colony.routes(int(rows[position]))
-                    best_usage[position] = usage[rows[position]]
-                    best_remaining[position] = colony.remaining[rows[position]]
-                best[improved] = value[improved]
-                stale[improved] = 0
-                stale[active & ~improved] += 1
-                used = colony.used(np.where(active, rows, -1), batch)
-                if config.update == "best_so_far":
-                    best_used.copy_from(used, improved)
-                    used = best_used
-                pheromone.update(used, config.evaporation, config.tau_min, active)
-                active &= stale < config.patience
-                if not active.any():
-                    break
+            best = self._colonies(batch, index, coefficients, available)
             for slot, problem in enumerate(batch.problems):
-                routes, remaining = best_routes[slot], best_remaining[slot]
-                assert routes is not None
-                assert remaining is not None
+                routes, remaining = best.routes[slot], best.remaining[slot]
                 if config.local_search:
                     routes, change = improve(
                         problem,
@@ -304,29 +330,168 @@ class _Search:
                         available[slot, : problem.options],
                         remaining[: problem.size],
                     )
-                    best[slot] += change
-                    best_usage[slot, : problem.options] = np.bincount(
+                    best.value[slot] += change
+                    best.usage[slot, : problem.options] = np.bincount(
                         routes.option, minlength=problem.options
                     )
                 builder.add(problem, routes)
             for w, o, offer in zip(which, option, offers, strict=True):
-                spot_left[int(days[w])][offer] -= best_usage[w, o]
-            score += float(best.sum())
-        owned_fixed = float(
-            np.sum(
-                self.instance.owned_count
-                * self.instance.owned_fixed
-                * self.instance.owned_mandatory
-            )
-            * len(self.instance.days)
+                spot_left[int(days[w])][offer] -= best.usage[w, o]
+            score += float(best.value.sum())
+        return score
+
+    def _one_by_one(
+        self,
+        coefficients: Mapping[str, float],
+        spot_left: dict[int, NDArray[np.int64]],
+        builder: PlanBuilder,
+    ) -> float:
+        """Scheduled instances: the subproblems of each day in planning order, with the ledger.
+
+        Subproblems that touch only centers without handling capacity or vehicle
+        limits cannot affect one another, so (without daily spot limits) they
+        run side by side first; the others run one by one.
+        """
+        ledger = Ledger(self.instance)
+        coordinator = Coordinator(self.instance)
+        score = 0.0
+        count = index = 0
+        for day in range(len(self.instance.days)):
+            problems = coordinator.day(day)
+            count += len(problems)
+            free = [] if self.limited else [p for p in problems if self._free(p)]
+            bound = [p for p in problems if not any(p is other for other in free)]
+            groups = [*self._groups(free), *([problem] for problem in bound)]
+            for group in groups:
+                batch = Batch(group, self.shared)
+                room = None if group[0] in free else ledger.room(group[0])
+                available = batch.available.copy()
+                for slot, problem in enumerate(group):
+                    spot = problem.kind == SPOT
+                    options = available[slot, : problem.options]
+                    options[spot] = np.minimum(options[spot], spot_left[day][problem.source[spot]])
+                best = self._colonies(batch, index, coefficients, available, room)
+                index += 1
+                for slot, problem in enumerate(group):
+                    score += self._settle(
+                        problem,
+                        best,
+                        slot,
+                        coefficients,
+                        available[slot, : problem.options],
+                        room,
+                        ledger,
+                        coordinator,
+                        builder,
+                    )
+                    used = np.bincount(best.routes[slot].option, minlength=problem.options)
+                    spot = problem.kind == SPOT
+                    spot_left[day][problem.source[spot]] -= used[spot]
+        self.stats |= {"subproblems": count, "batches": index}
+        return score
+
+    def _free(self, problem: Subproblem) -> bool:
+        """True if no center of ``problem`` has a handling capacity or a vehicle limit."""
+        instance = self.instance
+        places = np.concatenate([[problem.origin], problem.nodes])
+        return bool(
+            np.all(np.isinf(instance.handling_capacity[places]))
+            and np.all(instance.vehicle_limit[places] == UNLIMITED)
         )
-        self.stats |= {
-            "mode": "linear",
-            "iterations": iterations,
-            "constructions": constructions,
-            "score": score + coefficients.get("owned_fixed", 0.0) * owned_fixed,
-        }
-        return builder
+
+    def _settle(
+        self,
+        problem: Subproblem,
+        best: _Outcome,
+        slot: int,
+        coefficients: Mapping[str, float],
+        available: NDArray[np.int64],
+        room: Room | None,
+        ledger: Ledger,
+        coordinator: Coordinator,
+        builder: PlanBuilder,
+    ) -> float:
+        """Improve, charge and record the routes of one scheduled subproblem; return their value.
+
+        The value leaves out demand handed to the next day, which is valued there.
+        """
+        shared = self.shared
+        routes = best.routes[slot]
+        if self.config.local_search:
+            routes, _ = improve(
+                problem,
+                routes,
+                coefficients,
+                shared,
+                available,
+                best.remaining[slot][: problem.size],
+                room,
+                best.item_left[slot][: problem.size, : problem.item_row.shape[1]],
+            )
+        best.routes[slot] = routes
+        remaining, item_left = problem.leftover(routes, self.instance.rules.split_demand)
+        alone = Batch([problem], shared)
+        final = Colony.single(problem, routes, remaining, item_left)
+        value = float(scores(alone, final, coefficients, shared, room, waiting=False)[0, 0])
+        ledger.charge(problem, timeline(alone, final, shared))
+        coordinator.defer(problem, remaining, item_left)
+        builder.add(problem, routes)
+        return value
+
+    def _colonies(
+        self,
+        batch: Batch,
+        index: int,
+        coefficients: Mapping[str, float],
+        available: NDArray[np.int64],
+        room: Room | None = None,
+    ) -> _Outcome:
+        """Run the colonies of a batch until they stop improving."""
+        config, ants = self.config, self.config.ants
+        count = batch.count
+        rng = np.random.default_rng([self.seed, index])
+        pheromone = Pheromone.filled(batch, 1.0)
+        best_used = Pheromone.filled(batch, 0.0)
+        best = np.full(count, np.inf)
+        best_routes: list[Routes | None] = [None] * count
+        best_remaining: list[NDArray[np.float64] | None] = [None] * count
+        best_left: list[NDArray[np.bool_] | None] = [None] * count
+        best_usage = np.zeros((count, batch.n), dtype=np.int64)
+        stale = np.zeros(count, dtype=np.int64)
+        active = np.ones(count, dtype=np.bool_)
+        for _ in range(config.iterations):
+            self.iterations += 1
+            self.constructions += int(active.sum()) * ants
+            colony = self._build(
+                batch, pheromone, np.repeat(available, ants, axis=0), active, rng, room
+            )
+            values = scores(batch, colony, coefficients, self.shared, room)
+            winner = values.argmin(axis=1)
+            value = values[np.arange(count), winner]
+            rows = np.arange(count) * ants + winner
+            improved = active & _improves(value, best)
+            usage = colony.usage(batch.n)
+            for position in np.flatnonzero(improved):
+                best_routes[position] = colony.routes(int(rows[position]))
+                best_usage[position] = usage[rows[position]]
+                best_remaining[position] = colony.remaining[rows[position]]
+                best_left[position] = colony.item_left[rows[position]]
+            best[improved] = value[improved]
+            stale[improved] = 0
+            stale[active & ~improved] += 1
+            used = colony.used(np.where(active, rows, -1), batch)
+            if config.update == "best_so_far":
+                best_used.copy_from(used, improved)
+                used = best_used
+            pheromone.update(used, config.evaporation, config.tau_min, active)
+            active &= stale < config.patience
+            if not active.any():
+                break
+        routes = [route for route in best_routes if route is not None]
+        remaining = [left for left in best_remaining if left is not None]
+        item_left = [left for left in best_left if left is not None]
+        assert len(routes) == len(remaining) == len(item_left) == count
+        return _Outcome(best, routes, remaining, item_left, best_usage)
 
     def _exact(
         self,
@@ -355,9 +520,17 @@ class _Search:
         return score
 
     def general(self, goal: Objective, constraints: Sequence[Constraint]) -> PlanBuilder:
-        """Each ant builds a whole plan; plans are compared with ``goal``."""
+        """Each ant builds a whole plan; plans are compared with ``goal``.
+
+        On scheduled instances every ant keeps its own ledger and builds the
+        subproblems one by one; nothing is carried to the next day.
+        """
         config, ants = self.config, self.config.ants
-        self.waves = self._batches(self.pieces)
+        if self.scheduled:
+            self.waves = [Batch([problem], self.shared) for problem in Coordinator(self.instance)]
+            self.stats |= {"subproblems": len(self.waves), "batches": len(self.waves)}
+        else:
+            self.waves = self._batches(self.pieces)
         pheromones = [Pheromone.filled(batch, 1.0) for batch in self.waves]
         best_used = [Pheromone.filled(batch, 0.0) for batch in self.waves]
         best_value = np.inf
@@ -367,6 +540,7 @@ class _Search:
         for iteration in range(config.iterations):
             iterations += 1
             spot_left = np.broadcast_to(self.limits, (days, ants, self.limits.size)).copy()
+            ledger = Ledger(self.instance, ants) if self.scheduled else None
             colonies: list[Colony] = []
             for index, batch in enumerate(self.waves):
                 available = np.repeat(batch.available, ants, axis=0)
@@ -382,7 +556,10 @@ class _Search:
                 available[rows, columns] = np.minimum(available[rows, columns], left)
                 rng = np.random.default_rng([self.seed, iteration, index])
                 active = np.ones(batch.count, dtype=np.bool_)
-                colony = self._build(batch, pheromones[index], available, active, rng)
+                room = None if ledger is None else ledger.room(batch.problems[0])
+                colony = self._build(batch, pheromones[index], available, active, rng, room)
+                if ledger is not None:
+                    ledger.charge(batch.problems[0], timeline(batch, colony, self.shared))
                 usage = colony.usage(batch.n)
                 np.subtract.at(
                     spot_left,

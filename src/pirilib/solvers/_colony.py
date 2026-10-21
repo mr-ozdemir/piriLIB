@@ -4,6 +4,13 @@ Subproblems of similar size are stacked into padded arrays (:class:`Batch`).
 Rows are (subproblem, ant) pairs, ``row = subproblem * ants + ant``, and every
 construction step is a few numpy operations over all rows at once. Padded nodes
 and options are never allowed, so they are never chosen.
+
+On scheduled instances a batch holds one subproblem, and a
+:class:`~pirilib.solvers.ledger.Room` says what its centers can still handle:
+an ant then only takes a vehicle type that has a slot at the origin, stops only
+where its type has a slot and the center has handling room, and loads no more
+than that room. Construction charges everything to the subproblem's day; the
+scores time the routes exactly.
 """
 
 from collections.abc import Mapping, Sequence
@@ -15,7 +22,9 @@ from numpy.typing import NDArray
 
 from pirilib.evaluation import TOLERANCE
 from pirilib.plan import OWNED, SPOT
-from pirilib.solvers.decompose import Routes, Subproblem
+from pirilib.solvers._timing import timeline
+from pirilib.solvers.decompose import UNBOUNDED, Routes, Subproblem
+from pirilib.solvers.ledger import MIN_ROOM, Room
 from pirilib.spec.instance import LineHaulInstance
 from pirilib.spec.models import Rules
 
@@ -30,23 +39,43 @@ class Shared:
 
     Attributes:
         min_fill: Indexed by kind code
+        scheduled: Times, deferral or center limits matter (see LineHaulInstance)
+        minutes_per_unit: Handling time per primary unit
+        penalty: Lateness penalty per primary unit and started hour
     """
 
     rules: Rules
     primary: int
     dimensions: tuple[str, ...]
     min_fill: NDArray[np.float64]
+    scheduled: bool = False
+    minutes_per_unit: float = 0.0
+    penalty: float = 0.0
 
     @classmethod
     def of(cls, instance: LineHaulInstance) -> "Shared":
         min_fill = np.zeros(2)
         min_fill[OWNED] = instance.rules.min_fill.owned
         min_fill[SPOT] = instance.rules.min_fill.spot
-        return cls(instance.rules, instance.primary_dimension, instance.dimensions, min_fill)
+        return cls(
+            instance.rules,
+            instance.primary_dimension,
+            instance.dimensions,
+            min_fill,
+            instance.scheduled,
+            instance.rules.handling.minutes_per_unit,
+            instance.rules.service.penalty,
+        )
 
 
 class Batch:
-    """Subproblems stacked into padded arrays, indexed by subproblem, then node or option."""
+    """Subproblems stacked into padded arrays, indexed by subproblem, then node or option.
+
+    Attributes:
+        final_share: (subproblems, k, D) share of each node's demand that may not wait
+        node_defer: (subproblems, k) cost per primary unit of the node's demand left
+            for the next day, items in proportion (split demand)
+    """
 
     def __init__(self, problems: Sequence[Subproblem], shared: Shared) -> None:
         self.problems = list(problems)
@@ -72,11 +101,28 @@ class Batch:
         self.allowed = np.zeros((count, n, k), dtype=np.bool_)
         self.first_ok = np.zeros((count, n, k), dtype=np.bool_)
         self.first_cost = np.zeros((count, n, k))
+        self.day = np.array([problem.day for problem in self.problems], dtype=np.int64)
+        self.vehicle_type = np.zeros((count, n), dtype=np.int64)
+        self.per_hour = np.zeros((count, n))
+        self.speed = np.full((count, n), np.nan)
+        self.item_ready = np.full((count, k, items), -np.inf)
+        self.item_due = np.full((count, k, items), np.inf)
+        self.item_final = np.ones((count, k, items), dtype=np.bool_)
+        self.defer_cost = np.zeros((count, k, items))
+        self.node_ready = np.full((count, k), -np.inf)
         for index, problem in enumerate(self.problems):
             size, options, width = problem.size, problem.options, problem.item_row.shape[1]
             self.demand[index, :size] = problem.demand
             self.item_valid[index, :size, :width] = problem.item_row >= 0
             self.item_quantity[index, :size, :width] = problem.item_quantity
+            self.vehicle_type[index, :options] = problem.vehicle_type
+            self.per_hour[index, :options] = problem.per_hour
+            self.speed[index, :options] = problem.speed
+            self.item_ready[index, :size, :width] = problem.item_ready
+            self.item_due[index, :size, :width] = problem.item_due
+            self.item_final[index, :size, :width] = problem.item_final
+            self.defer_cost[index, :size, :width] = problem.defer_cost
+            self.node_ready[index, :size] = problem.node_ready
             self.origin_km[index, :size] = problem.origin_km
             self.node_km[index, :size, :size] = problem.node_km
             self.kind[index, :options] = problem.kind
@@ -112,6 +158,14 @@ class Batch:
             self.item_quantity[:, None] <= self.capacity[:, :, None, None, :] * (1 + TOLERANCE),
             axis=-1,
         )
+        primary = shared.primary
+        safe = np.where(self.demand > 0, self.demand, 1.0)
+        final = np.sum(self.item_quantity * self.item_final[..., None], axis=2)
+        self.final_share = np.where(self.demand > 0, final / safe, 1.0)
+        waiting = np.sum(
+            self.item_quantity[..., primary] * ~self.item_final * self.defer_cost, axis=2
+        )
+        self.node_defer = np.where(self.demand[..., primary] > 0, waiting / safe[..., primary], 0.0)
 
 
 def _first_choices(
@@ -137,7 +191,13 @@ def _first_choices(
                 on_the_way &= problem.origin_km + problem.node_km[:, line] <= limit
             allowed |= on_the_way
         ok[option] &= allowed
-    cost = problem.fixed[:, None] + problem.per_km[:, None] * (problem.origin_km[None, :] + detour)
+    km = problem.origin_km[None, :] + detour
+    cost = problem.fixed[:, None] + problem.per_km[:, None] * km
+    if np.any(problem.per_hour > 0):
+        speed = problem.speed[:, None]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            hours = np.where(np.isfinite(speed), km / speed, 0.0)
+        cost = cost + problem.per_hour[:, None] * hours
     return ok, cost
 
 
@@ -190,6 +250,7 @@ class Colony:
         first: (choices, 3): row, option, node
         step: (choices, 3): row, from node, to node
         end: (choices, 2): row, node
+        item_left: (rows, nodes, items) items not carried (whole items)
     """
 
     ants: int
@@ -208,6 +269,49 @@ class Colony:
     first: NDArray[np.int64]
     step: NDArray[np.int64]
     end: NDArray[np.int64]
+    item_left: NDArray[np.bool_]
+
+    @classmethod
+    def single(
+        cls,
+        problem: Subproblem,
+        routes: Routes,
+        remaining: NDArray[np.float64],
+        item_left: NDArray[np.bool_],
+    ) -> "Colony":
+        """A colony of one row holding ``routes`` and what they leave uncarried."""
+        size = routes.option.size
+        counts = np.diff(routes.stop_start)
+        stop_route = np.repeat(np.arange(size, dtype=np.int64), counts)
+        node = routes.stop_node
+        opening = np.zeros(node.size, dtype=np.bool_)
+        opening[routes.stop_start[:-1][counts > 0]] = True
+        previous = np.zeros_like(node)
+        previous[1:] = node[:-1]
+        previous[opening] = 0
+        legs = np.where(opening, problem.origin_km[node], problem.node_km[previous, node])
+        load = np.zeros((size, problem.demand.shape[1]))
+        np.add.at(load, stop_route, routes.stop_amount)
+        items = np.bincount(routes.item_stop, minlength=node.size)
+        return cls(
+            ants=1,
+            route_row=np.zeros(size, dtype=np.int64),
+            route_option=routes.option,
+            route_km=np.bincount(stop_route, weights=legs, minlength=size),
+            route_load=load,
+            route_offsets=np.array([0, size], dtype=np.int64),
+            stop_node=node,
+            stop_amount=routes.stop_amount,
+            stop_offsets=routes.stop_start,
+            item_stop=routes.item_stop,
+            item_slot=routes.item_slot,
+            item_offsets=np.concatenate([[0], np.cumsum(items)]).astype(np.int64),
+            remaining=remaining[None],
+            first=np.zeros((0, 3), dtype=np.int64),
+            step=np.zeros((0, 3), dtype=np.int64),
+            end=np.zeros((0, 2), dtype=np.int64),
+            item_left=item_left[None],
+        )
 
     def routes(self, row: int) -> Routes:
         """The solution of one row, in subproblem terms."""
@@ -260,7 +364,11 @@ def sample(
 
 
 class Build:
-    """Builds one solution per row of a batch."""
+    """Builds one solution per row of a batch.
+
+    With a ``room`` (one subproblem per batch), every row keeps its own copy of
+    the room on the subproblem's day and spends it as it builds.
+    """
 
     def __init__(
         self,
@@ -275,6 +383,7 @@ class Build:
         rng: np.random.Generator,
         available: NDArray[np.int64],
         active: NDArray[np.bool_],
+        room: Room | None = None,
     ) -> None:
         self.batch, self.shared, self.rng = batch, shared, rng
         self.ants, self.beta, self.exploitation = ants, beta, exploitation
@@ -307,6 +416,37 @@ class Build:
         self.routes_started = 0
         self.stops_made = 0
         self.log: dict[str, list[NDArray[Any]]] = {}
+        self.room = room is not None
+        self.handled = room is not None and bool(np.isfinite(room.handling).any())
+        self.slotted = room is not None and bool((room.slots < UNBOUNDED // 2).any())
+        if room is not None:
+            types = room.slots.shape[3]
+            self.origin_room = np.broadcast_to(room.origin_handling, (rows,)).copy()
+            self.node_room = np.broadcast_to(room.node_handling, (rows, batch.k)).copy()
+            self.origin_slots = np.broadcast_to(room.origin_slots, (rows, types)).copy()
+            self.node_slots = np.broadcast_to(room.node_slots, (rows, batch.k, types)).copy()
+
+    def _limit(self, rows: NDArray[np.intp]) -> NDArray[np.float64]:
+        """(rows, k): primary quantity that may still be loaded for each node."""
+        return np.asarray(
+            np.minimum(self.node_room[rows], self.origin_room[rows][:, None]), dtype=np.float64
+        )
+
+    def _open(self, rows: NDArray[np.intp], of: NDArray[np.int64]) -> NDArray[np.bool_]:
+        """(rows, options, nodes): the room allows a new route of the option to the node."""
+        batch = self.batch
+        result = np.ones((rows.size, batch.n, batch.k), dtype=np.bool_)
+        if self.slotted:
+            types = batch.vehicle_type[0]
+            origin_free = self.origin_slots[rows][:, types] > 0
+            node_free = (self.node_slots[rows][:, :, types] > 0).transpose(0, 2, 1)
+            line = batch.line_end[0]
+            line_free = node_free[:, np.arange(line.size), np.maximum(line, 0)] | (line < 0)
+            result &= origin_free[:, :, None] & line_free[:, :, None] & node_free
+        if self.handled:
+            origin = (self.origin_room[rows] > MIN_ROOM)[:, None]
+            result &= ((self.node_room[rows] > MIN_ROOM) & origin)[:, None, :]
+        return result
 
     def record(self, name: str, values: NDArray[Any]) -> None:
         self.log.setdefault(name, []).append(values)
@@ -330,9 +470,17 @@ class Build:
         if self.split:
             loadable = (remaining.max(axis=2, initial=0.0) > 0)[:, None, :]
         else:
-            loadable = (self.item_left[rows][:, None] & batch.fits_new[of]).any(axis=-1)
+            items = self.item_left[rows]
+            if self.handled:
+                limit = self._limit(rows)[:, :, None] * (1 + TOLERANCE)
+                items = items & (batch.item_quantity[of][..., primary] <= limit)
+            loadable = (items[:, None] & batch.fits_new[of]).any(axis=-1)
         mask = loadable & (self.available[rows] > 0)[:, :, None]
         carry = np.minimum(remaining[:, None, :, primary], batch.capacity_primary[of][:, :, None])
+        if self.room:
+            mask &= self._open(rows, of)
+        if self.handled:
+            carry = np.minimum(carry, self._limit(rows)[:, None, :])
         weights = np.where(mask, self.first_weight[of] * carry**self.beta, 0.0)
         choice = sample(weights.reshape(rows.size, -1), self.rng, self.exploitation)
 
@@ -342,6 +490,12 @@ class Build:
         option, node = np.divmod(choice[chosen], batch.k)
         self.record("first", np.column_stack([go, option, node]))
         self.available[go, option] -= 1
+        if self.slotted:
+            kind = batch.vehicle_type[of, option]
+            self.origin_slots[go, kind] -= 1
+            owned = batch.owned[of, option]
+            line = batch.line_end[of, option]
+            self.node_slots[go[owned], line[owned], kind[owned]] -= 1
         self.route[go] = self.routes_started + np.arange(go.size)
         self.routes_started += go.size
         self.record("route_row", go)
@@ -367,8 +521,17 @@ class Build:
         else:
             room = (cap + TOLERANCE * capacity)[:, None, None, :]
             fits = self.item_left[rows] & np.all(batch.item_quantity[of] <= room, axis=-1)
+            if self.handled:
+                limit = self._limit(rows)[:, :, None] * (1 + TOLERANCE)
+                fits &= batch.item_quantity[of][..., primary] <= limit
             loadable = fits.any(axis=-1)
         candidate = loadable & batch.allowed[of, option] & ~self.visited[rows]
+        if self.slotted:
+            kind = batch.vehicle_type[of, option]
+            candidate &= self.node_slots[rows[:, None], np.arange(k)[None, :], kind[:, None]] > 0
+        if self.handled:
+            handled = self.node_room[rows] > MIN_ROOM
+            candidate &= handled & (self.origin_room[rows] > MIN_ROOM)[:, None]
         origin_km = batch.origin_km[of]
         position = np.arange(rows.size)
         if self.forward_only:
@@ -389,7 +552,10 @@ class Build:
             candidate &= ~(owned[:, None] & blocked)
 
         cap_primary = batch.capacity_primary[of, option]
-        fill = np.minimum(remaining[:, :, primary], cap[:, primary][:, None]) / cap_primary[:, None]
+        reach = np.minimum(remaining[:, :, primary], cap[:, primary][:, None])
+        if self.handled:
+            reach = np.minimum(reach, self._limit(rows))
+        fill = reach / cap_primary[:, None]
         step_weight = np.where(candidate, self.step_weight[of, option, here] * fill**beta, 0.0)
         underfilled = self.load[rows, primary] < (
             batch.min_share[of, option] * cap_primary * (1 - TOLERANCE)
@@ -408,6 +574,8 @@ class Build:
 
     def _decide(self, rows: NDArray[np.intp], at_line: NDArray[np.bool_]) -> None:
         """After a visit: keep the route open, or finish it."""
+        if not rows.size:
+            return
         batch = self.batch
         of, option = self.of[rows], self.option[rows]
         full = np.all(self.cap[rows] <= TOLERANCE * batch.capacity[of, option], axis=1)
@@ -420,6 +588,8 @@ class Build:
 
     def _finish(self, rows: NDArray[np.intp]) -> None:
         """Close the routes of ``rows``; owned routes first go on to their line end."""
+        if not rows.size:
+            return
         batch = self.batch
         of, option = self.of[rows], self.option[rows]
         line = batch.line_end[of, option]
@@ -434,15 +604,27 @@ class Build:
 
     def _visit(self, rows: NDArray[np.intp], nodes: NDArray[np.int64]) -> None:
         """Load at ``nodes`` what fits, and record the stops."""
-        batch = self.batch
+        if not rows.size:
+            return
+        batch, primary = self.batch, self.shared.primary
         of = self.of[rows]
         capacity = batch.capacity[of, self.option[rows]]
         demand = batch.demand[of, nodes]
         cap = self.cap[rows]
         left = self.remaining[rows, nodes]
+        limit = (
+            np.minimum(self.node_room[rows, nodes], self.origin_room[rows])
+            if self.handled
+            else np.full(rows.size, np.inf)
+        )
         if self.split:
             ratio = np.where(left > 0, cap / np.where(left > 0, left, 1.0), np.inf)
-            amount = np.clip(ratio.min(axis=1, initial=np.inf), 0.0, 1.0)[:, None] * left
+            share = np.clip(ratio.min(axis=1, initial=np.inf), 0.0, 1.0)
+            if self.handled:
+                own = left[:, primary]
+                room = np.maximum(limit, 0.0) / np.where(own > 0, own, 1.0)
+                share = np.minimum(share, np.where(own > 0, room, np.inf))
+            amount = share[:, None] * left
         else:
             stop_ids = self.stops_made + np.arange(rows.size)
             amount = np.zeros_like(cap)
@@ -451,6 +633,10 @@ class Build:
                 fits = self.item_left[rows, nodes, slot] & np.all(
                     quantity <= cap - amount + TOLERANCE * capacity, axis=1
                 )
+                if self.handled:
+                    fits &= quantity[:, primary] <= (limit - amount[:, primary]) + (
+                        TOLERANCE * quantity[:, primary]
+                    )
                 if fits.any():
                     self.item_left[rows[fits], nodes[fits], slot] = False
                     amount[fits] += quantity[fits]
@@ -463,6 +649,14 @@ class Build:
         cap[cap <= TOLERANCE * capacity] = 0.0
         self.cap[rows] = cap
         self.load[rows] += amount
+        if self.slotted:
+            option = self.option[rows]
+            kind = batch.vehicle_type[of, option]
+            reserved = batch.owned[of, option] & (nodes == batch.line_end[of, option])
+            self.node_slots[rows[~reserved], nodes[~reserved], kind[~reserved]] -= 1
+        if self.handled:
+            self.node_room[rows, nodes] -= amount[:, primary]
+            self.origin_room[rows] -= amount[:, primary]
         self.stops[rows] += 1
         self.last[rows] = nodes
         self.visited[rows, nodes] = True
@@ -517,19 +711,38 @@ class Build:
             first=get("first", (0, 3), np.int64),
             step=get("step", (0, 3), np.int64),
             end=get("end", (0, 2), np.int64),
+            item_left=self.item_left,
         )
 
 
 def scores(
-    batch: Batch, colony: Colony, coefficients: Mapping[str, float], shared: Shared
+    batch: Batch,
+    colony: Colony,
+    coefficients: Mapping[str, float],
+    shared: Shared,
+    room: Room | None = None,
+    *,
+    waiting: bool = True,
 ) -> NDArray[np.float64]:
-    """(subproblems, ants): the linear objective of every solution, without constants."""
+    """(subproblems, ants): the linear objective of every solution, without constants.
+
+    On scheduled instances the routes are timed as the evaluator times them:
+    hourly costs join the dispatch costs, lateness joins ``service``, and only
+    demand that may not wait for the next day counts as unserved. Demand that
+    may wait costs its :attr:`~pirilib.solvers.decompose.Subproblem.defer_cost`
+    under ``service``, unless ``waiting`` is False (it is then planned, and paid
+    for, the next day). With a ``room`` (one subproblem), handling and vehicles
+    beyond it are violations.
+    """
     rows = colony.remaining.shape[0]
     of = colony.route_row // colony.ants
     option = colony.route_option
     kind = batch.kind[of, option]
     spot = kind == SPOT
     cost = batch.fixed[of, option] + batch.per_km[of, option] * colony.route_km
+    timing = timeline(batch, colony, shared) if shared.scheduled else None
+    if timing is not None:
+        cost = cost + batch.per_hour[of, option] * timing.hours
     capacity = batch.capacity_primary[of, option]
     load = colony.route_load[:, shared.primary]
     every = np.ones(option.size, dtype=np.bool_)
@@ -544,6 +757,14 @@ def scores(
         features[f"dispatches[{name}]"] = per_row(np.ones(option.size), mask)
         features[f"unused[{name}]"] = per_row(np.clip(capacity - load, 0.0, None), mask)
     remaining = colony.remaining
+    if timing is not None:
+        remaining, deferred = _waiting(batch, colony, shared)
+        service = per_row(timing.service, every)
+        features["service"] = service + deferred if waiting else service
+    if room is not None and timing is not None:
+        handling, vehicles = room.excess(timing, rows)
+        features["violation[handling]"] = handling
+        features["violation[vehicle_limit]"] = vehicles
     features["unserved"] = remaining.sum(axis=(1, 2))
     for column, name in enumerate(shared.dimensions):
         features[f"unserved[{name}]"] = remaining[:, :, column].sum(axis=1)
@@ -561,3 +782,20 @@ def scores(
         if feature in features:
             total += weight * features[feature]
     return total.reshape(batch.count, colony.ants)
+
+
+def _waiting(
+    batch: Batch, colony: Colony, shared: Shared
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Per row: the uncarried demand that may not wait, and the cost of the rest waiting."""
+    primary = shared.primary
+    of = np.arange(colony.remaining.shape[0]) // colony.ants
+    if shared.rules.split_demand:
+        final = colony.remaining * batch.final_share[of]
+        cost = np.sum(colony.remaining[..., primary] * batch.node_defer[of], axis=1)
+        return final, cost
+    waits = colony.item_left & ~batch.item_final[of]
+    quantity = batch.item_quantity[of]
+    final = np.clip(colony.remaining - np.sum(quantity * waits[..., None], axis=2), 0.0, None)
+    cost = np.sum(quantity[..., primary] * waits * batch.defer_cost[of], axis=(1, 2))
+    return final, cost

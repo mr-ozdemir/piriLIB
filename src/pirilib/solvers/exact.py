@@ -120,7 +120,8 @@ class ExactSolver:
             )
         if instance.scheduled:
             raise ValueError(
-                "ExactSolver does not support times, deferral, handling capacity or vehicle limits"
+                "ExactSolver: times, deferral, handling capacity and vehicle limits are not "
+                "yet supported; use ACOSolver"
             )
         if not instance.rules.split_demand:
             raise ValueError("ExactSolver does not support rules.split_demand = false")

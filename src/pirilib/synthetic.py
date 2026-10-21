@@ -6,6 +6,7 @@ probability proportional to the product of their sizes, and quantities are
 log-normal. Every figure is invented; nothing describes a real company.
 """
 
+import copy
 import csv
 import datetime as dt
 import os
@@ -125,8 +126,8 @@ def generate(
         },
         "centers": center_rows,
         "matrix": {"source": "haversine", "factor": 1.25},
-        "vehicle_types": [dict(vehicle) for vehicle in VEHICLE_TYPES],
-        "fleet": {"owned": owned, "spot": [dict(offer) for offer in SPOT]},
+        "vehicle_types": copy.deepcopy(list(VEHICLE_TYPES)),
+        "fleet": {"owned": owned, "spot": copy.deepcopy(list(SPOT))},
         "demand": demand,
         "rules": rules,
     }

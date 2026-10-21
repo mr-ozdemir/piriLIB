@@ -85,3 +85,9 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   families, a benchmark runner with CSV results and per-solver summaries, the
   `DirectShipping` baseline, and optional `PyVRPSolver` and `ORToolsSolver`
   adapters (extras `pirilib[pyvrp]`, `pirilib[ortools]`).
+- The ant colony plans with times and center limits: on scheduled problems the
+  subproblems run in urgency order against a ledger of handling capacity and
+  vehicle slots per center and day, routes are timed (hourly costs and
+  lateness in the scores, also in local search), and demand that does not fit
+  waits for the next day within `max_deferral_days`. Objectives with a linear
+  form keep the fast path; whole-plan search keeps a ledger per ant.
