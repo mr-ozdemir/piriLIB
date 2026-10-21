@@ -20,6 +20,7 @@ validation:
 nav:
   - Home: index.md
   - User guide: guide.md
+  - API stability: stability.md
   - API reference:
       - pirilib: api/pirilib.md
       - pirilib.spec: api/spec.md

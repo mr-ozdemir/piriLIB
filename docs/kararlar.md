@@ -213,6 +213,21 @@ dağıtım adı.
 | K160 | Dalga sütunu `spec/tables.py`'de yeni bir tablo düzeni ile okunur (dosya:satır hataları); saat `09:00`, `9:00`, `09:00:00` ya da `9` olabilir; sütun adı varsayılan `wave` | Hata raporlamasını yeniden kullanmak | Ayrı ayrıştırıcı | `spec/tables.py` | açık |
 | K161 | CLI: `--waves` ayrı dosya, `--wave-column`, `--wave-weeks`; günlük geçmiş aynı dosya olabilir (`load_history` dalgaları toplar); dalgalı çıktıda `-o` CSV'ye `wave` sütunu eklenir | Mevcut seçenekler değişmesin | Tek dosya zorunluluğu | `cli.py` | açık |
 
+## Belge sitesi
+
+| # | Karar | Neden | Alternatif | Yer | Durum |
+|---|---|---|---|---|---|
+| K162 | Belge sitesi MkDocs + Material + mkdocstrings; `docs` bağımlılık grubu, `dev`'e dahil değil; CI'da `mkdocs build --strict` işi | Statik, ücretsiz, Python ekosistemi standardı | Sphinx | `mkdocs.yml`, `ci.yml`, `pyproject.toml` | açık |
+| K163 | Docstring'lerdeki reST rolleri (`:class:` vb.) derleme sırasında bir griffe eklentisiyle bağlantıya çevrilir; docstring'ler değişmez; çözülemeyen ad bağlantı kalır, strict derleme yazım hatasını yakalar | ~80 docstring'i yeniden yazmamak | Docstring'leri Markdown'a çevirmek | `docs/extensions/docstrings.py` | açık |
+| K164 | "Attributes:" maddeleri her özniteliğin kendi belgesine taşınır, ayrı tablo gizlenir | Her öznitelik bir kez, bağlanabilir çapayla | Tabloyu bırakmak | `docs/extensions/docstrings.py` | açık |
+| K165 | Docstring'i olmayan public üyeler de gösterilir; alt çizgili adlar gizli (`__version__` hariç) | Strict derleme belgesiz özniteliklere bağlantıda düşüyordu | Yalnız belgeli üyeler | `mkdocs.yml` | açık |
+| K166 | Google docstring stili, kaynak gösterilmez, üyeler kaynak sırasında, `__init__` sınıfa katılır | Okunaklı başvuru sayfası | Kategoriye göre gruplama | `mkdocs.yml` | açık |
+| K167 | `pirilib` sayfası paketin dışa verdiği her şeyi gösterir (modül sayfalarıyla tekrar, bakım gerektirmez); spec, tuning, forecast tek sayfa; `decompose` sayfası eklendi; `errors` ve `geo` ayrı sayfa almadı | Kendiliğinden güncel | Elle yazılmış dizin | `docs/api/` | açık |
+| K168 | Dış envanter (Python, numpy belgeleri) yok; derleme ağ gerektirmez | Çevrimdışı ve tekrarlanabilir derleme | Dış bağlantılar | `mkdocs.yml` | açık |
+| K169 | `mkdocs<2` üst sınırı: MkDocs 2.0 eklentileri kaldırıyor | Material ve mkdocstrings uyumsuz olacak | Sınırsız | `pyproject.toml` | açık |
+| K170 | Tema: teal/amber, açık/koyu geçişi, `repo_url` GitHub deposu, `site_url` boş (Pages kararı S05'e bağlı) | Varsayılana yakın, sade | - | `mkdocs.yml` | açık |
+| K171 | `docs/kararlar.md` ve `docs/olcumler.md` siteye girmez; API kararlılık sayfası `docs/stability.md` adını aldı (`docs/api/` klasörüyle karışmasın) | Türkçe iç notlar ayrı | Hepsini yayımlamak | `mkdocs.yml`, `docs/` | açık |
+
 ## Depo kuralları
 
 | # | Karar | Neden | Alternatif | Yer | Durum |
@@ -225,7 +240,7 @@ dağıtım adı.
 | K148 | `forecast.Backtester(folds, days, calendar, starts)` sınıfı: `.run`, `.compare`, `.starts`; `backtest`/`compare` ona yönlenen ince fonksiyonlar | Ortak ayarlar tek yerde (K144) | Yalnız fonksiyonlar | `forecast/evaluate.py` | açık |
 | K149 | ABC başlangıç besin kaynakları Latin hiperküp; `sources` verilmezse bütçe // 8, 2 ile 4 arası (K101'deki 6 kaynağın yerine). Test fonksiyonlarında 24 değerlendirmede rastgele aramadan iyi ya da eşit, 60 ve 150'de eskisinden iyi (`docs/olcumler.md`) | K107'deki küçük bütçe zayıflığı | Sabit 6 kaynak, küçük bütçede rastgele aramaya düşmek | `tuning/bee_colony.py` | açık |
 | K150 | Yayın hazırlığı: `project.urls` GitHub deposunu gösterir; README bağlantıları PyPI'de de çalışsın diye mutlak GitHub adresi; yayın iş akışı etiketin sürümle aynı olduğunu denetler ve tekerleği kurup `pirilib --help` ile dener | PyPI sayfası ve yanlış etiketle yayın riski | Göreli bağlantılar | `pyproject.toml`, `README.md`, `release.yml` | açık |
-| K151 | API kararlılık kuralları ve 1.0 listesi `docs/api.md`'de: semver, `__all__` ile public, bir küçük sürüm uyarılı kullanımdan kaldırma, 1.x tüm eski şema kimliklerini okur, plan CSV sütunları API'nin parçası; deneysel ve iç adlar ayrı listede | 1.0 dondurmasına hazırlık | Kuralları 1.0'da yazmak | `docs/api.md` | açık |
+| K151 | API kararlılık kuralları ve 1.0 listesi `docs/stability.md`'de: semver, `__all__` ile public, bir küçük sürüm uyarılı kullanımdan kaldırma, 1.x tüm eski şema kimliklerini okur, plan CSV sütunları API'nin parçası; deneysel ve iç adlar ayrı listede | 1.0 dondurmasına hazırlık | Kuralları 1.0'da yazmak | `docs/stability.md` | açık |
 
 ## Sana sorulacaklar
 
@@ -241,3 +256,4 @@ Kendi başıma yapamadığım ya da senin hesabınla yapılması gereken işler.
 | S06 | Kararlar listesinin (K01...) alfa incelemesi | Senin kararın | İnceleme belgesinden sırayla | bekliyor |
 | S07 | Senin eklediğin `test.py` silindi (K147). Başka bir amacı varsa geri getiririm | Dosya senindi | Silinmiş kalsın | bekliyor |
 | S08 | README ve `project.urls` GitHub'a bağlı; depo özel kalırsa PyPI sayfasındaki bağlantılar açılmaz. Yayında depo açık mı olacak? | Depo görünürlüğü | İlk PyPI yayınında depoyu açmak; o zamana kadar yalnız TestPyPI | bekliyor |
+| S09 | MkDocs 2.0 Material ve mkdocstrings ile uyumsuz olacak; şimdilik `<2` ile sabit. İleride başka araca (ör. Zensical) geçilsin mi? | Uzun vadeli araç seçimi | 2.0 çıkıp eklenti durumu netleşince bakmak | bekliyor |

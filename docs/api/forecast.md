@@ -25,3 +25,7 @@
 ::: pirilib.forecast.bridge
     options:
       heading_level: 2
+
+::: pirilib.forecast.waves
+    options:
+      heading_level: 2
