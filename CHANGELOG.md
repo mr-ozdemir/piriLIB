@@ -81,3 +81,7 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
 - Documentation site (MkDocs, Material theme) with the user guide and an API
   reference generated from the docstrings; `docs` dependency group, and CI
   builds it with `mkdocs build --strict`.
+- `pirilib.bench` and `pirilib bench`: reproducible synthetic instance
+  families, a benchmark runner with CSV results and per-solver summaries, the
+  `DirectShipping` baseline, and optional `PyVRPSolver` and `ORToolsSolver`
+  adapters (extras `pirilib[pyvrp]`, `pirilib[ortools]`).

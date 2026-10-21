@@ -49,6 +49,8 @@ Issues = "https://github.com/mr-ozdemir/piriLIB/issues"
 exact = ["scipy>=1.14"]
 excel = ["openpyxl>=3.1"]
 forecast = ["lightgbm>=4.0", "scikit-learn>=1.4"]
+ortools = ["ortools>=9.15"]
+pyvrp = ["pyvrp>=0.14"]
 
 [project.scripts]
 pirilib = "pirilib.cli:main"
@@ -101,7 +103,7 @@ files = ["src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["scipy", "scipy.*", "openpyxl", "openpyxl.*", "lightgbm", "lightgbm.*", "sklearn", "sklearn.*"]
+module = ["scipy", "scipy.*", "openpyxl", "openpyxl.*", "lightgbm", "lightgbm.*", "sklearn", "sklearn.*", "pyvrp", "pyvrp.*", "ortools", "ortools.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]

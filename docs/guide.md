@@ -372,6 +372,48 @@ Plan files have one row per load. The columns are `dispatch`, `date`, `kind`,
 column per quantity dimension. `pirilib check` reads them back, so plans made
 elsewhere can be audited too.
 
+## 8. Benchmarks
+
+`pirilib.bench` compares solvers on reproducible synthetic instances:
+
+```python
+from pirilib.bench import FAMILIES, SOLVERS, Benchmark
+
+instances = FAMILIES.get("small").instances(10)
+table = Benchmark(SOLVERS.make(["direct", "aco", "exact"]), seeds=(0, 1)).run(instances)
+table.to_csv("results.csv")
+print(table.summary())
+```
+
+- **Families.** A `Family` holds ranges of settings for
+  `pirilib.synthetic.generate`: centers, days, demand per day, owned lines,
+  minimum fill, stretch, split or not, and daily spot limits. Instance `i`
+  draws its settings from a stream seeded by the family's name, its seed and
+  `i`. The built-in families are `tiny`, `small`, `routing`, `medium`,
+  `no-split`, `spot-limits` and `mixed` (`pirilib bench` lists them).
+- **Runs.** `Benchmark` takes any solvers with a `solve` method, by name.
+  It evaluates every plan again with one objective. A solver that raises
+  `ValueError` (it does not support the problem) or `ImportError` (its package
+  is missing) is recorded as skipped.
+- **Summary.** Per solver it gives the mean and median gap to the best
+  objective any run reached on the instance, the share of runs that reached
+  it, the share of solved runs without violations, and the mean seconds.
+- **Baselines.**
+  - `pirilib.solvers.direct.DirectShipping` sends every line straight: full
+    vehicles first, then the cheapest vehicle that fits. It keeps bans, owned
+    lines and spot limits.
+  - `ExactSolver` is the oracle on small subproblems.
+  - `pirilib.solvers.adapters.PyVRPSolver` (`pip install "pirilib[pyvrp]"`)
+    and `ORToolsSolver` (`pip install "pirilib[ortools]"`) run external
+    routing solvers on a reduced problem. Large demands go out as full direct
+    trips first, and the rest of each destination is one stop. They refuse
+    demand that may not be split, minimum fill, times and non-linear
+    objectives.
+
+```bash
+pirilib bench small --solvers direct,aco,aco-exact,exact -o results.csv --summary summary.csv
+```
+
 ## Library structure
 
 Classes own state and settings: solvers, tuners, forecasters, backtesters,
