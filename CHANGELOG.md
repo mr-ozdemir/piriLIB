@@ -78,3 +78,6 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   and weekday from a wave-level history (`load_wave_history`) without
   look-ahead, `planning_document(..., waves=...)` makes demand rows ready at
   the wave times, and `pirilib forecast --waves` splits from the command line.
+- Documentation site (MkDocs, Material theme) with the user guide and an API
+  reference generated from the docstrings; `docs` dependency group, and CI
+  builds it with `mkdocs build --strict`.
