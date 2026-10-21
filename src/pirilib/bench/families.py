@@ -40,6 +40,7 @@ class BenchInstance:
 
     @property
     def name(self) -> str:
+        """The label of the instance, ``family/index``."""
         return f"{self.family}/{self.index:03d}"
 
     def __repr__(self) -> str:
@@ -220,6 +221,7 @@ class FamilyCatalog:
             raise ValueError(f"family names used twice: {doubles}")
 
     def names(self) -> list[str]:
+        """The names of the families, in catalog order."""
         return [family.name for family in self.families]
 
     def get(self, name: str) -> Family:

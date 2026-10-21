@@ -181,6 +181,7 @@ class RandomSearch:
         seed: int = 0,
         start: Sequence[NDArray[np.float64]] = (),
     ) -> SearchResult:
+        """Evaluate ``budget`` uniform random points, ``start`` first, and keep the best."""
         if budget < 1:
             raise ValueError("budget must be at least 1")
         rng = np.random.default_rng(seed)

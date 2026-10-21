@@ -83,7 +83,9 @@ class Constraint(Protocol):
     """A constraint of your own."""
 
     @property
-    def name(self) -> str: ...
+    def name(self) -> str:
+        """The name the violation is reported under."""
+        ...
 
     def violation(self, evaluation: "Evaluation") -> float:
         """Return how much ``evaluation`` violates the constraint; 0 when it holds."""
@@ -98,6 +100,7 @@ class FunctionConstraint:
     function: Callable[["Evaluation"], float]
 
     def violation(self, evaluation: "Evaluation") -> float:
+        """The amount ``function`` returns for ``evaluation``, as a float."""
         return float(self.function(evaluation))
 
 
@@ -114,6 +117,7 @@ class MaxRouteKm:
     name: str = "max_route_km"
 
     def violation(self, evaluation: "Evaluation") -> float:
+        """The total length (km) by which routes exceed the limit; 0 when none does."""
         excess = evaluation.route_km - self.km
         return float(excess[excess > 0].sum())
 
@@ -130,6 +134,7 @@ class MaxDispatchesPerDay:
     name: str = "max_dispatches_per_day"
 
     def violation(self, evaluation: "Evaluation") -> float:
+        """The total dispatches above the daily limit, summed over days; 0 when it holds."""
         plan = evaluation.plan
         days = plan.day
         if self.kind is not None:

@@ -53,6 +53,7 @@ _SOURCE = re.compile(r"fleet\.(owned|spot)\[(\d+)\]")
 
 
 def columns(instance: LineHaulInstance) -> tuple[str, ...]:
+    """The column names of the plan table, ending with the dimensions of ``instance``."""
     return (*_FIXED, *_COMPUTED, *_LOAD, *instance.dimensions)
 
 

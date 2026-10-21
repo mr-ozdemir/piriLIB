@@ -35,7 +35,9 @@ class Tuner(Protocol):
         *,
         seed: int = 0,
         start: Sequence[NDArray[np.float64]] = (),
-    ) -> SearchResult: ...
+    ) -> SearchResult:
+        """Minimize ``objective`` over the unit cube with at most ``budget`` evaluations."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)

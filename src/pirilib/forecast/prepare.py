@@ -60,6 +60,7 @@ class Calendar:
 
     @classmethod
     def of(cls, unusual: Iterable[dt.date] = (), holidays: Iterable[dt.date] = ()) -> "Calendar":
+        """A calendar from any iterables of unusual days and holidays."""
         return cls(frozenset(unusual), frozenset(holidays))
 
 

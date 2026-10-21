@@ -105,6 +105,7 @@ class Term:
         return Sum((self,)) + other
 
     def breakdown(self, evaluation: "Evaluation") -> dict[str, float]:
+        """The value of the term, keyed by its name."""
         return {self.name: self(evaluation)}
 
     def linear_form(self) -> dict[str, float] | None:

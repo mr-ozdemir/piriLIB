@@ -67,10 +67,12 @@ class History:
 
     @property
     def lines(self) -> int:
+        """The number of lines (origin-destination pairs)."""
         return len(self.origins)
 
     @property
     def length(self) -> int:
+        """The number of days in the history."""
         return int(self.values.shape[1])
 
     @property
@@ -83,9 +85,11 @@ class History:
         return (date - self.start).days
 
     def date(self, day: int) -> dt.date:
+        """The date at position ``day`` in the history."""
         return self.start + dt.timedelta(days=day)
 
     def index(self, origin: str, destination: str) -> int:
+        """The row of the line ``origin`` to ``destination``; :class:`KeyError` if there is none."""
         for position, line in enumerate(zip(self.origins, self.destinations, strict=True)):
             if line == (origin, destination):
                 return position

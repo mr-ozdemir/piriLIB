@@ -160,6 +160,7 @@ class Plan:
 
     @property
     def dimensions(self) -> int:
+        """The number of quantity dimensions of the loads."""
         return int(self.load_quantity.shape[1])
 
     def stops(self, position: int) -> NDArray[np.int64]:
@@ -167,6 +168,7 @@ class Plan:
         return self.stop_center[self.stop_start[position] : self.stop_start[position + 1]]
 
     def dispatch(self, position: int) -> Dispatch:
+        """The dispatch at ``position`` with its stops and loads."""
         rows = np.flatnonzero(self.load_dispatch == position)
         return Dispatch(
             day=int(self.day[position]),
@@ -190,6 +192,7 @@ class Plan:
         return self.start
 
     def dispatches(self) -> Iterator[Dispatch]:
+        """The dispatches in plan order."""
         return (self.dispatch(position) for position in range(len(self)))
 
     def check(self, instance: "LineHaulInstance") -> None:

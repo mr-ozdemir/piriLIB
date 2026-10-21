@@ -108,10 +108,12 @@ class WaveHistory:
 
     @property
     def lines(self) -> int:
+        """The number of lines (origin-destination pairs)."""
         return len(self.origins)
 
     @property
     def length(self) -> int:
+        """The number of days in the history."""
         return int(self.values.shape[1])
 
     @property
@@ -124,6 +126,7 @@ class WaveHistory:
         return (date - self.start).days
 
     def date(self, day: int) -> dt.date:
+        """The date at position ``day`` in the history."""
         return self.start + dt.timedelta(days=day)
 
     def daily(self) -> History:
@@ -159,9 +162,11 @@ class WaveForecast:
 
     @property
     def days(self) -> int:
+        """The number of forecast days."""
         return int(self.values.shape[1])
 
     def dates(self) -> list[dt.date]:
+        """The forecast dates, one per day."""
         return [self.start + dt.timedelta(days=offset) for offset in range(self.days)]
 
     def rows(self, minimum: float = 0.5) -> Iterator[tuple[str, str, dt.date, dt.time, float]]:
@@ -182,6 +187,7 @@ class WaveForecast:
         return Forecast(self.origins, self.destinations, self.start, values, self.dimension)
 
     def total(self) -> float:
+        """The forecast quantity of all lines, days and waves added up."""
         return float(self.values.sum())
 
     def __repr__(self) -> str:

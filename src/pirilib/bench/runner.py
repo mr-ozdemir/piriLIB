@@ -142,6 +142,7 @@ class SolverCatalog:
     descriptions: Mapping[str, str] = field(default_factory=dict)
 
     def names(self) -> list[str]:
+        """The names of the solvers, in registration order."""
         return list(self.makers)
 
     def make(self, names: Iterable[str]) -> dict[str, Solver]:

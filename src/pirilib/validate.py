@@ -40,6 +40,7 @@ class PlanReport:
 
     @property
     def feasible(self) -> bool:
+        """True when there are no violations."""
         return not self.violations
 
     def totals(self) -> dict[str, float]:

@@ -38,6 +38,7 @@ class Scores:
 
     @classmethod
     def of(cls, actual: NDArray[np.float64], predicted: NDArray[np.float64]) -> "Scores":
+        """Scores of ``predicted`` against ``actual``; WMAPE and bias in % of actual volume."""
         error = predicted - actual
         volume = float(actual.sum())
         scale = max(volume, 1e-12)
@@ -68,6 +69,7 @@ class Fold:
 
     @property
     def scores(self) -> Scores:
+        """The scores of the fold's predictions."""
         return Scores.of(self.actual, self.predicted)
 
 

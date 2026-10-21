@@ -51,6 +51,7 @@ class Record:
 
     @property
     def solved(self) -> bool:
+        """True when the solver returned a plan (status ``ok``)."""
         return self.status == "ok"
 
     def row(self) -> list[str]:
@@ -142,12 +143,14 @@ class Summary:
     best_known: Mapping[str, float]
 
     def row(self, solver: str) -> SolverSummary:
+        """The summary of ``solver``; :class:`KeyError` if it is not in the table."""
         for item in self.rows:
             if item.solver == solver:
                 return item
         raise KeyError(solver)
 
     def to_csv(self, path: str | os.PathLike[str]) -> Path:
+        """Write the summary as CSV to ``path`` (empty cells for NaN) and return the path."""
         target = Path(path)
         with target.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
@@ -293,6 +296,7 @@ class ResultTable:
 
     @classmethod
     def of(cls, records: Iterable[Record]) -> "ResultTable":
+        """The table of ``records``."""
         return cls(tuple(records))
 
     def where(self, **values: Any) -> "ResultTable":

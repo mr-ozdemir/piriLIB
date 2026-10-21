@@ -63,9 +63,11 @@ class Forecast:
 
     @property
     def days(self) -> int:
+        """The number of forecast days."""
         return int(self.values.shape[1])
 
     def dates(self) -> list[dt.date]:
+        """The forecast dates, one per day."""
         return [self.start + dt.timedelta(days=offset) for offset in range(self.days)]
 
     def rows(self, minimum: float = 0.5) -> Iterator[tuple[str, str, dt.date, float]]:
@@ -80,6 +82,7 @@ class Forecast:
             )
 
     def total(self) -> float:
+        """The forecast quantity of all lines and days added up."""
         return float(self.values.sum())
 
     def __repr__(self) -> str:
@@ -94,7 +97,9 @@ class Forecaster(Protocol):
 
     def forecast(
         self, history: History, start: dt.date, days: int, calendar: Calendar | None = None
-    ) -> Forecast: ...
+    ) -> Forecast:
+        """The forecast of ``days`` days from ``start``, learned from the history before it."""
+        ...
 
 
 def _window(history: History, start: dt.date, days: int) -> int:
@@ -137,6 +142,7 @@ class SeasonalMean:
     def forecast(
         self, history: History, start: dt.date, days: int, calendar: Calendar | None = None
     ) -> Forecast:
+        """The mean of the last ``weeks`` usual days of the same weekday, per line."""
         calendar = Calendar() if calendar is None else calendar
         cut = _window(history, start, days)
         usual = ~unusual_days(history, calendar, cut)
@@ -201,6 +207,7 @@ class Regression:
     def forecast(
         self, history: History, start: dt.date, days: int, calendar: Calendar | None = None
     ) -> Forecast:
+        """The regression forecast; :class:`ValueError` if ``days`` exceeds the shortest lag."""
         calendar = Calendar() if calendar is None else calendar
         if days > min(LAGS):
             raise ValueError(f"days must not exceed {min(LAGS)}, the shortest lag")

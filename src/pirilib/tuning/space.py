@@ -29,11 +29,13 @@ class Float:
             raise ValueError("a log-scale range must be positive")
 
     def decode(self, unit: float) -> float:
+        """The value at ``unit`` in [0, 1] of the range (geometric when ``log``)."""
         if self.log:
             return math.exp(math.log(self.low) + unit * (math.log(self.high) - math.log(self.low)))
         return self.low + unit * (self.high - self.low)
 
     def encode(self, value: Any) -> float:
+        """The position in [0, 1] of ``value`` in the range."""
         number = float(value)
         if self.log:
             return (math.log(number) - math.log(self.low)) / (
@@ -54,9 +56,11 @@ class Int:
             raise ValueError(f"need low < high, got {self.low}, {self.high}")
 
     def decode(self, unit: float) -> int:
+        """The integer at ``unit`` in [0, 1]; the range is split into equal parts."""
         return min(self.high, self.low + int(unit * (self.high - self.low + 1)))
 
     def encode(self, value: Any) -> float:
+        """The middle of the part of [0, 1] that holds ``value``."""
         return (int(value) - self.low + 0.5) / (self.high - self.low + 1)
 
 
@@ -71,9 +75,11 @@ class Choice:
             raise ValueError("a choice needs at least two options")
 
     def decode(self, unit: float) -> Any:
+        """The option at ``unit`` in [0, 1], split into equal parts, one per option."""
         return self.options[min(len(self.options) - 1, int(unit * len(self.options)))]
 
     def encode(self, value: Any) -> float:
+        """The middle of the part of [0, 1] of option ``value``; :class:`ValueError` if unknown."""
         return (self.options.index(value) + 0.5) / len(self.options)
 
 
@@ -88,13 +94,16 @@ class SearchSpace:
 
     @property
     def names(self) -> tuple[str, ...]:
+        """The parameter names, in order."""
         return tuple(self.parameters)
 
     @property
     def size(self) -> int:
+        """The number of parameters, which is the dimension of the unit cube."""
         return len(self.parameters)
 
     def decode(self, point: Sequence[float] | NDArray[np.float64]) -> dict[str, Any]:
+        """The parameter values of a point in the unit cube (clipped to it)."""
         clipped = np.clip(np.asarray(point, dtype=np.float64), 0.0, 1.0)
         return {
             name: parameter.decode(float(unit))
@@ -102,6 +111,7 @@ class SearchSpace:
         }
 
     def encode(self, values: Mapping[str, Any]) -> NDArray[np.float64]:
+        """The point in the unit cube of the parameter ``values``."""
         return np.array(
             [parameter.encode(values[name]) for name, parameter in self.parameters.items()]
         )

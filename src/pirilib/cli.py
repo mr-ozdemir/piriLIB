@@ -39,6 +39,7 @@ from pirilib.spec import load_spec
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command line with ``argv`` (default ``sys.argv``) and return the exit code."""
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:

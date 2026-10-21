@@ -325,15 +325,18 @@ class LineHaulSpec(_Model):
 
     @property
     def primary_dimension(self) -> str:
+        """The dimension the rules call primary, else the first one."""
         return self.rules.primary_dimension or self.dimensions[0]
 
     @property
     def days(self) -> tuple[dt.date, ...]:
+        """Every date from the calendar start to its end, inclusive."""
         span = (self.calendar.end - self.calendar.start).days + 1
         return tuple(self.calendar.start + dt.timedelta(days=offset) for offset in range(span))
 
     @property
     def demand_ids(self) -> tuple[str, ...]:
+        """The id of each demand row (empty text when it has none)."""
         return tuple(row.id or "" for row in self.demand)
 
     def compile(self) -> "LineHaulInstance":

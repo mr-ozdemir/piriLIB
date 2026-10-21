@@ -87,6 +87,7 @@ class Evaluation:
 
     @property
     def total_km(self) -> float:
+        """The distance of all dispatches added up (km)."""
         return float(self.route_km.sum())
 
     @property

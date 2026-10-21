@@ -37,10 +37,12 @@ def document_json_schema() -> dict[str, Any]:
 
 
 def render() -> str:
+    """The JSON Schema of the problem document as text."""
     return json.dumps(document_json_schema(), indent=2, ensure_ascii=False) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Write the schema to the path in ``argv`` or to stdout; return the exit code."""
     arguments = sys.argv[1:] if argv is None else argv
     if arguments:
         Path(arguments[0]).write_text(render(), encoding="utf-8", newline="\n")
