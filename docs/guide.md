@@ -14,6 +14,8 @@ pip install "pirilib[excel]"       # + writing plans as .xlsx (openpyxl)
 pip install "pirilib[forecast]"    # + LightGBM and scikit-learn forecasters
 ```
 
+On macOS, LightGBM also needs OpenMP: `brew install libomp`.
+
 Python 3.12 or newer.
 
 ## 1. Describe the problem

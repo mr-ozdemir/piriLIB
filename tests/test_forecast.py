@@ -293,3 +293,21 @@ def test_scaled_regression(sample: tuple[History, Calendar]) -> None:
     bigger = History(history.origins, history.destinations, history.start, history.values * 10)
     tenfold = Regression(MeanModel, scale=True).forecast(bigger, start, 7, calendar)
     assert tenfold.total() == pytest.approx(10 * scaled.total(), rel=1e-6)
+
+
+def test_lightgbm_load_failure_explains_the_fix(
+    sample: tuple[History, Calendar], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import builtins
+
+    real = builtins.__import__
+
+    def broken(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "lightgbm":
+            raise OSError("Library not loaded: @rpath/libomp.dylib")
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", broken)
+    history, calendar = sample
+    with pytest.raises(ImportError, match="brew install libomp"):
+        lightgbm_tweedie().forecast(history, history.date(98), 7, calendar)

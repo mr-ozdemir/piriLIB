@@ -284,6 +284,11 @@ def lightgbm_tweedie(train_from: dt.date | None = None, **settings: Any) -> Regr
             raise ImportError(
                 'LightGBM forecasts need lightgbm: pip install "pirilib[forecast]"'
             ) from None
+        except OSError as error:
+            raise ImportError(
+                "lightgbm is installed but its native library could not be loaded; "
+                "on macOS it needs OpenMP: brew install libomp"
+            ) from error
         return LGBMRegressor(objective="tweedie", random_state=42, verbose=-1, n_jobs=1, **params)
 
     return Regression(make=make, target="raw", train_from=train_from, name="lightgbm_tweedie")
