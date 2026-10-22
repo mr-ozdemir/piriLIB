@@ -72,6 +72,8 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   `vehicle_limit`). Plan files have a `start` column.
 - `BeeColony` starts from a Latin hypercube and, unless `sources` is set,
   sizes the colony by the budget, which helps small tuning budgets.
+- Local search is about ten times faster (plans and scores unchanged): cheap
+  pre-checks and remembered rejections of move candidates.
 - `pirilib.forecast.Backtester` keeps fold settings for repeated backtests and
   comparisons.
 - Time waves in `pirilib.forecast`: `WaveSplitter` learns wave shares per line

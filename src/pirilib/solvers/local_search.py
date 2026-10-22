@@ -16,9 +16,16 @@ stopovers, stops, stretch, forward-only); loads are never carried twice. On
 scheduled instances routes are timed, so hourly costs and lateness count, and a
 move is only taken if the subproblem's :class:`~pirilib.solvers.ledger.Room`
 still has the vehicle slots and handling capacity it needs on the day.
+
+Change vehicle, merge and relocate remember the moves they tried that were no
+better, by the stamps of the routes involved, and skip them while those routes
+stay. Cheap checks of capacity, bans and stopovers on cached loads and nodes
+skip most hopeless moves before a route is built. Both only save time: the
+moves are tried in the same order and the first one taken is the same.
 """
 
-from collections.abc import Mapping
+import itertools
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -50,10 +57,27 @@ class _Stop:
 
 @dataclass(slots=True)
 class _Route:
-    """A route being improved: its vehicle option and its stops in order."""
+    """A route being improved: its vehicle option and its stops in order.
+
+    The cached fields are set once, at construction. A route whose stops change
+    is replaced by a new one with a new stamp, so what was remembered about the
+    old stamp stays true.
+
+    Attributes:
+        stamp: Number of the route, unique within its search
+        nodes_set: Nodes the route unloads something at
+        load_tuple: :attr:`load` at construction, as floats
+    """
 
     option: int
     stops: list[_Stop]
+    stamp: int
+    nodes_set: frozenset[int] = field(init=False)
+    load_tuple: tuple[float, ...] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.nodes_set = frozenset(stop.node for stop in self.stops if stop.amount.max() > 0)
+        self.load_tuple = tuple(np.atleast_1d(self.load).tolist())
 
     @property
     def nodes(self) -> list[int]:
@@ -67,8 +91,18 @@ class _Route:
 class _Search:
     """Applies the local search moves to the routes of one subproblem.
 
+    A move is remembered as rejected only when it failed for reasons that
+    depend on its routes alone, never for vehicle availability or the room of
+    the day. The capacity in :attr:`cap` has twice the tolerance of
+    :func:`~pirilib.solvers._routing.fits`, so the cheap checks are looser
+    than the rules and never skip a move the rules allow.
+
     Attributes:
         item_left: (k, I) items nobody carries, when demand may not be split
+        stamps: Stamps for the routes of this search
+        cap: Per option, the capacity per dimension with twice the tolerance
+        allowed_nodes: Per option, the nodes it may stop at
+        stopover_ok: Per option, whether it may serve several nodes
     """
 
     def __init__(
@@ -89,6 +123,28 @@ class _Search:
         self.room = room
         self.timed = shared.scheduled
         self.item_left = None if item_left is None else item_left.copy()
+        self.stamps = itertools.count()
+        self.cap: list[tuple[float, ...]] = [
+            tuple(row) for row in (problem.capacity * (1 + 2 * TOLERANCE)).tolist()
+        ]
+        self.allowed_nodes = [frozenset(np.flatnonzero(row).tolist()) for row in problem.allowed]
+        self.stopover_ok: list[bool] = problem.stopovers.tolist()
+        self._merge_rejected: set[tuple[int, int, int]] = set()
+        self._relocate_rejected: set[tuple[int, int, int]] = set()
+        self._change_rejected: set[tuple[int, int]] = set()
+        self._shrunk: dict[tuple[int, int], tuple[_Route | None, float] | None] = {}
+
+    def route(self, option: int, stops: list[_Stop]) -> _Route:
+        """A new route of this search, with a fresh stamp."""
+        return _Route(option, stops, next(self.stamps))
+
+    def admits(self, option: int, load: Sequence[float], nodes: frozenset[int]) -> bool:
+        """False if no route of ``option`` may carry ``load`` to ``nodes``."""
+        if any(amount > limit for amount, limit in zip(load, self.cap[option], strict=False)):
+            return False
+        if len(nodes) > 1 and not self.stopover_ok[option]:
+            return False
+        return nodes <= self.allowed_nodes[option]
 
     def value(self, route: _Route) -> float:
         km = route_km(self.p, route.nodes)
@@ -198,6 +254,35 @@ class _Search:
     def _better(self, new: float, old: float) -> bool:
         return new < old - _EPSILON * max(1.0, abs(old))
 
+    def _renew(self, routes: list[_Route], *indices: int) -> None:
+        """Replace the routes at ``indices`` by new ones with the same stops."""
+        for index in indices:
+            routes[index] = self.route(routes[index].option, routes[index].stops)
+
+    def _shrink(self, source: _Route, position: int) -> tuple[_Route | None, float] | None:
+        """``source`` without its stop at ``position``, and the value of what is left.
+
+        None when the stop has nothing to move or what is left breaks a rule;
+        the route is None when nothing is left to carry. Remembered per stamp
+        and position.
+        """
+        key = (source.stamp, position)
+        if key in self._shrunk:
+            return self._shrunk[key]
+        result: tuple[_Route | None, float] | None = None
+        if source.stops[position].amount.max() > 0:
+            rest = [other for at, other in enumerate(source.stops) if at != position]
+            left = self.arranged(source.option, rest) if rest else []
+            shrunk = self.route(source.option, left[0]) if left else None
+            if shrunk is not None and not any(s.amount.max() > 0 for s in shrunk.stops):
+                shrunk = None
+            if shrunk is None:
+                result = (None, 0.0)
+            elif self.valid(shrunk):
+                result = (shrunk, self.value(shrunk))
+        self._shrunk[key] = result
+        return result
+
     def run(self, routes: list[_Route]) -> tuple[list[_Route], float]:
         values = [self.value(route) for route in routes]
         start = sum(values) + self.uncarried(self.remaining)
@@ -215,80 +300,119 @@ class _Search:
 
     def _change_vehicles(self, routes: list[_Route], values: list[float]) -> bool:
         usage = self._usage(routes)
+        rejected = self._change_rejected
         for index, route in enumerate(routes):
             for option in range(self.p.options):
                 if option == route.option or usage[option] >= self.available[option]:
                     continue
+                key = (route.stamp, option)
+                if key in rejected:
+                    continue
+                if not self.admits(option, route.load_tuple, route.nodes_set):
+                    rejected.add(key)
+                    continue
+                blocked = False
                 for stops in self.arranged(option, route.stops):
-                    candidate = _Route(option, stops)
+                    candidate = self.route(option, stops)
                     if not self.valid(candidate):
                         continue
                     value = self.value(candidate)
-                    if self._better(value, values[index]) and self.roomy(
-                        self._with(routes, {index: candidate})
-                    ):
-                        routes[index], values[index] = candidate, value
-                        return True
+                    if self._better(value, values[index]):
+                        if self.roomy(self._with(routes, {index: candidate})):
+                            routes[index], values[index] = candidate, value
+                            return True
+                        blocked = True
+                if not blocked:
+                    rejected.add(key)
         return False
 
     def _merge(self, routes: list[_Route], values: list[float]) -> bool:
         usage = self._usage(routes)
+        rejected = self._merge_rejected
         for first in range(len(routes)):
+            a = routes[first]
             for second in range(first + 1, len(routes)):
+                b = routes[second]
                 old = values[first] + values[second]
-                joined = routes[first].stops + routes[second].stops
+                load = [x + y for x, y in zip(a.load_tuple, b.load_tuple, strict=False)]
+                nodes = a.nodes_set | b.nodes_set
+                joined: list[_Stop] | None = None
                 for option in range(self.p.options):
-                    freed = (routes[first].option == option) + (routes[second].option == option)
+                    freed = (a.option == option) + (b.option == option)
                     if usage[option] - freed + 1 > self.available[option]:
                         continue
+                    key = (a.stamp, b.stamp, option)
+                    if key in rejected:
+                        continue
+                    if not self.admits(option, load, nodes):
+                        rejected.add(key)
+                        continue
+                    if joined is None:
+                        joined = a.stops + b.stops
+                    blocked = False
                     for stops in self.arranged(option, joined):
-                        candidate = _Route(option, stops)
+                        candidate = self.route(option, stops)
                         if not self.valid(candidate):
                             continue
                         value = self.value(candidate)
-                        if self._better(value, old) and self.roomy(
-                            self._with(routes, {first: candidate, second: None})
-                        ):
-                            routes[first], values[first] = candidate, value
-                            del routes[second], values[second]
-                            return True
+                        if self._better(value, old):
+                            if self.roomy(self._with(routes, {first: candidate, second: None})):
+                                routes[first], values[first] = candidate, value
+                                del routes[second], values[second]
+                                return True
+                            blocked = True
+                    if not blocked:
+                        rejected.add(key)
         return False
 
     def _relocate(self, routes: list[_Route], values: list[float]) -> bool:
+        rejected = self._relocate_rejected
         for source in range(len(routes)):
-            for position, stop in enumerate(routes[source].stops):
-                if stop.amount.max() <= 0:
+            giver = routes[source]
+            for position, stop in enumerate(giver.stops):
+                shrink = self._shrink(giver, position)
+                if shrink is None:
                     continue
-                rest = [other for at, other in enumerate(routes[source].stops) if at != position]
-                left = self.arranged(routes[source].option, rest) if rest else []
-                shrunk = _Route(routes[source].option, left[0]) if left else None
-                if shrunk is not None and not any(s.amount.max() > 0 for s in shrunk.stops):
-                    shrunk = None
-                if shrunk is not None and not self.valid(shrunk):
-                    continue
-                shrunk_value = 0.0 if shrunk is None else self.value(shrunk)
+                shrunk, shrunk_value = shrink
+                amount = stop.amount.tolist()
                 for target in range(len(routes)):
                     if target == source:
                         continue
                     receiver = routes[target]
-                    for stops in self.arranged(receiver.option, [*receiver.stops, stop]):
-                        candidate = _Route(receiver.option, stops)
+                    key = (giver.stamp, position, receiver.stamp)
+                    if key in rejected:
+                        continue
+                    option = receiver.option
+                    load = [x + y for x, y in zip(receiver.load_tuple, amount, strict=False)]
+                    if not self.admits(option, load, receiver.nodes_set | {stop.node}):
+                        rejected.add(key)
+                        continue
+                    blocked = False
+                    for stops in self.arranged(option, [*receiver.stops, stop]):
+                        candidate = self.route(option, stops)
                         if not self.valid(candidate):
                             continue
                         value = self.value(candidate)
                         old = values[source] + values[target]
-                        if self._better(shrunk_value + value, old) and self.roomy(
-                            self._with(routes, {target: candidate, source: shrunk})
-                        ):
-                            routes[target], values[target] = candidate, value
-                            if shrunk is None:
-                                del routes[source], values[source]
-                            else:
-                                routes[source], values[source] = shrunk, shrunk_value
-                            return True
+                        if self._better(shrunk_value + value, old):
+                            if self.roomy(self._with(routes, {target: candidate, source: shrunk})):
+                                routes[target], values[target] = candidate, value
+                                if shrunk is None:
+                                    del routes[source], values[source]
+                                else:
+                                    routes[source], values[source] = shrunk, shrunk_value
+                                return True
+                            blocked = True
+                    if not blocked:
+                        rejected.add(key)
         return False
 
     def _rebalance(self, routes: list[_Route], values: list[float]) -> bool:
+        """Shift load between two routes; the stops change in place, so both are renewed.
+
+        A shift that is undone may leave the amounts a rounding error away
+        from what they were, so then both routes are renewed as well.
+        """
         if not self.split:
             return False
         primary = self.shared.primary
@@ -317,14 +441,21 @@ class _Search:
                     if part[primary] <= TOLERANCE * float(capacity[primary]):
                         continue
                     old = values[taker_index] + values[giver_index]
+                    given_before, taken_before = given.amount, stop.amount
                     given.amount = given.amount - part
                     stop.amount = stop.amount + part
                     new_taker, new_giver = self.value(taker), self.value(giver)
                     if self._better(new_taker + new_giver, old):
                         values[taker_index], values[giver_index] = new_taker, new_giver
+                        self._renew(routes, taker_index, giver_index)
                         return True
                     given.amount = given.amount + part
                     stop.amount = stop.amount - part
+                    if not (
+                        np.array_equal(given.amount, given_before)
+                        and np.array_equal(stop.amount, taken_before)
+                    ):
+                        self._renew(routes, taker_index, giver_index)
         return False
 
     def _serve(self, routes: list[_Route], values: list[float]) -> bool:
@@ -342,7 +473,7 @@ class _Search:
                 if part.max() <= TOLERANCE * float(capacity.max()):
                     continue
                 for stops in self.arranged(route.option, [*route.stops, _Stop(int(node), part)]):
-                    candidate = _Route(route.option, stops)
+                    candidate = self.route(route.option, stops)
                     if not self.valid(candidate):
                         continue
                     after = self.remaining.copy()
@@ -391,13 +522,12 @@ def improve(
     items may wait for the next day). ``room`` limits the moves on scheduled
     instances.
     """
-    current = _unpack(routes)
     search = _Search(problem, coefficients, shared, available, remaining, room, item_left)
-    better, change = search.run(current)
+    better, change = search.run(_unpack(routes, search.stamps))
     return _pack(better, problem.demand.shape[1]), change
 
 
-def _unpack(routes: Routes) -> list[_Route]:
+def _unpack(routes: Routes, stamps: Iterator[int]) -> list[_Route]:
     items: dict[int, list[int]] = {}
     for stop, slot in zip(routes.item_stop.tolist(), routes.item_slot.tolist(), strict=True):
         items.setdefault(stop, []).append(slot)
@@ -408,7 +538,7 @@ def _unpack(routes: Routes) -> list[_Route]:
             _Stop(int(routes.stop_node[s]), routes.stop_amount[s].copy(), items.get(int(s), []))
             for s in range(start, end)
         ]
-        result.append(_Route(int(option), stops))
+        result.append(_Route(int(option), stops, next(stamps)))
     return result
 
 

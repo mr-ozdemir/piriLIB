@@ -4,12 +4,13 @@ from typing import Any
 import numpy as np
 import pytest
 
+from pirilib import ACOSolver, synthetic
 from pirilib import objective as obj
 from pirilib.solvers._colony import Shared
 from pirilib.solvers.base import linear_coefficients
 from pirilib.solvers.decompose import Routes, Subproblem, subproblems
 from pirilib.solvers.local_search import improve
-from pirilib.spec import LineHaulInstance
+from pirilib.spec import LineHaulInstance, parse_spec
 
 ONE = 6371.0 * math.pi / 180.0
 B, C = 0, 1
@@ -123,3 +124,13 @@ def test_nothing_to_improve(document: dict[str, Any], compile_document: Any) -> 
     result, change = run(instance, problem, start, GOAL)
     assert described(result) == described(start)
     assert change == 0.0
+
+
+def test_colony_plans_with_local_search_did_not_change() -> None:
+    """Pinned with the local search before its moves were remembered."""
+    instance = parse_spec(
+        synthetic.generate(centers=20, days=2, demand_per_day=150, seed=7)
+    ).compile()
+    result = ACOSolver().solve(instance, seed=0)
+    assert result.stats["score"] == pytest.approx(313495540.81793475, rel=1e-12)
+    assert len(result.plan) == 145

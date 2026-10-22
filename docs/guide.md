@@ -447,8 +447,10 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
   Planning one by one is slower: 2 to 2.5x the untimed time on a 10-center
   problem and 4.5x on 81 centers. The exact solver does not support these
   problems yet.
-- Local search runs in plain Python, which roughly doubles solve time on large
-  problems.
+- Local search runs in plain Python; with cheap pre-checks and remembered
+  rejections it takes about a tenth of solve time on large problems. Most of
+  the rest is the colony's construction (a 30-day problem with 40,500 demands
+  takes about 100 s).
 - The exact solver needs splittable demand and up to about 9 destinations per
   subproblem.
 - When spot offers have daily limits, origins of a day take vehicles one after

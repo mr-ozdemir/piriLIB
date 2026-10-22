@@ -212,3 +212,19 @@ Doğrudan gönderimin ortalama farkı iki örnekteki minimum doluluk cezalarınd
 | ortools (açgözlü iniş) | %3,22 | %2,87 | %20 | %100 | 0,04 |
 
 80 rastgele belgede (minimum doluluk 0, bölme açık) iki adaptör ve doğrudan gönderim, spot limiti olan yerlerdeki kapsama dışında hiçbir kuralı bozmadı; `check_plan` maliyette aynı sonucu verdi. Bu örneklerde adaptörler kesin çözücüyü hiç geçmedi. PyVRP 0.14.1, OR-Tools 9.15.6755, Python 3.14.3, Windows.
+
+## Hız: yerel arama
+
+Yerel arama, değiştirmeyi, birleştirmeyi ve taşımayı denediği ama daha iyi bulmadığı hamleleri rota damgalarıyla hatırlıyor ve o rotalar durdukça yeniden denemiyor. Rota kurulmadan önce önbellekteki yük ve düğümlerle ucuz bir kapasite, yasak ve ara durak kontrolü yapılıyor (kapasite toleransı `fits`'in iki katı, yani kurallardan gevşek). Araç sayısı ve günün odası yüzünden reddedilen hamleler hatırlanmıyor. Hamleler aynı sırayla denendiği için alınan ilk hamle de aynı.
+
+`pirilib.solve(instance, seed=1)`, `synthetic.generate(..., seed=3)` (30 gün için `seed=0`); 3 çalıştırmanın en kısası (30 gün tek çalıştırma). Yerel arama süresi `improve` çağrılarının toplamı.
+
+| Problem | Talep | Önce toplam | Önce yerel arama | Sonra toplam | Sonra yerel arama | Skor |
+|---|---|---|---|---|---|---|
+| 40 merkez, 5 gün, günde 400 | 2.000 | 4,81 sn | 1,80 sn | 3,26 sn | 0,29 sn | 183.746.683 |
+| 81 merkez, 7 gün, günde 1.350 | 9.450 | 52,9 sn | 35,4 sn | 20,4 sn | 3,37 sn | 356.221.394 |
+| 81 merkez, 30 gün, günde 1.350 | 40.500 | 175,2 sn | 82,1 sn | 99,8 sn | 12,0 sn | 1.835.913.154 |
+
+30 günlük problemde "önce" bugünkü main; ACO hızı bölümündeki 381 sn daha eski bir sürümden.
+
+Değişmezlik: 40 rastgele, 40 zamanlı rastgele, 6 varsayılan ayarlı rastgele, 2 zamanlı sentetik ve örnek problem ile yukarıdaki 3 büyük problem, toplam 92 çalıştırmada planlar (`np.array_equal`), skorlar ve amaç değerleri değişiklikten önceki kodla birebir aynı (`==`), 0 fark. `tests/test_local_search.py` 20 merkez, 2 gün, günde 150 talepli bir problemin skorunu (313.495.540,8) ve sefer sayısını (145) eski kodla sabitliyor.

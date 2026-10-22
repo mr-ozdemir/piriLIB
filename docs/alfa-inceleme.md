@@ -219,6 +219,7 @@ K10, K11, K12, K13, K15, K30, K45, K46, K49, K50, K53, K59, K61, K69, K71, K74, 
 - **K152–K161 (dalga bölme):** B. Yalnız K152 (pencere: veri olan son 4 olağan gün) ve K153 (havuzlanmış oran, prototipteki ağırlıksız ortalamadan sapma) bir kez okunmalı.
 - **K162–K171 (belge sitesi):** C. Sitenin yayımlanması S05'e bağlı.
 - **K172–K185 (kıyas paketi, adaptörler):** B. K177 (doğrudan gönderim alt çizgisi) ve K180 (adaptörlerin reddettiği problemler) bir kez okunmalı.
+- **K200 (spot limiti sayacı), K201–K203 (hız):** B. K203 çok çekirdeği ve numba'yı yine ertesi sürüme bırakıyor.
 - **K186–K199 (3b):** A-14 ile birlikte. K188 Fable'ın tanımından sapıyor (erteleme maliyetine sefer maliyeti de eklendi, ölçümle); K199 kabul koşulunun neden 250.000 desiyle ölçüldüğünü anlatıyor.
 
 ## Tutarsızlıklar
