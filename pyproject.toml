@@ -41,8 +41,8 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/mr-ozdemir/piriLIB"
-Documentation = "https://github.com/mr-ozdemir/piriLIB/blob/main/docs/guide.md"
-Changelog = "https://github.com/mr-ozdemir/piriLIB/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/mr-ozdemir/piriLIB/blob/master/docs/guide.md"
+Changelog = "https://github.com/mr-ozdemir/piriLIB/blob/master/CHANGELOG.md"
 Issues = "https://github.com/mr-ozdemir/piriLIB/issues"
 
 [project.optional-dependencies]

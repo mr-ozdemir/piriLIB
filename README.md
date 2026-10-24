@@ -26,7 +26,7 @@ pirilib (short name *piri*) generalizes the solution built for the TEKNOFEST
   the prototype's LightGBM-Tweedie, walk-forward backtests, ABC tuning, and a
   quantile-buffered bridge from the forecast to a planning problem.
 
-Read the [user guide](https://github.com/mr-ozdemir/piriLIB/blob/main/docs/guide.md) for the problem format, the rules, the
+Read the [user guide](https://github.com/mr-ozdemir/piriLIB/blob/master/docs/guide.md) for the problem format, the rules, the
 objective building blocks, solving, tuning and the command line.
 
 ## Command line
@@ -42,7 +42,7 @@ pirilib forecast history.csv --network network.yaml --problem week.yaml --quanti
 ## Python
 
 A problem is described in YAML, and large tables can come from CSV files, as in
-[`examples/linehaul_mini`](https://github.com/mr-ozdemir/piriLIB/tree/main/examples/linehaul_mini):
+[`examples/linehaul_mini`](https://github.com/mr-ozdemir/piriLIB/tree/master/examples/linehaul_mini):
 
 ```python
 import pirilib
@@ -61,7 +61,7 @@ problem.yaml: invalid problem specification
 - demand.csv:18: date: 2026-05-13 is outside the calendar 2026-05-11..2026-05-12
 ```
 
-The JSON Schema of problem documents is in [`schemas/`](https://github.com/mr-ozdemir/piriLIB/tree/main/schemas). Editors with
+The JSON Schema of problem documents is in [`schemas/`](https://github.com/mr-ozdemir/piriLIB/tree/master/schemas). Editors with
 YAML language support use it for completion and checks.
 
 A plan is a list of dispatches. One evaluator computes its cost and how much it
