@@ -61,9 +61,9 @@ print(pirilib.check_plan(instance, result.plan))
 - The [API reference](api/pirilib.md) is generated from the docstrings of the
   package.
 - The source, the example problem in
-  [`examples/linehaul_mini`](https://github.com/mr-ozdemir/piriLIB/tree/main/examples/linehaul_mini)
+  [`examples/linehaul_mini`](https://github.com/mr-ozdemir/piriLIB/tree/master/examples/linehaul_mini)
   and the JSON Schema of problem documents in
-  [`schemas/`](https://github.com/mr-ozdemir/piriLIB/tree/main/schemas) are on
+  [`schemas/`](https://github.com/mr-ozdemir/piriLIB/tree/master/schemas) are on
   [GitHub](https://github.com/mr-ozdemir/piriLIB).
 
 pirilib is licensed under Apache-2.0.
