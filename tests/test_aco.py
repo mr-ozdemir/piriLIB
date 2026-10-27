@@ -10,6 +10,8 @@ import pirilib
 from pirilib import ACOConfig, ACOSolver, check_plan, evaluate
 from pirilib import objective as obj
 from pirilib.constraints import CATALOG, MaxDispatchesPerDay
+from pirilib.solvers._colony import NEED, ROUTE, Batch, Build, Pheromone, Shared
+from pirilib.solvers.decompose import subproblems
 from pirilib.spec import LineHaulInstance, parse_spec
 
 type RandomDocument = Callable[[int], dict[str, Any]]
@@ -177,3 +179,39 @@ def test_scheduled_problems_are_planned_piece_by_piece(
         assert result.evaluation.violations[name] == 0, name
     assert result.objective == pytest.approx(GOAL(result.evaluation))
     assert result.stats["score"] == pytest.approx(result.objective, rel=1e-9)
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_kept_opening_weights_equal_fresh_ones(seed: int, random_document: RandomDocument) -> None:
+    """Without a room, ``opening`` always holds what ``_opening`` would compute."""
+    instance = parse_spec(random_document(seed)).compile()
+    shared = Shared.of(instance)
+    batch = Batch(subproblems(instance), shared)
+    ants = 4
+    build = Build(
+        batch,
+        Pheromone.filled(batch, 1.0),
+        shared,
+        ants=ants,
+        alpha=1.0,
+        beta=2.0,
+        exploitation=0.0,
+        rng=np.random.default_rng(seed),
+        available=np.repeat(batch.available, ants, axis=0),
+        active=np.ones(batch.count, dtype=np.bool_),
+    )
+    checked = 0
+    for _ in range(1000):
+        need = (build.phase == NEED).nonzero()[0]
+        if need.size:
+            if build.pending:
+                build._reopen()
+            assert np.array_equal(build.opening[need], build._opening(need, build.of[need]))
+            checked += 1
+            build._start(need)
+        moving = (build.phase == ROUTE).nonzero()[0]
+        if moving.size:
+            build._extend(moving)
+        if not need.size and not moving.size:
+            break
+    assert checked > 1
