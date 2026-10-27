@@ -558,9 +558,10 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
   problem and 4.5x on 81 centers. The exact solver does not support these
   problems yet.
 - Local search runs in plain Python; with cheap pre-checks and remembered
-  rejections it takes about a tenth of solve time on large problems. Most of
-  the rest is the colony's construction (a 30-day problem with 40,500 demands
-  takes about 100 s).
+  rejections it takes about 15 to 20 % of solve time on large problems. Most of the
+  rest is the colony's construction, in numpy on one core: with 81 centers a
+  7-day problem with 9,450 demands takes about 15 s and a 30-day problem with
+  40,500 demands about 80 s.
 - The exact solver needs splittable demand and up to about 9 destinations per
   subproblem.
 - When spot offers have daily limits, origins of a day take vehicles one after

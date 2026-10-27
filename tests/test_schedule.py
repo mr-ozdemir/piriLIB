@@ -322,6 +322,17 @@ def test_untimed_plans_did_not_change() -> None:
     assert len(result.plan) == 40
 
 
+def test_whole_plans_did_not_change() -> None:
+    """Pinned in general mode, where every ant builds a whole plan."""
+    instance = parse_spec(
+        synthetic.generate(centers=10, days=2, demand_per_day=40, seed=3)
+    ).compile()
+    result = ACOSolver(QUICK).solve(instance, lambda evaluation: GOAL(evaluation), seed=0)
+    assert result.stats["mode"] == "general"
+    assert result.objective == pytest.approx(1000768.9168453162, rel=1e-12)
+    assert len(result.plan) == 52
+
+
 def test_the_exact_solver_does_not_plan_times_yet(
     document: dict[str, Any], compile_document: Callable[..., LineHaulInstance]
 ) -> None:

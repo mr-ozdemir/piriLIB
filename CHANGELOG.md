@@ -105,6 +105,11 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
 
 ### Changed
 
+- The ant colony builds its solutions about 1.5 to 1.7 times faster, with the
+  same plans and scores to the last bit: per-option and per-node values are
+  laid out once per build, the weights of opening a route are kept and updated
+  only where a row loads, and sampling and each step use fewer numpy calls.
+  Large problems solve about a third faster in total.
 - There is no default objective any more: `default_objective` and
   `DEFAULT_PENALTY` are gone, and `objective` is a required argument of
   `pirilib.solve`, `Solver.solve` (`ACOSolver`, `ExactSolver`, `DirectShipping`,
