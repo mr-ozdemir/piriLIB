@@ -33,14 +33,30 @@ objective building blocks, solving, tuning and the command line.
 
 ```bash
 pip install pirilib
-pirilib generate sample --centers 20 --days 3   # a synthetic problem to try
-pirilib solve sample/problem.yaml -o plan.csv    # plan it; one row per load
-pirilib check sample/problem.yaml plan.csv       # audit any plan against the rules
+pirilib generate sample --centers 20 --days 3
+pirilib solve sample/problem.yaml -o plan.csv
+pirilib check sample/problem.yaml plan.csv
 pirilib forecast history.csv --network network.yaml --problem week.yaml --quantile 0.8
 ```
 
-`solve` minimizes the objective that the problem file defines in its
+`generate` writes a synthetic problem to try, `solve` plans it with one row
+per load, and `check` audits any plan against the rules. `solve` minimizes the objective that the problem file defines in its
 `objective:` section; `generate` writes one, and there is no default.
+
+## Your objective
+
+The objective weighs the total cost of a plan against every rule it breaks.
+You write it in the problem file: a weight for the cost, optional weights per
+km, per dispatch and per unit of empty capacity, and a penalty per unit of
+violation for every rule, by name or through `other`. The penalties decide
+what gives way when not every rule can hold, for example whether a small
+demand stays behind or travels in an under-filled vehicle. The page
+[Building the objective](https://github.com/mr-ozdemir/piriLIB/blob/master/docs/objective.md)
+explains every field and the unit of every rule, works through the total cost
+of a small plan, gives advice on choosing weights and writes the same
+objective in Python. The scenarios in
+[`examples/objectives`](https://github.com/mr-ozdemir/piriLIB/tree/master/examples/objectives)
+show how the weights change a plan.
 
 ## Python
 
@@ -50,10 +66,13 @@ A problem is described in YAML, and large tables can come from CSV files, as in
 ```python
 import pirilib
 
-spec = pirilib.load_spec("examples/linehaul_mini/problem.yaml")  # validated, immutable
-instance = spec.compile()  # read-only numpy arrays for the engines
+spec = pirilib.load_spec("examples/linehaul_mini/problem.yaml")
+instance = spec.compile()
 print(instance)
 ```
+
+`load_spec` returns the validated, immutable document, and `compile` turns it
+into read-only numpy arrays for the engines.
 
 Every problem in a document is reported at once, with file and line for CSV
 rows:
@@ -68,51 +87,60 @@ The JSON Schema of problem documents is in [`schemas/`](https://github.com/mr-oz
 YAML language support use it for completion and checks.
 
 A plan is a list of dispatches. One evaluator computes its cost and how much it
-violates every rule; your objective and your own constraints read the result:
+violates every rule; your objective and your own constraints read the result.
+The dispatch below is one spot kamyon (offer 1) from İstanbul (center 0) to
+Kocaeli (center 1) on day 0, carrying 12000 desi of the first demand, and
+`check_plan` explains the same rules in words:
 
 ```python
 from pirilib import Dispatch, Load, Plan, check_plan, evaluate
 from pirilib import objective as obj
 from pirilib.constraints import MaxRouteKm
 
-# One spot kamyon (offer 1) from İstanbul (center 0) to Kocaeli (center 1), day 0,
-# carrying 12000 desi of the first demand.
 dispatch = Dispatch(
     day=0, kind="spot", source=1, origin=0, stops=(1,), loads=(Load(0, (12000.0,)),)
 )
 plan = Plan.from_dispatches([dispatch], dimensions=1)
 
 evaluation = evaluate(instance, plan, constraints=[MaxRouteKm(400)])
-goal = obj.total_cost() + 10 * obj.unserved() + 1e6 * obj.violation("capacity")
+goal = spec.build_objective()
 print(evaluation.total_cost, evaluation.violated())
 print(goal.breakdown(evaluation))
-print(check_plan(instance, plan))  # the same rules, explained in words
+print(check_plan(instance, plan))
 ```
 
 The ant colony searches for the plan that minimizes your objective. There is
-no default one: write it with `pirilib.objective`, or build it from the
-`objective:` section of the problem file:
+no default one: build it from the `objective:` section of the problem file, or
+write it with `pirilib.objective`. `print(result)` shows the objective value,
+the seconds and the evaluation of the best plan. Any function of an evaluation
+is an objective too; it is searched on whole plans, which is slower:
 
 ```python
 from pirilib import ACOConfig, ACOSolver, solve
 
 result = solve(instance, spec.build_objective(), seed=1)
-result = solve(instance, objective=obj.total_cost() + 1e6 * obj.violations(), seed=1)
-print(result)  # objective, seconds, and the evaluation of the best plan
+result = solve(instance, spec.build_objective() + 500 * obj.dispatches("spot"), seed=1)
+print(result)
 
-# Any function of an evaluation is an objective too (searched on whole plans, slower).
 result = solve(
     instance,
-    objective=lambda e: e.total_cost + 50 * len(e.plan),
+    objective=lambda e: goal(e) + 50 * len(e.plan),
     solver=ACOSolver(ACOConfig(ants=8)),
 )
 ```
 
 ## Development setup
 
+Create a virtual environment and activate it, with `.venv\Scripts\activate` on
+Windows or `source .venv/bin/activate` on macOS and Linux:
+
 ```bash
 python -m venv .venv
-# Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
+```
+
+Then install and run the checks:
+
+```bash
 python -m pip install --upgrade pip
 python -m pip install -e . --group dev
 pytest

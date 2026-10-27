@@ -1,0 +1,35 @@
+schema: pirilib/linehaul@0.2
+name: Distance-aware
+
+calendar: {start: 2026-06-01, end: 2026-06-01}
+
+centers:
+  - {id: A}
+  - {id: B}
+  - {id: C}
+
+matrix:
+  source: explicit
+  symmetric: true
+  arcs:
+    - {origin: A, destination: B, km: 100}
+    - {origin: A, destination: C, km: 120}
+    - {origin: B, destination: C, km: 200}
+
+vehicle_types:
+  - {name: van, capacity: {desi: 1000}}
+
+fleet:
+  spot:
+    - {type: van, cost: {fixed: 1000, per_km: 1}}
+
+demand:
+  - {origin: A, destination: B, date: 2026-06-01, quantity: {desi: 300}}
+  - {origin: A, destination: C, date: 2026-06-01, quantity: {desi: 300}}
+
+objective:
+  cost: 1
+  distance_km: 20
+  penalties:
+    coverage: 10000000
+    other: 1000000

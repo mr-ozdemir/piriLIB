@@ -1,0 +1,52 @@
+schema: pirilib/linehaul@0.2
+name: Every load must go
+
+calendar: {start: 2026-06-01, end: 2026-06-02}
+
+centers:
+  - {id: A}
+  - {id: B}
+  - {id: C}
+  - {id: D}
+
+matrix:
+  source: explicit
+  symmetric: true
+  arcs:
+    - {origin: A, destination: B, km: 120}
+    - {origin: A, destination: C, km: 200}
+    - {origin: A, destination: D, km: 90}
+    - {origin: B, destination: C, km: 100}
+    - {origin: B, destination: D, km: 150}
+    - {origin: C, destination: D, km: 210}
+
+vehicle_types:
+  - {name: big, capacity: {desi: 1000}}
+  - {name: small, capacity: {desi: 400}}
+
+fleet:
+  owned:
+    - {type: big, origin: A, destination: B, count: 1, cost: {fixed: 500, per_km: 1.5}}
+  spot:
+    - {type: big, cost: {fixed: 600, per_km: 2.5}}
+    - {type: small, cost: {fixed: 300, per_km: 1.8}}
+
+demand:
+  - {origin: A, destination: B, date: 2026-06-01, quantity: {desi: 900}}
+  - {origin: A, destination: C, date: 2026-06-01, quantity: {desi: 700}}
+  - {origin: A, destination: D, date: 2026-06-01, quantity: {desi: 40}}
+  - {origin: B, destination: C, date: 2026-06-01, quantity: {desi: 350}}
+  - {origin: A, destination: B, date: 2026-06-02, quantity: {desi: 600}}
+  - {origin: A, destination: C, date: 2026-06-02, quantity: {desi: 380}}
+  - {origin: C, destination: A, date: 2026-06-02, quantity: {desi: 500}}
+
+rules:
+  min_fill: {spot: 0.3}
+  stopover: {enabled: false}
+
+objective:
+  cost: 1
+  penalties:
+    coverage: 10000000
+    min_fill: 1000
+    other: 1000000

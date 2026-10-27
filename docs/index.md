@@ -48,19 +48,30 @@ compiled form holds read-only numpy arrays for the engines.
 
 ```python
 import pirilib
-from pirilib import objective as obj
 
 spec = pirilib.load_spec("sample/problem.yaml")
 instance = spec.compile()
-result = pirilib.solve(instance, objective=obj.total_cost() + 1e6 * obj.violations(), seed=1)
+result = pirilib.solve(instance, spec.build_objective(), seed=1)
 print(result)
 print(pirilib.check_plan(instance, result.plan))
 ```
+
+## Your objective
+
+The objective weighs the total cost of a plan against every rule it breaks,
+and there is no default one. The problem file's `objective:` section gives a
+weight for the cost and a penalty per unit of violation for every rule, by
+name or through `other`; those penalties decide what gives way when not every
+rule can hold. [Building the objective](objective.md) explains every field and
+the unit of every rule, works through the total cost of a small plan, and
+shows how to choose weights and write the same objective in Python.
 
 ## Where to go next
 
 - The [user guide](guide.md) covers the problem format, the rules, the
   objective building blocks, solving, tuning, forecasting and the command line.
+- [Building the objective](objective.md) explains the `objective:` section,
+  penalty weights and objectives written in Python.
 - The [API reference](api/pirilib.md) is generated from the docstrings of the
   package.
 - The source, the example problem in
