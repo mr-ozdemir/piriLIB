@@ -131,6 +131,6 @@ def test_colony_plans_with_local_search_did_not_change() -> None:
     instance = parse_spec(
         synthetic.generate(centers=20, days=2, demand_per_day=150, seed=7)
     ).compile()
-    result = ACOSolver().solve(instance, seed=0)
+    result = ACOSolver().solve(instance, GOAL, seed=0)
     assert result.stats["score"] == pytest.approx(313495540.81793475, rel=1e-12)
     assert len(result.plan) == 145

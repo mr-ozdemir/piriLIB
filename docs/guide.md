@@ -54,6 +54,12 @@ rules:
   min_fill: {spot: 0.10, owned: 0.0} # share of capacity a vehicle must carry
   stopover: {enabled: true, max_stretch: 1.3, forward_only: true, max_stops: null}
   split_demand: true                 # a demand may travel in several vehicles
+
+objective:
+  cost: 1
+  penalties:
+    coverage: 10000000
+    other: 1000000
 ```
 
 What the fields mean:
@@ -83,6 +89,12 @@ What the fields mean:
   - `max_stretch` bounds route length divided by the direct distance to the last stop.
   - `forward_only` requires each stop to be farther from the origin than the one before it.
   - `max_stops` bounds the number of stops.
+- **Objective.** `objective:` says what to minimize: `cost` times the total
+  cost, optional weights `distance_km`, `dispatches` and `unused_capacity`, and
+  under `penalties` a weight per unit of violation of each rule (the names in
+  the table of section 2). Every rule needs a penalty, or `other` gives one to
+  every rule not named; a missing one is an error. The section is optional for
+  validating and checking, but solving and tuning need it (see section 3).
 
 ### Times and service (schema 0.2)
 
@@ -225,11 +237,20 @@ subproblem, which is fast. A plain function such as
 `lambda e: e.total_cost ** 1.1` is optimized on whole plans instead, which is
 slower. Constraints of your own are handled the same way.
 
-The default objective is `total_cost() + 1e6 * violations()`, so every rule
-behaves like a hard constraint. When a rule cannot be met, the solver does what
-the objective prefers. For example, it may leave a small demand uncarried
-rather than send a vehicle below its minimum fill, if that costs less in
-penalties.
+There is no default objective: `solve`, `tune` and `Benchmark` take one, and
+the command line reads it from the `objective:` section of the problem file.
+`spec.build_objective()` turns that section into a `Sum` with a linear form:
+
+```python
+spec = pirilib.load_spec("problem.yaml")
+goal = spec.build_objective()
+```
+
+With large penalties every rule behaves like a hard constraint. When a rule
+cannot be met, the solver does what the objective prefers. For example, it may
+leave a small demand uncarried rather than send a vehicle below its minimum
+fill, if that costs less in penalties. An objective written in Python is used
+as it is; pirilib does not check that it weights every rule.
 
 ## 4. Solve
 
@@ -378,6 +399,12 @@ pirilib solve problem.yaml -o plan.csv               # plan the forecast week
 
 Date files (`--holidays`, `--unusual`) have one ISO date per line.
 
+`solve`, `tune` and `bench` minimize the objective of the problem files (for
+`bench`, the generated ones). Without an `objective:` section they stop with
+exit status 2; `tune` also needs every training file to define the same one.
+`generate` writes `cost: 1` with penalties `coverage: 10000000` and
+`other: 1000000`, and `forecast --network` copies the network's section.
+
 Plan files have one row per load. The columns are `dispatch`, `date`, `kind`,
 `start` (loading start, `HH:MM` after 00:00 of the date, hours may pass 24),
 `vehicle_type`, `source` (for example `fleet.spot[1]`), `origin`, `stops`
@@ -391,9 +418,12 @@ elsewhere can be audited too.
 
 ```python
 from pirilib.bench import FAMILIES, SOLVERS, Benchmark
+from pirilib.spec import parse_spec
 
 instances = FAMILIES.get("small").instances(10)
-table = Benchmark(SOLVERS.make(["direct", "aco", "exact"]), seeds=(0, 1)).run(instances)
+goal = parse_spec(instances[0].document).build_objective()
+benchmark = Benchmark(SOLVERS.make(["direct", "aco", "exact"]), objective=goal, seeds=(0, 1))
+table = benchmark.run(instances)
 table.to_csv("results.csv")
 print(table.summary())
 ```

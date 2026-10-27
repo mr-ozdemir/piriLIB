@@ -31,7 +31,7 @@ from pirilib.objective import Objective, linear_form
 from pirilib.plan import OWNED, SPOT
 from pirilib.solvers._colony import Shared
 from pirilib.solvers._routing import route_km, route_ok, route_value
-from pirilib.solvers.base import SolveResult, default_objective, linear_coefficients
+from pirilib.solvers.base import SolveResult, linear_coefficients, require_objective
 from pirilib.solvers.decompose import UNBOUNDED, PlanBuilder, Routes, Subproblem, subproblems
 from pirilib.spec.instance import UNLIMITED, LineHaulInstance
 
@@ -107,12 +107,12 @@ class ExactSolver:
     def solve(
         self,
         instance: LineHaulInstance,
-        objective: Objective | None = None,
+        objective: Objective,
         constraints: Sequence[Constraint] = (),
         *,
         seed: int = 0,
     ) -> SolveResult:
-        goal = default_objective() if objective is None else objective
+        goal = require_objective(objective, "ExactSolver.solve")
         form = linear_form(goal)
         if form is None or constraints:
             raise ValueError(

@@ -13,7 +13,7 @@ can be served at all.
 import datetime as dt
 import unicodedata
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Final, Literal, Self
 
 from pydantic import (
     AfterValidator,
@@ -25,12 +25,15 @@ from pydantic import (
     PositiveFloat,
     PositiveInt,
     StringConstraints,
+    field_validator,
     model_validator,
 )
 
+from pirilib.errors import SpecError
 from pirilib.spec._format import Loc, SpecIssues
 
 if TYPE_CHECKING:
+    from pirilib.objective import Sum
     from pirilib.spec.instance import LineHaulInstance
 
 SCHEMA_ID: Final = "pirilib/linehaul@0.2"
@@ -280,6 +283,109 @@ class Rules(_Model):
     handling: Handling = Handling()
 
 
+class ObjectiveSpec(_Model):
+    """The objective to minimize, built from the costs and rules of the document.
+
+    The objective is ``cost`` times the total cost (dispatch costs, the fixed
+    cost of mandatory owned vehicles and lateness), plus the optional extra
+    terms, plus a weight per unit of violation of every built-in rule. Every
+    rule a plan can break needs a weight: name it under ``penalties`` (the names
+    are those of :data:`pirilib.constraints.CATALOG`), or give ``other`` for
+    every rule that is not named. A weight of 0 lets a plan break the rule for
+    free, so it has to be written down.
+    """
+
+    OTHER: ClassVar[str] = "other"
+    """The ``penalties`` key that applies to every built-in rule not named."""
+
+    cost: PositiveFloat = Field(
+        description=(
+            "Weight of the total cost: dispatches (fixed, per km and per hour), the fixed "
+            "cost of mandatory owned vehicles and lateness."
+        )
+    )
+    distance_km: NonNegativeFloat = Field(default=0.0, description="Weight per km of route.")
+    dispatches: NonNegativeFloat = Field(default=0.0, description="Weight per dispatch.")
+    unused_capacity: NonNegativeFloat = Field(
+        default=0.0,
+        description="Weight per primary unit of capacity left empty on departure.",
+    )
+    penalties: dict[str, NonNegativeFloat] = Field(
+        description=(
+            "Weight per unit of violation, by rule name; 'other' applies to every rule "
+            "not named. Without 'other', every rule must be named."
+        )
+    )
+
+    @field_validator("penalties")
+    @classmethod
+    def _check_penalties(cls, penalties: dict[str, float]) -> dict[str, float]:
+        from pirilib.constraints import CATALOG
+
+        known = [*CATALOG, cls.OTHER]
+        issues: list[Issue] = [
+            ((name,), f"unknown rule '{name}'; known: {', '.join(known)}")
+            for name in penalties
+            if name not in known
+        ]
+        missing = [name for name in CATALOG if name not in penalties]
+        if cls.OTHER not in penalties and missing:
+            issues.append(
+                (
+                    (),
+                    f"no penalty for {', '.join(missing)}; every rule needs a weight: add "
+                    f"them, or '{cls.OTHER}' for every rule not named",
+                )
+            )
+        if issues:
+            raise SpecIssues(issues)
+        return penalties
+
+    def penalty(self, name: str) -> float:
+        """The weight per unit of violation of the built-in rule ``name``, named or ``other``."""
+        from pirilib.constraints import CATALOG
+
+        if name not in CATALOG:
+            raise KeyError(f"no built-in rule named '{name}'; known: {', '.join(CATALOG)}")
+        if name in self.penalties:
+            return self.penalties[name]
+        return self.penalties[self.OTHER]
+
+    def build(self) -> "Sum":
+        """The objective as a :class:`~pirilib.objective.Sum`, with a linear form.
+
+        Extra terms with weight 0 are left out; every built-in rule gets its
+        penalty term, also when the weight is 0.
+        """
+        from pirilib import objective as obj
+        from pirilib.constraints import CATALOG
+
+        extras = (
+            (self.distance_km, obj.distance_km),
+            (self.dispatches, obj.dispatches),
+            (self.unused_capacity, obj.unused_capacity),
+        )
+        terms = [
+            obj.total_cost() * self.cost,
+            *(make() * weight for weight, make in extras if weight),
+            *(obj.violation(name) * self.penalty(name) for name in CATALOG),
+        ]
+        return obj.Sum(tuple(terms))
+
+
+_NO_OBJECTIVE: Final = (
+    "the problem document has no objective: section; solving and tuning need one, "
+    "for example\n\n"
+    "objective:\n"
+    "  cost: 1\n"
+    "  penalties:\n"
+    "    coverage: 10000000\n"
+    "    other: 1000000\n\n"
+    "Every rule a plan can break needs a penalty weight, by name or through 'other'."
+)
+"""Why :meth:`LineHaulSpec.build_objective` fails on a document without an objective."""
+
+
 class LineHaulSpec(_Model):
     """A complete, validated line-haul planning problem."""
 
@@ -292,6 +398,10 @@ class LineHaulSpec(_Model):
     fleet: Fleet
     demand: tuple[Demand, ...]
     rules: Rules = Rules()
+    objective: ObjectiveSpec | None = Field(
+        default=None,
+        description="The objective to minimize; solving and tuning need it.",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -338,6 +448,12 @@ class LineHaulSpec(_Model):
     def demand_ids(self) -> tuple[str, ...]:
         """The id of each demand row (empty text when it has none)."""
         return tuple(row.id or "" for row in self.demand)
+
+    def build_objective(self) -> "Sum":
+        """The objective of the ``objective:`` section; :class:`~pirilib.SpecError` without it."""
+        if self.objective is None:
+            raise SpecError(_NO_OBJECTIVE)
+        return self.objective.build()
 
     def compile(self) -> "LineHaulInstance":
         """Return the read-only array form used by the engines."""

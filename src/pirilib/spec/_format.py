@@ -44,7 +44,10 @@ def validation_problems(
     for error in exc.errors(include_url=False):
         cause = error.get("ctx", {}).get("error")
         if isinstance(cause, SpecIssues):
-            lines += [locate((*prefix, *loc), message, origins) for loc, message in cause.issues]
+            lines += [
+                locate((*prefix, *error["loc"], *loc), message, origins)
+                for loc, message in cause.issues
+            ]
         else:
             message = str(error["msg"]).removeprefix("Value error, ")
             lines.append(locate((*prefix, *error["loc"]), message, origins))

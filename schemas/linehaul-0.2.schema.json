@@ -380,6 +380,78 @@
       "title": "MinFill",
       "type": "object"
     },
+    "ObjectiveSpec": {
+      "additionalProperties": false,
+      "description": "The objective to minimize, built from the costs and rules of the document.\n\nThe objective is ``cost`` times the total cost (dispatch costs, the fixed\ncost of mandatory owned vehicles and lateness), plus the optional extra\nterms, plus a weight per unit of violation of every built-in rule. Every\nrule a plan can break needs a weight: name it under ``penalties`` (the names\nare those of :data:`pirilib.constraints.CATALOG`), or give ``other`` for\nevery rule that is not named. A weight of 0 lets a plan break the rule for\nfree, so it has to be written down.",
+      "properties": {
+        "cost": {
+          "description": "Weight of the total cost: dispatches (fixed, per km and per hour), the fixed cost of mandatory owned vehicles and lateness.",
+          "exclusiveMinimum": 0,
+          "title": "Cost",
+          "type": "number"
+        },
+        "distance_km": {
+          "default": 0.0,
+          "description": "Weight per km of route.",
+          "minimum": 0,
+          "title": "Distance Km",
+          "type": "number"
+        },
+        "dispatches": {
+          "default": 0.0,
+          "description": "Weight per dispatch.",
+          "minimum": 0,
+          "title": "Dispatches",
+          "type": "number"
+        },
+        "unused_capacity": {
+          "default": 0.0,
+          "description": "Weight per primary unit of capacity left empty on departure.",
+          "minimum": 0,
+          "title": "Unused Capacity",
+          "type": "number"
+        },
+        "penalties": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Weight per unit of violation, by rule name; 'other' applies to every rule not named. Without 'other', every rule must be named.",
+          "title": "Penalties",
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "route",
+              "load_route",
+              "ready",
+              "deferral",
+              "ban",
+              "owned_line",
+              "owned_availability",
+              "spot_availability",
+              "handling",
+              "vehicle_limit",
+              "capacity",
+              "min_fill",
+              "stopover",
+              "max_stops",
+              "stretch",
+              "forward_only",
+              "split",
+              "coverage",
+              "overdelivery",
+              "other"
+            ]
+          }
+        }
+      },
+      "required": [
+        "cost",
+        "penalties"
+      ],
+      "title": "ObjectiveSpec",
+      "type": "object"
+    },
     "OwnedVehicles": {
       "additionalProperties": false,
       "description": "Identical owned or long-term rented vehicles bound to one line.",
@@ -829,6 +901,18 @@
           "minutes_per_unit": 0.0
         }
       }
+    },
+    "objective": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ObjectiveSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The objective to minimize; solving and tuning need it."
     }
   },
   "required": [

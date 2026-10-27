@@ -12,7 +12,8 @@ from pirilib.bench.results import Record, ResultTable
 from pirilib.constraints import Constraint
 from pirilib.evaluation import evaluate
 from pirilib.objective import Objective
-from pirilib.solvers import ACOConfig, ACOSolver, Solver, default_objective
+from pirilib.solvers import ACOConfig, ACOSolver, Solver
+from pirilib.solvers.base import require_objective
 from pirilib.solvers.direct import DirectShipping
 
 
@@ -30,7 +31,8 @@ class Benchmark:
 
     Attributes:
         solvers: By name, in the order they run on each instance
-        objective: Scores every plan; defaults to :func:`~pirilib.solvers.default_objective`
+        objective: Passed to every solver and scores every plan; required, as
+            there is no default objective
         seeds: One run per seed, solver and instance
     """
 
@@ -38,7 +40,7 @@ class Benchmark:
         self,
         solvers: Mapping[str, Solver],
         *,
-        objective: Objective | None = None,
+        objective: Objective,
         constraints: Sequence[Constraint] = (),
         seeds: Sequence[int] = (0,),
         skip: tuple[type[Exception], ...] = (ValueError, ImportError),
@@ -48,7 +50,7 @@ class Benchmark:
         if not seeds:
             raise ValueError("a benchmark needs at least one seed")
         self.solvers = dict(solvers)
-        self.objective = objective
+        self.objective = require_objective(objective, "Benchmark")
         self.constraints = tuple(constraints)
         self.seeds = tuple(seeds)
         self.skip = skip
@@ -71,7 +73,6 @@ class Benchmark:
 
     def run_one(self, item: BenchInstance, name: str, solver: Solver, seed: int) -> Record:
         """One run of ``solver`` on ``item``."""
-        goal = default_objective() if self.objective is None else self.objective
         started = time.perf_counter()
         try:
             result = solver.solve(item.instance, self.objective, self.constraints, seed=seed)
@@ -102,7 +103,7 @@ class Benchmark:
             solver=name,
             seed=seed,
             status="ok",
-            objective=float(goal(evaluation)),
+            objective=float(self.objective(evaluation)),
             total_cost=evaluation.total_cost,
             feasible=evaluation.feasible,
             violated=tuple(evaluation.violated()),

@@ -18,7 +18,7 @@ from numpy.typing import NDArray
 from pirilib.constraints import Constraint
 from pirilib.objective import Objective
 from pirilib.solvers.aco import ACOConfig, ACOSolver
-from pirilib.solvers.base import default_objective
+from pirilib.solvers.base import require_objective
 from pirilib.spec.instance import LineHaulInstance
 from pirilib.tuning.bee_colony import BeeColony, SearchResult, UnitObjective
 from pirilib.tuning.space import SearchSpace, aco_space
@@ -56,7 +56,7 @@ class TuningResult:
 
 def tune(
     instances: Sequence[LineHaulInstance],
-    objective: Objective | None = None,
+    objective: Objective,
     constraints: Sequence[Constraint] = (),
     *,
     budget: int = 40,
@@ -76,7 +76,7 @@ def tune(
     """
     if not instances:
         raise ValueError("tune needs at least one training instance")
-    goal = default_objective() if objective is None else objective
+    goal = require_objective(objective, "tune")
     chosen_space = aco_space() if space is None else space
     start_config = ACOConfig() if base is None else base
     started = time.perf_counter()

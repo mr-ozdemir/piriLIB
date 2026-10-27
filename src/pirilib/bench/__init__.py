@@ -2,9 +2,12 @@
 
 ```python
 from pirilib.bench import FAMILIES, SOLVERS, Benchmark
+from pirilib.spec import parse_spec
 
 instances = FAMILIES.get("small").instances(10)
-table = Benchmark(SOLVERS.make(["direct", "aco", "exact"])).run(instances)
+goal = parse_spec(instances[0].document).build_objective()
+benchmark = Benchmark(SOLVERS.make(["direct", "aco", "exact"]), objective=goal)
+table = benchmark.run(instances)
 table.to_csv("results.csv")
 print(table.summary())
 ```

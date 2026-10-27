@@ -17,7 +17,7 @@ from pirilib.evaluation import evaluate
 from pirilib.objective import Objective
 from pirilib.plan import SPOT
 from pirilib.solvers._colony import Shared
-from pirilib.solvers.base import SolveResult, default_objective
+from pirilib.solvers.base import SolveResult, require_objective
 from pirilib.solvers.decompose import UNBOUNDED, PlanBuilder, Routes, Subproblem, subproblems
 from pirilib.spec.instance import UNLIMITED, LineHaulInstance
 
@@ -84,12 +84,12 @@ class SequentialSolver:
     def solve(
         self,
         instance: LineHaulInstance,
-        objective: Objective | None = None,
+        objective: Objective,
         constraints: Sequence[Constraint] = (),
         *,
         seed: int = 0,
     ) -> SolveResult:
-        goal = default_objective() if objective is None else objective
+        goal = require_objective(objective, f"{type(self).__name__}.solve")
         coefficients = self.prepare(instance, goal, constraints)
         started = time.perf_counter()
         shared = Shared.of(instance)
