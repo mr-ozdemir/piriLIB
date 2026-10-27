@@ -21,6 +21,7 @@ validation:
 nav:
   - Home: index.md
   - User guide: guide.md
+  - Building the objective: objective.md
   - API stability: stability.md
   - API reference:
       - pirilib: api/pirilib.md

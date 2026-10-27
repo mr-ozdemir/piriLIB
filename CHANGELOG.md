@@ -93,9 +93,23 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   lateness in the scores, also in local search), and demand that does not fit
   waits for the next day within `max_deferral_days`. Objectives with a linear
   form keep the fast path; whole-plan search keeps a ledger per ant.
+- Documentation page "Building the objective" (`docs/objective.md`): the
+  `objective:` section field by field, the unit of every rule's penalty, a
+  worked total-cost example, advice on choosing weights (including coverage
+  against minimum fill), the same objective in Python, linear forms and speed,
+  tuning and benchmarks, and the real error messages. Example scenarios in
+  `examples/objectives` (every load goes, minimum fill as a hard rule,
+  distance-aware, the worked example), and `tests/test_docs_examples.py`,
+  which solves them, runs the page's Python blocks and checks its rule table
+  against `CATALOG` and its error messages against the code.
 
 ### Changed
 
+- The ant colony builds its solutions about 1.5 to 1.7 times faster, with the
+  same plans and scores to the last bit: per-option and per-node values are
+  laid out once per build, the weights of opening a route are kept and updated
+  only where a row loads, and sampling and each step use fewer numpy calls.
+  Large problems solve about a third faster in total.
 - There is no default objective any more: `default_objective` and
   `DEFAULT_PENALTY` are gone, and `objective` is a required argument of
   `pirilib.solve`, `Solver.solve` (`ACOSolver`, `ExactSolver`, `DirectShipping`,

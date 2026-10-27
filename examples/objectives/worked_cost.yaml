@@ -1,0 +1,40 @@
+schema: pirilib/linehaul@0.2
+name: Worked cost example
+
+calendar: {start: 2026-06-01, end: 2026-06-01}
+
+centers:
+  - {id: A}
+  - {id: B}
+  - {id: C}
+
+matrix:
+  source: explicit
+  symmetric: true
+  arcs:
+    - {origin: A, destination: B, km: 100}
+    - {origin: A, destination: C, km: 140}
+    - {origin: B, destination: C, km: 50}
+
+vehicle_types:
+  - {name: truck, capacity: {desi: 1000}, speed_kmh: 50}
+
+fleet:
+  owned:
+    - {type: truck, origin: A, destination: B, count: 1, cost: {fixed: 400, per_km: 2}}
+  spot:
+    - {type: truck, cost: {fixed: 300, per_km: 3, per_hour: 20}}
+
+demand:
+  - {id: AB, origin: A, destination: B, date: 2026-06-01, ready: "08:00", quantity: {desi: 800}}
+  - {id: AC, origin: A, destination: C, date: 2026-06-01, ready: "06:00",
+     due: "2026-06-01T08:00", quantity: {desi: 500}}
+
+rules:
+  service: {penalty: 0.5}
+
+objective:
+  cost: 1
+  penalties:
+    coverage: 1000
+    other: 100000
