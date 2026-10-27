@@ -228,3 +228,19 @@ Yerel arama, değiştirmeyi, birleştirmeyi ve taşımayı denediği ama daha iy
 30 günlük problemde "önce" bugünkü main; ACO hızı bölümündeki 381 sn daha eski bir sürümden.
 
 Değişmezlik: 40 rastgele, 40 zamanlı rastgele, 6 varsayılan ayarlı rastgele, 2 zamanlı sentetik ve örnek problem ile yukarıdaki 3 büyük problem, toplam 92 çalıştırmada planlar (`np.array_equal`), skorlar ve amaç değerleri değişiklikten önceki kodla birebir aynı (`==`), 0 fark. `tests/test_local_search.py` 20 merkez, 2 gün, günde 150 talepli bir problemin skorunu (313.495.540,8) ve sefer sayısını (145) eski kodla sabitliyor.
+
+## Hız: koloni inşası
+
+Yerel arama hızlandıktan sonra çözüm süresinin %80-85'i koloni inşasıydı (`Build`): adım başına ~100 küçük numpy çağrısı, süre dizi boyutundan çok çağrı sayısında. İnşa artık alt probleme ve seçeneğe bağlı değerleri inşa başında düz tablolara yazıyor ve adımda tek indeksle `take` ile topluyor (K211), oda olmayan inşada rota açma ağırlıklarını önbellekte tutup yalnız yükleme yapılan hücrelerde yeniden hesaplıyor (K212), örneklemede eşiği geçen ilk sütunu `argmax` ile buluyor (K213) ve adım içinde gereksiz çağrıları atlıyor (K214). Her sayı aynı işlemlerle, aynı sırayla hesaplanıyor; rastgele sayılar aynı sırada çekiliyor.
+
+`ACOSolver().solve(instance, amaç, seed=1)`, amaç `obj.total_cost() + 1e6 * obj.violations()`, `synthetic.generate(..., seed=3)` (30 gün için `seed=0`). İnşa süresi `_Search._build` çağrılarının toplamı. Makinede aynı kodun süresi süreçten sürece %15'e kadar oynadı; eski ve yeni kod sırayla, turlar halinde 3'er çalıştırıldı ve her biri için en kısası alındı (40 merkezde 3 tur, 81 merkez 7 günde 2 tur; 30 gün tek çalıştırma).
+
+| Problem | İnşa sayısı | Önce toplam | Önce inşa | Sonra toplam | Sonra inşa | İnşada kazanç | Skor |
+|---|---|---|---|---|---|---|---|
+| 40 merkez, 5 gün, günde 400 | 235 | 3,87 sn | 3,28 sn | 2,51 sn | 1,95 sn | 1,6-1,7x | 183.746.683 |
+| 81 merkez, 7 gün, günde 1.350 | 286 | 21,9 sn | 17,3 sn | 15,0 sn | 10,3 sn | 1,68x | 356.221.394 |
+| 81 merkez, 30 gün, günde 1.350 | 349 | 117,3 sn | 97,9 sn | 81,0 sn | 57,3 sn | 1,71x | 1.835.913.154 |
+
+40 merkezde kazanç turdan tura 1,61x ile 1,69x arasında (en kısalar 1,69x); makine daha yüklüyken yapılan ayrı bir ölçümde 1,57x, toplamda %30 kısalma. Örnekleme artık inşanın en büyük kalemi (40 merkezde ~%25, bunun yarısı kümülatif toplam `cumsum`); toplama sırasını değiştirmeden kısaltılamıyor.
+
+Değişmezlik: referans, değişiklikten önceki kaynağın kopyasıyla (`git archive 4803351`) ayrı süreçte üretildi. Örnek problem (doğrusal ve genel mod, 2 çözüm), 40 rastgele problem (yerel aramalı, aramasız, düz fonksiyon amaçlı genel mod; her dördüncüde ayrıca kendi kısıtıyla, q0 = 0,3 ve en iyi şimdiye kadar güncellemesiyle, varsayılan ayarlarla ve beta = 0 genel mod; 160 çözüm), 40 zamanlı rastgele problem (yerel aramalı, aramasız, genel mod; her dördüncüde ayrıca q0 ve kendi kısıtıyla; 140 çözüm), testlerdeki zamanlı sentetik problem (4 çözüm), sabit testlerin 2 sentetik problemi (doğrusal ve genel, 4 çözüm), 20 merkezli kural çeşitleri (bölünemez talep doğrusal ve genel, geri yön serbest, esneme sınırı yok, en çok 1 ve 2 durak; 6 çözüm) ve yukarıdaki 3 büyük problem: toplam 319 çözüm (204 doğrusal, 115 genel mod). Planların tüm dizileri (`np.array_equal`), `stats` (skor dahil) ve amaç değerleri eski kodla birebir aynı (`==`), 0 fark; numpy uyarıları da aynı 3 çözümde aynı. `tests/test_schedule.py` genel modu 10 merkez, 2 gün, günde 40 talepli problemde eski kodun amaç değeri (1.000.768,9) ve sefer sayısıyla (52) sabitliyor. `tests/test_aco.py` 20 rastgele problemde, önbellekteki rota açma ağırlıklarının her başlangıç adımında baştan hesaplananlarla birebir aynı olduğunu sınıyor.
