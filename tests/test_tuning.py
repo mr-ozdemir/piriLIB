@@ -10,6 +10,7 @@ from pirilib.tuning import BeeColony, Choice, Float, Int, RandomSearch, SearchSp
 from pirilib.tuning.bee_colony import latin_hypercube
 
 TARGET = np.array([0.3, 0.7, 0.2])
+GOAL = obj.total_cost() + 1e6 * obj.violations()
 
 
 def sphere(point: np.ndarray) -> float:
@@ -95,8 +96,7 @@ def test_bee_colony_settings(settings: dict[str, Any], message: str) -> None:
 
 def test_tune_keeps_the_base_unless_it_is_beaten(instance: LineHaulInstance) -> None:
     base = ACOConfig(ants=4, iterations=3, patience=2)
-    goal = obj.total_cost() + 1e6 * obj.violations()
-    result = tune([instance], goal, budget=4, base=base, min_improvement=10.0)
+    result = tune([instance], GOAL, budget=4, base=base, min_improvement=10.0)
     assert result.config == base
     assert result.score == 0.0
     assert result.search.evaluations == 4
@@ -104,11 +104,15 @@ def test_tune_keeps_the_base_unless_it_is_beaten(instance: LineHaulInstance) -> 
 
 
 def test_tune_returns_a_valid_config(instance: LineHaulInstance) -> None:
-    result = tune([instance], budget=3, base=ACOConfig(ants=4, iterations=3, patience=2))
+    result = tune([instance], GOAL, budget=3, base=ACOConfig(ants=4, iterations=3, patience=2))
     assert isinstance(result.config, ACOConfig)
     assert result.score <= 0.0
     with pytest.raises(ValueError, match="at least one training instance"):
-        tune([], budget=3)
+        tune([], GOAL, budget=3)
+    with pytest.raises(TypeError):
+        tune([instance], budget=3)
+    with pytest.raises(ValueError, match="tune needs an objective"):
+        tune([instance], None, budget=3)
 
 
 def test_latin_hypercube_fills_every_slice() -> None:

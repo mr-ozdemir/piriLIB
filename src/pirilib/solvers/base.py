@@ -2,22 +2,26 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import Protocol
 
-from pirilib import objective as obj
 from pirilib.constraints import Constraint
 from pirilib.evaluation import Evaluation
 from pirilib.objective import FEATURES, Objective
 from pirilib.plan import Plan
 from pirilib.spec.instance import LineHaulInstance
 
-DEFAULT_PENALTY: Final = 1e6
-"""Weight of every built-in violation in :func:`default_objective`."""
 
+def require_objective(objective: Objective | None, user: str) -> Objective:
+    """Return ``objective``; :class:`ValueError` if it is None, as there is no default one.
 
-def default_objective() -> obj.Sum:
-    """Total cost, plus :data:`DEFAULT_PENALTY` per unit of violation of any rule."""
-    return obj.total_cost() + DEFAULT_PENALTY * obj.violations()
+    ``user`` names the caller in the message, for example ``"ACOSolver.solve"``.
+    """
+    if objective is None:
+        raise ValueError(
+            f"{user} needs an objective: build one with pirilib.objective, or from the "
+            "objective: section of the problem document (LineHaulSpec.build_objective)"
+        )
+    return objective
 
 
 def linear_coefficients(instance: LineHaulInstance, form: Mapping[str, float]) -> dict[str, float]:
@@ -52,10 +56,10 @@ class Solver(Protocol):
     def solve(
         self,
         instance: LineHaulInstance,
-        objective: Objective | None = None,
+        objective: Objective,
         constraints: Sequence[Constraint] = (),
         *,
         seed: int = 0,
     ) -> SolveResult:
-        """Return the best plan found; ``objective`` defaults to :func:`default_objective`."""
+        """Return the best plan found for ``objective``; there is no default objective."""
         ...

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from pirilib import ACOConfig, ACOSolver, SolveResult
+from pirilib import objective as obj
 from pirilib.bench import (
     COLUMNS,
     FAMILIES,
@@ -19,9 +20,10 @@ from pirilib.cli import main
 from pirilib.constraints import Constraint
 from pirilib.objective import Objective
 from pirilib.solvers.direct import DirectShipping
-from pirilib.spec import LineHaulInstance
+from pirilib.spec import LineHaulInstance, parse_spec
 
 SMALL = ACOConfig(ants=4, iterations=5, patience=3)
+GOAL = obj.total_cost() + 1e6 * obj.violations()
 
 
 class Refusing:
@@ -30,7 +32,7 @@ class Refusing:
     def solve(
         self,
         instance: LineHaulInstance,
-        objective: Objective | None = None,
+        objective: Objective,
         constraints: Sequence[Constraint] = (),
         *,
         seed: int = 0,
@@ -75,6 +77,20 @@ def test_instances_are_reproducible() -> None:
     assert reseeded.instance(1).document != first.document
 
 
+def test_instances_carry_an_objective() -> None:
+    item = FAMILIES.get("tiny").instance(0)
+    assert item.document["objective"] == {"cost": 1.0, "penalties": {"coverage": 1e7, "other": 1e6}}
+    goal = parse_spec(item.document).build_objective()
+    assert goal.linear_form() is not None
+
+
+def test_benchmark_needs_an_objective() -> None:
+    with pytest.raises(TypeError):
+        Benchmark({"direct": DirectShipping()})
+    with pytest.raises(ValueError, match="Benchmark needs an objective"):
+        Benchmark({"direct": DirectShipping()}, objective=None)
+
+
 def test_families_vary_split_and_spot_limits() -> None:
     no_split = FAMILIES.get("no-split").instance(0)
     assert not no_split.instance.rules.split_demand
@@ -103,6 +119,7 @@ def test_benchmark_records_every_run(tmp_path: Path) -> None:
     instances = FAMILIES.get("tiny").instances(2)
     benchmark = Benchmark(
         {"direct": DirectShipping(), "aco": ACOSolver(SMALL), "refusing": Refusing()},
+        objective=GOAL,
         seeds=(0, 1),
     )
     seen: list[Record] = []
@@ -178,7 +195,7 @@ def test_summary_numbers() -> None:
 def test_exact_solver_is_skipped_where_it_cannot_solve() -> None:
     pytest.importorskip("scipy")
     instance = FAMILIES.get("no-split").instance(0)
-    table = Benchmark(SOLVERS.make(["direct", "exact"])).run([instance])
+    table = Benchmark(SOLVERS.make(["direct", "exact"]), objective=GOAL).run([instance])
     direct, exact = table.records
     assert direct.solved
     assert exact.status == "skipped"

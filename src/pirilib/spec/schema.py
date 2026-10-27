@@ -9,7 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from pirilib.spec.models import SCHEMA_ID, LineHaulSpec
+from pirilib.constraints import CATALOG
+from pirilib.spec.models import SCHEMA_ID, LineHaulSpec, ObjectiveSpec
 from pirilib.spec.tables import TableSource
 
 _TABLE_REFERENCE = {"$ref": "#/$defs/TableSource"}
@@ -20,7 +21,8 @@ def document_json_schema() -> dict[str, Any]:
 
     It is the schema of :class:`~pirilib.spec.LineHaulSpec`, except that
     ``centers``, ``demand`` and ``matrix.arcs`` may also be a
-    :class:`~pirilib.spec.TableSource` file reference.
+    :class:`~pirilib.spec.TableSource` file reference, and that the keys of
+    ``objective.penalties`` are limited to the built-in rule names and ``other``.
     """
     schema = LineHaulSpec.model_json_schema(by_alias=True)
     definitions = schema.setdefault("$defs", {})
@@ -30,6 +32,8 @@ def document_json_schema() -> dict[str, Any]:
         properties[name] = {"anyOf": [properties[name], _TABLE_REFERENCE]}
     explicit = definitions["ExplicitMatrix"]["properties"]
     explicit["arcs"] = {"anyOf": [explicit["arcs"], _TABLE_REFERENCE]}
+    penalties = definitions["ObjectiveSpec"]["properties"]["penalties"]
+    penalties["propertyNames"] = {"enum": [*CATALOG, ObjectiveSpec.OTHER]}
     document = {"$schema": "https://json-schema.org/draft/2020-12/schema"}
     document.update(schema)
     document["title"] = f"{SCHEMA_ID} problem document"

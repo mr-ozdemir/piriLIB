@@ -5,11 +5,14 @@ import numpy as np
 import pytest
 
 from pirilib import check_plan
+from pirilib import objective as obj
 from pirilib.plan import OWNED, SPOT
 from pirilib.solvers.direct import DirectShipping
 from pirilib.spec import LineHaulInstance, parse_spec
 
 type RandomDocument = Callable[[int], dict[str, Any]]
+
+GOAL = obj.total_cost() + 1e6 * obj.violations()
 
 
 def without_fill_and_limits(document: dict[str, Any]) -> dict[str, Any]:
@@ -24,7 +27,7 @@ def test_feasible_without_min_fill_and_spot_limits(
     seed: int, random_document: RandomDocument
 ) -> None:
     instance = parse_spec(without_fill_and_limits(random_document(seed))).compile()
-    result = DirectShipping().solve(instance, seed=seed)
+    result = DirectShipping().solve(instance, GOAL, seed=seed)
     assert result.evaluation.feasible, result.evaluation.violated()
     report = check_plan(instance, result.plan)
     assert report.feasible, str(report)
@@ -40,7 +43,7 @@ def test_full_vehicles_then_the_cheapest_that_fits(
         {"origin": "A", "destination": "B", "date": "2026-01-05", "quantity": {"desi": 2300.0}}
     ]
     instance = compile_document(document)
-    plan = DirectShipping().solve(instance).plan
+    plan = DirectShipping().solve(instance, GOAL).plan
     used = sorted(zip(plan.kind.tolist(), plan.source.tolist(), strict=True))
     assert used == [(OWNED, 0), (SPOT, 0), (SPOT, 1)]
     loads = {
@@ -54,7 +57,7 @@ def test_full_vehicles_then_the_cheapest_that_fits(
 
 
 def test_bans_and_owned_lines_are_kept(instance: LineHaulInstance) -> None:
-    result = DirectShipping().solve(instance)
+    result = DirectShipping().solve(instance, GOAL)
     assert result.evaluation.feasible
     for dispatch in result.plan.dispatches():
         if dispatch.stops == (2,):
@@ -73,7 +76,7 @@ def test_spot_limits_leave_demand_uncarried(
         {"origin": "B", "destination": "C", "date": "2026-01-05", "quantity": {"desi": 300.0}},
         {"origin": "C", "destination": "A", "date": "2026-01-05", "quantity": {"desi": 300.0}},
     ]
-    evaluation = DirectShipping().solve(compile_document(document)).evaluation
+    evaluation = DirectShipping().solve(compile_document(document), GOAL).evaluation
     assert evaluation.violations["spot_availability"] == 0
     assert evaluation.violations["coverage"] == 300.0
 
@@ -91,11 +94,11 @@ def test_prefers_a_vehicle_that_reaches_its_minimum_fill(
         {"origin": "A", "destination": "B", "date": "2026-01-05", "quantity": {"desi": 350.0}}
     ]
     document["rules"] = {"min_fill": {"spot": 0.5}}
-    result = DirectShipping().solve(compile_document(document))
+    result = DirectShipping().solve(compile_document(document), GOAL)
     assert result.plan.source.tolist() == [1]
     assert result.evaluation.feasible
     document["rules"] = {"min_fill": {"spot": 0.95}}
-    result = DirectShipping().solve(compile_document(document))
+    result = DirectShipping().solve(compile_document(document), GOAL)
     assert result.plan.source.tolist() == [0]
     assert result.evaluation.violated() == {"min_fill": pytest.approx(600.0)}
 
@@ -107,7 +110,7 @@ def test_whole_demands_when_they_may_not_be_split(random_document: RandomDocumen
         if document["rules"]["split_demand"]:
             continue
         instance = parse_spec(without_fill_and_limits(document)).compile()
-        result = DirectShipping().solve(instance)
+        result = DirectShipping().solve(instance, GOAL)
         plan = result.plan
         assert np.array_equal(plan.load_quantity, instance.demand_quantity[plan.load_demand])
         assert len(set(plan.load_demand.tolist())) == plan.load_demand.size

@@ -95,10 +95,12 @@ def planning_document(
 ) -> dict[str, Any]:
     """A problem document: the network (centers, fleet, rules ...) with the forecast as demand.
 
-    The calendar becomes the forecast window. With ``waves``, the demand of
-    every line and day is split into time waves that are ready at the wave
-    time (see :func:`demand_rows`); ``rules.service.due_hours`` of the network
-    then counts from that time. Validate it with
+    The calendar becomes the forecast window. Every other section of the
+    network is copied, ``objective:`` included, so a network that defines its
+    objective gives a document that can be solved as it is. With ``waves``, the
+    demand of every line and day is split into time waves that are ready at the
+    wave time (see :func:`demand_rows`); ``rules.service.due_hours`` of the
+    network then counts from that time. Validate it with
     :func:`pirilib.spec.parse_spec`; lines whose centers are not in the network
     are reported there.
     """

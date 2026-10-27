@@ -10,22 +10,24 @@ import pirilib
 from pirilib import ACOConfig, ACOSolver, check_plan, evaluate
 from pirilib import objective as obj
 from pirilib.constraints import CATALOG, MaxDispatchesPerDay
-from pirilib.solvers import default_objective
 from pirilib.spec import LineHaulInstance, parse_spec
 
 type RandomDocument = Callable[[int], dict[str, Any]]
 
 SMALL = ACOConfig(ants=6, iterations=8, patience=4)
 BY_CONSTRUCTION = [name for name in CATALOG if name not in ("min_fill", "coverage")]
+GOAL = obj.total_cost() + 1e6 * obj.violations()
 
 
-def solve(instance: LineHaulInstance, **options: Any) -> pirilib.SolveResult:
-    return ACOSolver(options.pop("config", SMALL)).solve(instance, **options)
+def solve(
+    instance: LineHaulInstance, objective: obj.Objective, **options: Any
+) -> pirilib.SolveResult:
+    return ACOSolver(options.pop("config", SMALL)).solve(instance, objective, **options)
 
 
 def test_example_problem(example_path: Path) -> None:
     instance = pirilib.load_spec(example_path).compile()
-    result = solve(instance, config=ACOConfig(), seed=1)
+    result = solve(instance, GOAL, config=ACOConfig(), seed=1)
     assert result.evaluation.feasible
     assert result.stats["mode"] == "linear"
     assert result.objective == pytest.approx(result.evaluation.total_cost)
@@ -38,15 +40,15 @@ def test_example_problem(example_path: Path) -> None:
 @pytest.mark.parametrize("seed", range(40))
 def test_rules_hold_by_construction(seed: int, random_document: RandomDocument) -> None:
     instance = parse_spec(random_document(seed)).compile()
-    result = solve(instance, seed=seed)
+    result = solve(instance, GOAL, seed=seed)
     evaluation = result.evaluation
     broken = {name: evaluation.violations[name] for name in BY_CONSTRUCTION}
     assert not any(broken.values()), broken
     if np.all(instance.spot_available == -1):
-        plain = solve(instance, config=replace(SMALL, local_search=False), seed=seed)
+        plain = solve(instance, GOAL, config=replace(SMALL, local_search=False), seed=seed)
         assert plain.evaluation.violations["coverage"] == 0.0
         assert result.objective <= plain.objective * (1 + 1e-12)
-    assert result.objective == pytest.approx(default_objective()(evaluation))
+    assert result.objective == pytest.approx(GOAL(evaluation))
     assert result.stats["score"] == pytest.approx(result.objective, rel=1e-9)
     report = check_plan(instance, result.plan)
     assert report.total_cost == pytest.approx(evaluation.total_cost, rel=1e-12)
@@ -60,14 +62,14 @@ def test_whole_items_when_demand_may_not_be_split(random_document: RandomDocumen
         if not document["rules"]["split_demand"]:
             break
     instance = parse_spec(document).compile()
-    plan = solve(instance, seed=0).plan
+    plan = solve(instance, GOAL, seed=0).plan
     assert np.array_equal(plan.load_quantity, instance.demand_quantity[plan.load_demand])
     assert len(set(plan.load_demand.tolist())) == plan.load_demand.size
 
 
 def test_same_seed_same_plan(example_path: Path) -> None:
     instance = pirilib.load_spec(example_path).compile()
-    first, second = solve(instance, seed=3), solve(instance, seed=3)
+    first, second = solve(instance, GOAL, seed=3), solve(instance, GOAL, seed=3)
     for name in ("day", "kind", "source", "origin", "stop_start", "stop_center", "load_quantity"):
         assert np.array_equal(getattr(first.plan, name), getattr(second.plan, name)), name
 
@@ -99,7 +101,7 @@ def test_plain_function_objectives_use_whole_plans(instance: LineHaulInstance) -
 
 def test_constraints_of_your_own_use_whole_plans(instance: LineHaulInstance) -> None:
     constraint = MaxDispatchesPerDay(5)
-    result = solve(instance, constraints=[constraint], seed=0)
+    result = solve(instance, GOAL, constraints=[constraint], seed=0)
     assert result.stats["mode"] == "general"
     assert "max_dispatches_per_day" in result.evaluation.violations
     assert result.evaluation.feasible
@@ -115,7 +117,7 @@ def test_spot_limits_are_shared_by_the_origins_of_a_day(
         {"origin": "C", "destination": "A", "date": "2026-01-05", "quantity": {"desi": 300.0}},
     ]
     instance = compile_document(document)
-    for result in (solve(instance, seed=0), solve(instance, objective=lambda e: e.total_cost)):
+    for result in (solve(instance, GOAL, seed=0), solve(instance, lambda e: e.total_cost)):
         assert result.evaluation.violations["spot_availability"] == 0
         assert result.evaluation.violations["coverage"] == 300.0
         assert result.stats["spot_limits_reached"] == 1
@@ -142,10 +144,21 @@ def test_config_is_checked(change: dict[str, Any], message: str) -> None:
 
 
 def test_solve_shortcut(instance: LineHaulInstance) -> None:
-    result = pirilib.solve(instance, solver=ACOSolver(SMALL))
+    result = pirilib.solve(instance, GOAL, solver=ACOSolver(SMALL))
     assert result.evaluation.feasible
     assert evaluate(instance, result.plan).total_cost == pytest.approx(result.evaluation.total_cost)
     assert repr(result).startswith("SolveResult(objective=")
+
+
+def test_there_is_no_default_objective(instance: LineHaulInstance) -> None:
+    with pytest.raises(TypeError):
+        pirilib.solve(instance)
+    with pytest.raises(TypeError):
+        ACOSolver(SMALL).solve(instance)
+    with pytest.raises(ValueError, match="solve needs an objective"):
+        pirilib.solve(instance, None)
+    with pytest.raises(ValueError, match=r"ACOSolver\.solve needs an objective"):
+        ACOSolver(SMALL).solve(instance, None)
 
 
 def test_scheduled_problems_are_planned_piece_by_piece(
@@ -158,9 +171,9 @@ def test_scheduled_problems_are_planned_piece_by_piece(
     document["rules"] = {"service": {"due_hours": 6, "penalty": 1.0}}
     instance = compile_document(document)
     assert instance.scheduled
-    result = solve(instance, seed=0)
+    result = solve(instance, GOAL, seed=0)
     assert result.stats["mode"] == "linear"
     for name in ("route", "load_route", "ready", "deferral", "ban", "owned_line", "capacity"):
         assert result.evaluation.violations[name] == 0, name
-    assert result.objective == pytest.approx(default_objective()(result.evaluation))
+    assert result.objective == pytest.approx(GOAL(result.evaluation))
     assert result.stats["score"] == pytest.approx(result.objective, rel=1e-9)

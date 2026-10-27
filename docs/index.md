@@ -40,6 +40,9 @@ pirilib solve sample/problem.yaml -o plan.csv
 pirilib check sample/problem.yaml plan.csv
 ```
 
+`solve` minimizes the objective that the problem file defines in its
+`objective:` section; `generate` writes one, and there is no default.
+
 The same from Python: the specification is validated and immutable, and its
 compiled form holds read-only numpy arrays for the engines.
 

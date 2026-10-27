@@ -4,13 +4,18 @@ Centers are spread over a rectangle of latitude and longitude, each with a
 random size. Demand follows a gravity model: a pair of centers is chosen with
 probability proportional to the product of their sizes, and quantities are
 log-normal. Every figure is invented; nothing describes a real company.
+
+Generated documents carry an explicit ``objective:`` section, :data:`OBJECTIVE`
+unless another one is given, so that they can be solved as they are.
 """
 
 import copy
 import csv
 import datetime as dt
 import os
+from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -20,6 +25,7 @@ from pirilib.spec.models import SCHEMA_ID
 from pirilib.spec.tables import LIST_SEPARATOR
 
 __all__ = [
+    "OBJECTIVE",
     "VEHICLE_TYPES",
     "generate",
     "history",
@@ -44,6 +50,11 @@ SPOT: tuple[dict[str, Any], ...] = (
     {"type": "kamyon", "cost": {"fixed": 8000.0, "per_km": 20.0}},
     {"type": "kamyonet", "cost": {"fixed": 5000.0, "per_km": 17.0}},
 )
+OBJECTIVE: Mapping[str, Any] = MappingProxyType(
+    {"cost": 1.0, "penalties": MappingProxyType({"coverage": 1e7, "other": 1e6})}
+)
+"""The ``objective:`` section of generated documents: the total cost, 10,000,000 per
+unit of demand not carried and 1,000,000 per unit of violation of every other rule."""
 
 
 def generate(
@@ -58,8 +69,12 @@ def generate(
     region: tuple[float, float, float, float] = (36.5, 41.5, 26.5, 44.0),
     start: dt.date = dt.date(2026, 1, 5),
     seed: int = 0,
+    objective: Mapping[str, Any] = OBJECTIVE,
 ) -> dict[str, Any]:
-    """A problem document with inline tables; see the module documentation."""
+    """A problem document with inline tables; see the module documentation.
+
+    ``objective`` is written as the document's ``objective:`` section.
+    """
     if centers < 2 or days < 1 or demand_per_day < 1:
         raise ValueError("need at least 2 centers, 1 day and 1 demand per day")
     rng = np.random.default_rng(seed)
@@ -130,7 +145,15 @@ def generate(
         "fleet": {"owned": owned, "spot": copy.deepcopy(list(SPOT))},
         "demand": demand,
         "rules": rules,
+        "objective": _plain(objective),
     }
+
+
+def _plain(value: Any) -> Any:
+    """``value`` with every mapping turned into a dict, so that it can be written as YAML."""
+    if isinstance(value, Mapping):
+        return {key: _plain(item) for key, item in value.items()}
+    return copy.deepcopy(value)
 
 
 def write(document: dict[str, Any], folder: str | os.PathLike[str]) -> Path:

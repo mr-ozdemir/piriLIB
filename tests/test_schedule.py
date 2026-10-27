@@ -17,12 +17,13 @@ from pirilib import (
     evaluate,
     synthetic,
 )
-from pirilib.solvers import default_objective
+from pirilib import objective as obj
 from pirilib.solvers.exact import ExactSolver
 from pirilib.spec import LineHaulInstance, parse_spec
 
 A, B, C = 0, 1, 2
 BIG, SMALL = 0, 1
+GOAL = obj.total_cost() + 1e6 * obj.violations()
 
 
 def timed(document: dict[str, Any]) -> dict[str, Any]:
@@ -208,14 +209,14 @@ def scheduled_document(seed: int, base: dict[str, Any]) -> dict[str, Any]:
 
 def test_the_colony_plans_with_handling_capacity() -> None:
     instance = synthetic_case()
-    result = ACOSolver().solve(instance, seed=0)
+    result = ACOSolver().solve(instance, GOAL, seed=0)
     violations = result.evaluation.violations
     assert result.stats["mode"] == "linear"
     for name in ("handling", "vehicle_limit", "ready", "deferral"):
         assert violations[name] == 0, name
     assert result.stats["score"] == pytest.approx(result.objective, rel=1e-6)
 
-    roomy = ACOSolver().solve(synthetic_case(250000.0), seed=0)
+    roomy = ACOSolver().solve(synthetic_case(250000.0), GOAL, seed=0)
     assert roomy.evaluation.feasible
     assert roomy.evaluation.total_cost < 1_059_052
     assert roomy.stats["score"] == pytest.approx(roomy.evaluation.total_cost, rel=1e-6)
@@ -223,7 +224,7 @@ def test_the_colony_plans_with_handling_capacity() -> None:
 
 def test_whole_plans_keep_handling_capacity() -> None:
     result = ACOSolver(QUICK).solve(
-        synthetic_case(), objective=lambda evaluation: default_objective()(evaluation), seed=0
+        synthetic_case(), objective=lambda evaluation: GOAL(evaluation), seed=0
     )
     assert result.stats["mode"] == "general"
     for name in ("handling", "vehicle_limit", "ready", "deferral"):
@@ -236,10 +237,10 @@ def test_the_score_is_the_evaluated_objective(
 ) -> None:
     instance = parse_spec(scheduled_document(seed, random_document(seed))).compile()
     assert instance.scheduled
-    result = ACOSolver(QUICK).solve(instance, seed=seed)
+    result = ACOSolver(QUICK).solve(instance, GOAL, seed=seed)
     evaluation = result.evaluation
     assert result.stats["mode"] == "linear"
-    assert result.objective == pytest.approx(default_objective()(evaluation))
+    assert result.objective == pytest.approx(GOAL(evaluation))
     assert result.stats["score"] == pytest.approx(result.objective, rel=1e-6)
     if evaluation.feasible:
         assert result.stats["score"] == pytest.approx(evaluation.total_cost, rel=1e-6)
@@ -272,7 +273,7 @@ def test_what_does_not_fit_waits_for_the_next_day(
     document: dict[str, Any], compile_document: Callable[..., LineHaulInstance]
 ) -> None:
     instance = compile_document(deferral_document(document, 1))
-    result = ACOSolver(QUICK).solve(instance, seed=0)
+    result = ACOSolver(QUICK).solve(instance, GOAL, seed=0)
     evaluation = result.evaluation
     plan = evaluation.plan
     assert evaluation.feasible
@@ -290,7 +291,7 @@ def test_without_deferral_what_does_not_fit_is_not_carried(
     document: dict[str, Any], compile_document: Callable[..., LineHaulInstance]
 ) -> None:
     instance = compile_document(deferral_document(document, 0))
-    result = ACOSolver(QUICK).solve(instance, seed=0)
+    result = ACOSolver(QUICK).solve(instance, GOAL, seed=0)
     assert result.evaluation.violated() == {"coverage": 400.0}
     assert result.evaluation.plan.day.tolist() == [0]
     assert result.stats["score"] == pytest.approx(result.objective, rel=1e-9)
@@ -302,7 +303,7 @@ def test_vehicle_limits_are_kept(
     document = timed(document)
     document["centers"][1]["vehicle_limits"] = {"big": 0}
     instance = compile_document(document)
-    result = ACOSolver(QUICK).solve(instance, seed=0)
+    result = ACOSolver(QUICK).solve(instance, GOAL, seed=0)
     evaluation = result.evaluation
     assert evaluation.violations["vehicle_limit"] == 0
     assert evaluation.violations["ban"] == 0
@@ -315,7 +316,7 @@ def test_untimed_plans_did_not_change() -> None:
     instance = parse_spec(
         synthetic.generate(centers=10, days=2, demand_per_day=40, seed=3)
     ).compile()
-    result = ACOSolver().solve(instance, seed=0)
+    result = ACOSolver().solve(instance, GOAL, seed=0)
     assert not instance.scheduled
     assert result.stats["score"] == pytest.approx(855347.2161499044, rel=1e-12)
     assert len(result.plan) == 40
@@ -326,4 +327,4 @@ def test_the_exact_solver_does_not_plan_times_yet(
 ) -> None:
     instance = compile_document(timed(document))
     with pytest.raises(ValueError, match="not yet supported"):
-        ExactSolver().solve(instance)
+        ExactSolver().solve(instance, GOAL)

@@ -93,3 +93,17 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   lateness in the scores, also in local search), and demand that does not fit
   waits for the next day within `max_deferral_days`. Objectives with a linear
   form keep the fast path; whole-plan search keeps a ledger per ant.
+
+### Changed
+
+- There is no default objective any more: `default_objective` and
+  `DEFAULT_PENALTY` are gone, and `objective` is a required argument of
+  `pirilib.solve`, `Solver.solve` (`ACOSolver`, `ExactSolver`, `DirectShipping`,
+  the routing adapters), `tuning.tune` and `bench.Benchmark`. Problem documents
+  define it in a new optional `objective:` section (`ObjectiveSpec`: `cost`,
+  `distance_km`, `dispatches`, `unused_capacity` and a penalty per rule, or
+  `other` for the rules not named; a rule without a penalty is an error), and
+  `LineHaulSpec.build_objective()` turns it into a `Sum`. The command line
+  `solve`, `tune` and `bench` read it from the documents, and their `--penalty`
+  option was removed. Generated documents and the example carry an explicit
+  `objective:` section.

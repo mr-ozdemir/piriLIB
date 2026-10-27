@@ -1,7 +1,11 @@
 import json
+import shutil
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
+import yaml
 
 from pirilib.cli import main
 
@@ -106,6 +110,53 @@ def test_generate_then_solve(capsys: pytest.CaptureFixture[str], tmp_path: Path)
     code, out, _ = run(capsys, "solve", str(tmp_path / "sample" / "problem.yaml"), "--ants", "4")
     assert code == 0
     assert "total cost" in out
+
+
+@pytest.fixture
+def example_copy(example_path: Path, tmp_path: Path) -> Path:
+    """A copy of the example folder; returns the path of its problem file."""
+    folder = shutil.copytree(example_path.parent, tmp_path / "example")
+    return Path(folder) / example_path.name
+
+
+def rewrite(path: Path, change: Callable[[dict[str, Any]], None]) -> Path:
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    change(document)
+    path.write_text(yaml.safe_dump(document, allow_unicode=True, sort_keys=False), "utf-8")
+    return path
+
+
+def test_solving_needs_the_objective_section(
+    capsys: pytest.CaptureFixture[str], example_copy: Path
+) -> None:
+    rewrite(example_copy, lambda document: document.pop("objective"))
+    code, _, _ = run(capsys, "validate", str(example_copy))
+    assert code == 0
+    for command in ("solve", "tune"):
+        code, out, err = run(capsys, command, str(example_copy))
+        assert code == 2
+        assert out == ""
+        assert err.startswith(f"error: {example_copy}: the problem document has no objective:")
+        assert "objective:\n  cost: 1\n  penalties:" in err
+
+
+def test_tuning_needs_one_objective(
+    capsys: pytest.CaptureFixture[str], example_path: Path, example_copy: Path
+) -> None:
+    rewrite(example_copy, lambda document: document["objective"].update(cost=2))
+    code, _, err = run(capsys, "tune", str(example_path), str(example_copy), "--budget", "1")
+    assert code == 2
+    assert "define different objectives" in err
+
+
+def test_the_penalty_option_is_gone(capsys: pytest.CaptureFixture[str], example_path: Path) -> None:
+    for command in ("solve", "tune"):
+        with pytest.raises(SystemExit) as info:
+            main([command, str(example_path), "--penalty", "10"])
+        assert info.value.code == 2
+    with pytest.raises(SystemExit) as info:
+        main(["bench", "tiny", "--penalty", "10"])
+    assert info.value.code == 2
 
 
 def test_schema(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:

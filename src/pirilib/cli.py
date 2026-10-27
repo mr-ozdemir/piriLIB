@@ -13,8 +13,12 @@ Commands::
     pirilib schema linehaul.schema.json
     pirilib bench small --solvers direct,aco,exact -o results.csv --summary summary.csv
 
+``solve``, ``tune`` and ``bench`` minimize the objective that the problem
+documents define in their ``objective:`` section; there is no default one.
+
 Exit status: 0 on success, 1 when an input is invalid or a plan breaks a rule
-(``check``), 2 for wrong usage.
+(``check``), 2 for wrong usage, including solving or tuning a problem whose
+document has no ``objective:`` section.
 """
 
 import argparse
@@ -31,11 +35,15 @@ import yaml
 
 from pirilib import objective as obj
 from pirilib._version import __version__
-from pirilib.errors import PirilibError
+from pirilib.errors import PirilibError, SpecError
 from pirilib.evaluation import evaluate
 from pirilib.planio import read_plan, summary, write_plan
-from pirilib.solvers import DEFAULT_PENALTY, ACOConfig, ACOSolver
-from pirilib.spec import load_spec
+from pirilib.solvers import ACOConfig, ACOSolver
+from pirilib.spec import LineHaulSpec, load_spec, parse_spec
+
+
+class _UsageError(Exception):
+    """Wrong usage found after the arguments are read; the command line exits with 2."""
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -48,6 +56,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     try:
         result: int = arguments.run(arguments)
+    except _UsageError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     except (PirilibError, OSError, ValueError, ImportError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -71,9 +82,6 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--summary", help="write the headline numbers as JSON")
     command.add_argument("--config", help="ACO settings as JSON, for example from 'tune'")
     command.add_argument("--seed", type=int, default=0)
-    command.add_argument(
-        "--penalty", type=float, default=DEFAULT_PENALTY, help="weight per unit of violation"
-    )
     command.add_argument("--ants", type=int)
     command.add_argument("--iterations", type=int)
     command.add_argument(
@@ -96,7 +104,6 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--seeds", type=int, default=1, help="runs per problem and setting")
     command.add_argument("--tuner", choices=("abc", "random"), default="abc")
     command.add_argument("--config", help="base ACO settings as JSON")
-    command.add_argument("--penalty", type=float, default=DEFAULT_PENALTY)
     command.set_defaults(run=_tune)
 
     command = commands.add_parser("generate", help="write a synthetic problem")
@@ -152,7 +159,6 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--count", type=int, help="instances (default: the family's size)")
     command.add_argument("--start", type=int, default=0, help="index of the first instance")
     command.add_argument("--seeds", type=int, default=1, help="runs per instance and solver")
-    command.add_argument("--penalty", type=float, default=DEFAULT_PENALTY)
     command.add_argument("-o", "--output", help="write one row per run as CSV")
     command.add_argument("--summary", help="write the summary per solver as CSV")
     command.set_defaults(run=_bench)
@@ -245,7 +251,6 @@ def _forecast(arguments: argparse.Namespace) -> int:
         load_wave_history,
         planning_document,
     )
-    from pirilib.spec import parse_spec
     from pirilib.spec.tables import materialize_tables
 
     history, calendar = _load_history(arguments)
@@ -314,8 +319,28 @@ def _forecast(arguments: argparse.Namespace) -> int:
     return 0
 
 
-def _goal(penalty: float) -> obj.Sum:
-    return obj.total_cost() + penalty * obj.violations()
+def _objective(problems: Sequence[tuple[str, LineHaulSpec]]) -> obj.Sum:
+    """The objective the documents define; they must define the same one.
+
+    A document without an ``objective:`` section, or documents with different
+    sections, are usage errors.
+    """
+    if not problems:
+        raise _UsageError("there is no problem to take the objective from")
+    goals = []
+    for label, spec in problems:
+        try:
+            goals.append(spec.build_objective())
+        except SpecError as exc:
+            raise _UsageError(f"{label}: {exc}") from exc
+    first_label, first = problems[0]
+    for label, spec in problems[1:]:
+        if spec.objective != first.objective:
+            raise _UsageError(
+                f"{label} and {first_label} define different objectives; one run "
+                "minimizes one objective, so give them the same objective: section"
+            )
+    return goals[0]
 
 
 def _config(path: str | None, **overrides: Any) -> ACOConfig:
@@ -352,7 +377,9 @@ def _validate(arguments: argparse.Namespace) -> int:
 
 
 def _solve(arguments: argparse.Namespace) -> int:
-    instance = load_spec(arguments.problem).compile()
+    spec = load_spec(arguments.problem)
+    goal = _objective([(arguments.problem, spec)])
+    instance = spec.compile()
     config = _config(
         arguments.config,
         ants=arguments.ants,
@@ -360,7 +387,7 @@ def _solve(arguments: argparse.Namespace) -> int:
         exact_nodes=arguments.exact_nodes,
         local_search=False if arguments.no_local_search else None,
     )
-    result = ACOSolver(config).solve(instance, _goal(arguments.penalty), seed=arguments.seed)
+    result = ACOSolver(config).solve(instance, goal, seed=arguments.seed)
     numbers = summary(result.evaluation) | {
         "objective": result.objective,
         "seconds": result.seconds,
@@ -399,10 +426,11 @@ def _check(arguments: argparse.Namespace) -> int:
 def _tune(arguments: argparse.Namespace) -> int:
     from pirilib.tuning import BeeColony, RandomSearch, tune
 
-    instances = [load_spec(path).compile() for path in arguments.problems]
+    specs = [(path, load_spec(path)) for path in arguments.problems]
+    goal = _objective(specs)
     result = tune(
-        instances,
-        _goal(arguments.penalty),
+        [spec.compile() for _, spec in specs],
+        goal,
         budget=arguments.budget,
         tuner=BeeColony() if arguments.tuner == "abc" else RandomSearch(),
         base=_config(arguments.config),
@@ -444,11 +472,9 @@ def _bench(arguments: argparse.Namespace) -> int:
         raise ValueError("--seeds must be at least 1")
     family = FAMILIES.get(arguments.family)
     names = [name.strip() for name in arguments.solvers.split(",") if name.strip()]
-    benchmark = Benchmark(
-        SOLVERS.make(names),
-        objective=_goal(arguments.penalty),
-        seeds=tuple(range(arguments.seeds)),
-    )
+    instances = family.instances(arguments.count, start=arguments.start)
+    goal = _objective([(item.name, parse_spec(item.document)) for item in instances])
+    benchmark = Benchmark(SOLVERS.make(names), objective=goal, seeds=tuple(range(arguments.seeds)))
 
     def report(record: Record) -> None:
         head = f"{record.instance}  {record.solver:<10} seed {record.seed}"
@@ -461,7 +487,7 @@ def _bench(arguments: argparse.Namespace) -> int:
             flush=True,
         )
 
-    table = benchmark.run(family.instances(arguments.count, start=arguments.start), report)
+    table = benchmark.run(instances, report)
     summary = table.summary()
     print()
     print(summary)
