@@ -49,7 +49,7 @@ from pirilib.objective import Objective, linear_form
 from pirilib.plan import SPOT, Plan
 from pirilib.solvers._colony import Batch, Build, Colony, Pheromone, Shared, scores
 from pirilib.solvers._timing import timeline
-from pirilib.solvers.base import SolveResult, default_objective, linear_coefficients
+from pirilib.solvers.base import SolveResult, linear_coefficients, require_objective
 from pirilib.solvers.decompose import (
     UNBOUNDED,
     Coordinator,
@@ -130,12 +130,12 @@ class ACOSolver:
     def solve(
         self,
         instance: LineHaulInstance,
-        objective: Objective | None = None,
+        objective: Objective,
         constraints: Sequence[Constraint] = (),
         *,
         seed: int = 0,
     ) -> SolveResult:
-        goal = default_objective() if objective is None else objective
+        goal = require_objective(objective, "ACOSolver.solve")
         started = time.perf_counter()
         search = _Search(instance, self.config, seed)
         form = linear_form(goal)

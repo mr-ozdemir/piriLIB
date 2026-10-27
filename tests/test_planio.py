@@ -12,8 +12,8 @@ from pirilib.spec import LineHaulInstance
 
 @pytest.fixture
 def solved(example_path: Path) -> pirilib.SolveResult:
-    instance = pirilib.load_spec(example_path).compile()
-    return pirilib.solve(instance, seed=1)
+    spec = pirilib.load_spec(example_path)
+    return pirilib.solve(spec.compile(), spec.build_objective(), seed=1)
 
 
 def same_plan(first: pirilib.Plan, second: pirilib.Plan) -> bool:

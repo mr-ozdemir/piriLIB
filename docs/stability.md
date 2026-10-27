@@ -25,11 +25,11 @@ decision log at the first alpha.
 
 | Area | Names |
 |---|---|
-| Problem | `load_spec`, `parse_spec`, `compile_spec`, `LineHaulSpec` and its models (`Calendar`, `Center`, `VehicleType`, `Cost`, `Fleet`, `OwnedVehicles`, `SpotOffer`, `Demand`, `Rules`, `MinFill`, `Stopover`, `Service`, `Handling`, `HaversineMatrix`, `ExplicitMatrix`, `Arc`, `TableSource`), `SCHEMA_ID`, `UNLIMITED` |
+| Problem | `load_spec`, `parse_spec`, `compile_spec`, `LineHaulSpec` and its models (`Calendar`, `Center`, `VehicleType`, `Cost`, `Fleet`, `OwnedVehicles`, `SpotOffer`, `Demand`, `Rules`, `MinFill`, `Stopover`, `Service`, `Handling`, `ObjectiveSpec`, `HaversineMatrix`, `ExplicitMatrix`, `Arc`, `TableSource`), `SCHEMA_ID`, `UNLIMITED` |
 | Plans | `Plan`, `Dispatch`, `Load`, `planio.read_plan`, `planio.write_plan` |
 | Evaluation | `evaluate`, `Evaluation`, `check_plan`, `constraints.CATALOG`, `Constraint`, `constraint`, `MaxRouteKm`, `MaxDispatchesPerDay` |
 | Objectives | every term factory in `pirilib.objective` (`total_cost`, `dispatch_cost`, `service_cost`, `owned_fixed_cost`, `distance_km`, `dispatches`, `unused_capacity`, `unserved`, `violation`, `violations`), `Term`, `Sum` |
-| Solving | `solve`, `Solver` (protocol), `ACOSolver`, `ACOConfig`, `SolveResult`, `default_objective` |
+| Solving | `solve`, `Solver` (protocol), `ACOSolver`, `ACOConfig`, `SolveResult`, `LineHaulSpec.build_objective` (there is no default objective) |
 | Tuning | `tune`, `Tuner` (protocol), `BeeColony`, `RandomSearch`, `SearchSpace`, `Int`, `Float`, `Choice`, `aco_space`, `TuningResult`, `SearchResult`, `Trace` |
 | Forecasting | `Forecaster` (protocol), `History`, `load_history`, `clean`, `Calendar`, `Forecast`, `SeasonalMean`, `SeasonalNaive`, `Regression`, `Backtester`, `backtest`, `compare`, `report`, `Backtest`, `Fold`, `Scores` |
 | Command line | `validate`, `solve`, `check`, `tune`, `generate`, `backtest`, `forecast`, `schema` and their options |

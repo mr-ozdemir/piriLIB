@@ -16,6 +16,7 @@ Birlikte okunması gerekenler: K83 + K90 + K109 (ceza ağırlıkları), K55 + K2
 **Soru.** Tüm yerleşik ihlaller aynı ağırlıkla cezalandırılıyor; `coverage` (taşınmayan desi) ile `min_fill` (eksik doluluk desisi) aynı birimde ve aynı ağırlıkta olduğundan çözücü, küçük bir talebi taşımak yerine bırakmayı "daha ucuz" bulabiliyor (ölçümde 30 günlük problemde 346,7 desi bırakıldı). Asıl soru: taşınmayan talep iş kuralı olarak doluluk açığından daha mı ağır?
 **Öneri.** Değiştir: varsayılan amaçta `violation[coverage]` ağırlığını diğer ihlallerin üstüne çıkar (örn. 1e6 × ihlaller + 1e7 × coverage), CLI `--penalty` aynı kalsın. Böylece "her talep gider" varsayılan davranış olur, kullanıcı isterse eşitler.
 **Değiştirecek durum.** "Minimum doluluk altı araç kalkmaz, küçük talep ertesi güne kalır" deniyorsa mevcut eşit ağırlık doğru; o zaman K90 ile birlikte "koru" ve kılavuzda açıkça yaz (şu an §3'te yazılı).
+**Durum.** Karar verildi: varsayılan amaç yok, amaç her yerde zorunlu, cezası olmayan kural hata (K205+).
 
 ### 2. K90 — Yerel aramanın "bırak" hamlesi talebi taşımadan bırakabiliyor
 **Soru.** Amaç fonksiyonuna sadakat gereği yerel arama, taşıması cezadan pahalı olan rotayı siliyor; kesin çözücü de aynı optimumu buluyor, yani matematiksel olarak tutarlı. Ama kullanıcı "plan talebi unuttu" diye okuyabilir.

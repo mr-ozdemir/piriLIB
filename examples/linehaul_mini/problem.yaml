@@ -57,3 +57,9 @@ rules:
     spot: 0.10
   stopover:
     max_stretch: 1.3
+
+objective:
+  cost: 1
+  penalties:
+    coverage: 10000000
+    other: 1000000

@@ -36,3 +36,10 @@ def test_inline_document_matches_schema(document: dict[str, Any]) -> None:
 def test_schema_rejects_unknown_fields(document: dict[str, Any]) -> None:
     document["rules"] = {"min_fil": {"spot": 0.1}}
     assert not validator().is_valid(document)
+
+
+def test_schema_knows_the_penalty_names(document: dict[str, Any]) -> None:
+    document["objective"] = {"cost": 1, "penalties": {"coverage": 1e7, "other": 1e6}}
+    assert validator().is_valid(document)
+    document["objective"]["penalties"]["tolls"] = 1.0
+    assert not validator().is_valid(document)

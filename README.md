@@ -39,6 +39,9 @@ pirilib check sample/problem.yaml plan.csv       # audit any plan against the ru
 pirilib forecast history.csv --network network.yaml --problem week.yaml --quantile 0.8
 ```
 
+`solve` minimizes the objective that the problem file defines in its
+`objective:` section; `generate` writes one, and there is no default.
+
 ## Python
 
 A problem is described in YAML, and large tables can come from CSV files, as in
@@ -86,11 +89,14 @@ print(goal.breakdown(evaluation))
 print(check_plan(instance, plan))  # the same rules, explained in words
 ```
 
-The ant colony searches for the plan that minimizes your objective:
+The ant colony searches for the plan that minimizes your objective. There is
+no default one: write it with `pirilib.objective`, or build it from the
+`objective:` section of the problem file:
 
 ```python
 from pirilib import ACOConfig, ACOSolver, solve
 
+result = solve(instance, spec.build_objective(), seed=1)
 result = solve(instance, objective=obj.total_cost() + 1e6 * obj.violations(), seed=1)
 print(result)  # objective, seconds, and the evaluation of the best plan
 

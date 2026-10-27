@@ -13,6 +13,7 @@ from pirilib.spec import LineHaulInstance, parse_spec
 
 type RandomDocument = Callable[[int], dict[str, Any]]
 
+GOAL = obj.total_cost() + 1e6 * obj.violations()
 HAS_PYVRP = importlib.util.find_spec("pyvrp") is not None
 HAS_ORTOOLS = importlib.util.find_spec("ortools") is not None
 BY_CONSTRUCTION = (
@@ -57,7 +58,7 @@ def test_plans_keep_the_rules(
     make: Callable[[], RoutingAdapter], seed: int, random_document: RandomDocument
 ) -> None:
     instance = parse_spec(routable(random_document(seed))).compile()
-    result = make().solve(instance, seed=seed)
+    result = make().solve(instance, GOAL, seed=seed)
     evaluation = result.evaluation
     broken = {name: evaluation.violations[name] for name in BY_CONSTRUCTION}
     assert not any(broken.values()), broken
@@ -79,8 +80,8 @@ def test_not_better_than_the_exact_solver(
         document = routable(random_document(seed))
         document["fleet"]["spot"][1].pop("available", None)
         instance = parse_spec(document).compile()
-        exact = ExactSolver().solve(instance)
-        routed = make().solve(instance, seed=seed)
+        exact = ExactSolver().solve(instance, GOAL)
+        routed = make().solve(instance, GOAL, seed=seed)
         assert routed.evaluation.feasible
         assert routed.objective >= exact.objective * (1 - 1e-9)
 
@@ -95,16 +96,16 @@ def test_unsupported_problems_are_refused(
     document["rules"] = {"min_fill": {"spot": 0.1}, "split_demand": False}
     instance = compile_document(document)
     with pytest.raises(ValueError, match=r"split_demand = false; minimum fill"):
-        solver.solve(instance)
+        solver.solve(instance, GOAL)
     document["rules"] = {}
     instance = compile_document(document)
     with pytest.raises(ValueError, match="objectives without a linear form"):
         solver.solve(instance, objective=lambda evaluation: evaluation.total_cost)
     with pytest.raises(ValueError, match="constraints of your own"):
-        solver.solve(instance, constraints=[MaxRouteKm(100)])
+        solver.solve(instance, GOAL, constraints=[MaxRouteKm(100)])
     with pytest.raises(ValueError, match=r"objective terms \['unused\[spot\]'\]"):
         solver.solve(instance, objective=obj.total_cost() + obj.unused_capacity("spot"))
-    assert solver.solve(instance).evaluation.feasible
+    assert solver.solve(instance, GOAL).evaluation.feasible
 
 
 def test_missing_package_is_explained(
@@ -112,10 +113,10 @@ def test_missing_package_is_explained(
 ) -> None:
     monkeypatch.setitem(sys.modules, "pyvrp", None)
     with pytest.raises(ImportError, match=r'PyVRPSolver needs .* pip install "pirilib\[pyvrp\]"'):
-        PyVRPSolver().solve(instance)
+        PyVRPSolver().solve(instance, GOAL)
     monkeypatch.setitem(sys.modules, "ortools.constraint_solver", None)
     with pytest.raises(ImportError, match=r'pip install "pirilib\[ortools\]"'):
-        ORToolsSolver().solve(instance)
+        ORToolsSolver().solve(instance, GOAL)
 
 
 def test_settings_are_checked() -> None:
