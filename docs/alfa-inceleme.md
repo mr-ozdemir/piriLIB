@@ -223,6 +223,32 @@ K10, K11, K12, K13, K15, K30, K45, K46, K49, K50, K53, K59, K61, K69, K71, K74, 
 - **K200 (spot limiti sayacı), K201–K203 (hız):** B. K203 çok çekirdeği ve numba'yı yine ertesi sürüme bırakıyor.
 - **K186–K199 (3b):** A-14 ile birlikte. K188 Fable'ın tanımından sapıyor (erteleme maliyetine sefer maliyeti de eklendi, ölçümle); K199 kabul koşulunun neden 250.000 desiyle ölçüldüğünü anlatıyor.
 
+## En son bakılacak: koloni inşası hızlandırması (K211–K215)
+
+Commit `34a4847` ("Speed up colony construction", PR #6). Kararların tam metni `docs/kararlar.md` "Hız: koloni inşası", ölçümler `docs/olcumler.md` aynı başlık. Değişen kod yalnız `src/pirilib/solvers/_colony.py` (`sample` ve `Build`); `aco.py`, amaç, değerlendirici ve şema değişmedi.
+
+**Ne yapıldı.** Koloni inşası (karıncaların rota kurduğu kısım) çözüm süresinin %80-85'iydi ve süre dizi boyutundan çok adım başına ~100 küçük numpy çağrısından geliyordu. Çağrı sayısı azaltıldı; inşa 1,6-1,7 kat hızlandı (7 gün 21,9 → 15,0 sn, 30 gün 117,3 → 81,0 sn). Planlar birebir aynı: eski kodla 319 senaryoda (büyük problemler dahil) planlar, istatistikler ve amaç değeri bit bit eşit.
+
+**Senin seçebileceğin tercihler.** Her satırda benim seçtiğim, nedeni ve değiştirirsen ne olacağı:
+
+| # | Seçilen | Neden | Değiştirirsen |
+|---|---|---|---|
+| 1 | Sonuç birebir aynı kalsın (aynı tohum, aynı plan) | Eski ölçümler, sabit testler ve kullanıcının tekrar üretilebilir sonuçları bozulmasın | "Aynı kalitede ama farklı plan" kabul edilirse toplama sırası değişebilir, sıfır sütunlar atılabilir: ek hız, ama sabit test sayıları ve eski tohumların planları değişir |
+| 2 | Saf numpy, tek çekirdek (K203'teki erteleme sürüyor) | Yeni bağımlılık yok, kurulum her yerde aynı | numba ya da çok çekirdek çok daha büyük kazanç verebilir (ölçülmedi); numba bağımlılığı ve derleme süresi gelir |
+| 3 | K211: değerler inşa başında düz `option_*`, `node_*`, `*_cells` tablolarına yazılıyor, adım `take` ile okuyor | `take` çok boyutlu indekslemeden 2-3 kat hızlı | Kod okunurluğu düştü: `Build` artık `Batch`'teki değerlerin düz kopyalarını taşıyor; geri almak hızın bir kısmını götürür |
+| 4 | K212: oda (merkez sınırı) yokken rota açma ağırlıkları önbellekte, yalnız değişen hücreler yeniden hesaplanıyor | Başlangıç adımındaki en büyük işlemler kalkıyor | Aynı formül iki yerde (`_opening` ve `_reopen`); biri değişip öbürü unutulursa sonuç bozulur. `tests/test_aco.py::test_kept_opening_weights_equal_fresh_ones` bunu yakalıyor (bilerek bozulan sürümde 20 durumdan 18'i düştü). Önbelleği kaldırmak bu riski siler, hızın bir kısmını götürür |
+| 5 | Oda varken (merkez sınırlı zamanlı problemler) eski hesap aynen kaldı | Oda her ziyarette tüm düğümleri etkiliyor, önbellek doğru tutulamıyor | Zamanlı ve merkez sınırlı problemler bu hızlanmadan daha az yararlanıyor |
+| 6 | K213: örnekleme `argmax`, `sum` ve `cumsum` aynı | Toplama sırası değişmesin (1. tercih) | Örnekleme artık inşanın en büyük kalemi (~%25); 1. tercih gevşerse burası da kısalır |
+| 7 | K214: aynı adımda kapanan satırlar tek `_finish` çağrısında kapanıyor | Çağrı sayısı | Satırlar arası durak kayıt sırası değişti (rota içi sıra aynı, plan sıralanıyor); hiçbir sonuç değişmedi |
+
+**Hata olabilecek yerler.**
+
+- Süreler gürültülü bir makinede ölçüldü (aynı kod süreçten sürece %15'e kadar oynadı). Eski ve yeni sürüm sırayla birkaç turda koşturulup en kısaları alındı; 40 merkezde kazanç 1,57x ile 1,69x arasında çıktı. Kesin sayı için sessiz bir makinede yeniden ölçmek gerekir.
+- Kılavuzdaki "Known limits" süreleri (7 gün ~15 sn, 30 gün ~80 sn, yerel arama %15-20) bu ölçümlerden; başka makinede farklı çıkar.
+- Birebir aynılık 319 senaryo ve iki yeni sabit testle (`test_whole_plans_did_not_change`, `test_kept_opening_weights_equal_fresh_ones`) gösterildi; denenmemiş bir kural birleşimi teoride fark verebilir.
+
+**Bakmak için.** `git show 34a4847`, `src/pirilib/solvers/_colony.py` içinde `Build` docstring'i (tabloların listesi), yukarıdaki iki test. Bir tercihi değiştirmek istersen numarasını söylemen yeterli.
+
 ## Tutarsızlıklar
 
 Geçersiz kılınanlar. Her birinin karar metnine "**Güncel:**" notu eklendi:
