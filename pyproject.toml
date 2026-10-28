@@ -5,23 +5,24 @@ build-backend = "hatchling.build"
 [project]
 name = "pirilib"
 dynamic = ["version"]
-description = "Demand forecasting and ACO-ABC based distribution optimization with user-defined objectives and constraints."
+description = "Fleet optimization with an ant colony solver, a bee colony tuner and your own objective and constraints, starting with line-haul planning."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Muhammet Ozdemir" }]
 keywords = [
+    "fleet optimization",
     "ant colony optimization",
     "artificial bee colony",
     "vehicle routing",
-    "fleet planning",
+    "line-haul",
     "logistics",
     "demand forecasting",
     "metaheuristics",
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
@@ -74,6 +75,8 @@ include = [
     "schemas",
     "examples",
     "docs/guide.md",
+    "docs/objective.md",
+    "docs/stability.md",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",

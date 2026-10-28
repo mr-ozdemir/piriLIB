@@ -4,7 +4,12 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
 
+[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.0a1...HEAD
+[0.1.0a1]: https://github.com/mr-ozdemir/piriLIB/releases/tag/v0.1.0a1
+
 ## [Unreleased]
+
+## [0.1.0a1] - unreleased
 
 ### Added
 

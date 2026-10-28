@@ -1,12 +1,15 @@
 # pirilib
 
-Demand forecasting and ACO-ABC based distribution optimization for logistics
-planning, driven by your own data, constraints and objective.
+Fleet optimization with an ant colony solver and a bee colony tuner, driven by
+your own data, constraints and objective.
 
-!!! warning "Status: pre-alpha (0.0.x)"
+!!! warning "Status: first alpha (0.1.0a1)"
 
-    Nothing here is ready for production use and the API will change without
-    notice.
+    Everything may still change before 1.0, the public API and the internal
+    structure alike. Fleet optimization is the default domain, and line-haul
+    planning is the first supported problem type, not a fixed contract. The
+    alpha is published on TestPyPI only; the [user guide](guide.md#install)
+    shows how to install it. See [Public API and stability](stability.md).
 
 pirilib (short name *piri*) generalizes the solution built for the TEKNOFEST
 2026 Hepsiburada intercity logistics challenge into a reusable library.
@@ -30,11 +33,10 @@ pirilib (short name *piri*) generalizes the solution built for the TEKNOFEST
 
 ## Quick start
 
-Generate a synthetic problem, plan it (one row per load) and audit the plan
-against the rules:
+After [installing](guide.md#install), generate a synthetic problem, plan it
+(one row per load) and audit the plan against the rules:
 
 ```bash
-pip install pirilib
 pirilib generate sample --centers 20 --days 3
 pirilib solve sample/problem.yaml -o plan.csv
 pirilib check sample/problem.yaml plan.csv

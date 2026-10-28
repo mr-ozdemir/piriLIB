@@ -3,9 +3,18 @@
 pirilib plans line-haul transport: which vehicles leave which center on which
 day, where they stop and what they carry, so that your objective is as small as
 possible and your rules hold. It also forecasts the demand to plan. This guide
-covers the pre-alpha versions 0.1 (planning) and 0.2 (forecasting).
+covers the first alpha, 0.1.0a1, in which line-haul planning is the first
+supported problem type; everything may still change before 1.0.
 
 ## Install
+
+The alpha is published on TestPyPI only, with its dependencies from PyPI:
+
+```bash
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ "pirilib==0.1.0a1"
+```
+
+From the first final release on, the package and its extras come from PyPI:
 
 ```bash
 pip install pirilib
