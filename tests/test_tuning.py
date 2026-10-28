@@ -7,7 +7,7 @@ from pirilib import ACOConfig
 from pirilib import objective as obj
 from pirilib.spec import LineHaulInstance
 from pirilib.tuning import BeeColony, Choice, Float, Int, RandomSearch, SearchSpace, aco_space, tune
-from pirilib.tuning.bee_colony import latin_hypercube
+from pirilib.tuning.bee_colony import default_sources, latin_hypercube
 
 TARGET = np.array([0.3, 0.7, 0.2])
 GOAL = obj.total_cost() + 1e6 * obj.violations()
@@ -131,3 +131,14 @@ def test_default_colony_beats_random_search_at_small_budgets() -> None:
     colony = np.mean([BeeColony().minimize(sphere, 3, 24, seed=s).best_value for s in range(20)])
     random = np.mean([RandomSearch().minimize(sphere, 3, 24, seed=s).best_value for s in range(20)])
     assert colony < random
+
+
+@pytest.mark.parametrize(
+    ("budget", "sources"),
+    [(1, 2), (23, 2), (24, 3), (40, 3), (60, 3), (119, 3), (120, 4), (500, 4)],
+)
+def test_default_sources_follow_the_budget(budget: int, sources: int) -> None:
+    assert default_sources(budget) == sources
+    first = BeeColony().minimize(sphere, 3, budget, seed=2).trace[: min(budget, sources)]
+    expected = latin_hypercube(np.random.default_rng(2), sources, 3)[: len(first)]
+    assert np.array_equal(np.array([item.point for item in first]), expected)

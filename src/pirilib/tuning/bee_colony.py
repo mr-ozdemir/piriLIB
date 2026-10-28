@@ -10,8 +10,8 @@ Karaboga's algorithm, with the corrections the prototype needed:
   (at least one), as in Akay and Karaboga (2012);
 - the budget counts objective evaluations, so tuners can be compared fairly;
 - the first food sources form a Latin hypercube and, unless set, their number
-  follows the budget, which keeps the colony ahead of random search even with a
-  few dozen evaluations.
+  follows the budget (three for a few dozen evaluations, four from 120), which
+  keeps the colony ahead of random search even with a few dozen evaluations.
 
 The search is minimization; every call of the objective counts towards the budget.
 """
@@ -78,13 +78,23 @@ def latin_hypercube(rng: np.random.Generator, count: int, dimensions: int) -> ND
     return np.asarray((cells + rng.random((count, dimensions))) / count, dtype=np.float64)
 
 
+def default_sources(budget: int) -> int:
+    """The number of food sources of a colony with ``budget`` evaluations and no ``sources``.
+
+    ``budget // 8`` between 2 and 3 below 120 evaluations, and 4 from 120: on test
+    functions three sources did best from 24 to about 100 evaluations and four
+    from about 120.
+    """
+    return 4 if budget >= 120 else int(np.clip(budget // 8, 2, 3))
+
+
 @dataclass(frozen=True, slots=True)
 class BeeColony:
     """ABC settings: food sources, modification rate and abandonment limit.
 
     Attributes:
-        sources: number of food sources; ``None`` chooses ``budget // 8``,
-            between 2 and 4.
+        sources: number of food sources; ``None`` chooses ``budget // 8``
+            between 2 and 3 below 120 evaluations, and 4 from 120.
         modification_rate: share of dimensions a neighbour changes.
         limit: failed improvements before a source is abandoned; ``None`` means
             ``sources * dimensions``.
@@ -120,7 +130,7 @@ class BeeColony:
             raise ValueError("budget must be at least 1")
         rng = np.random.default_rng(seed)
         count = _Budget(objective, budget)
-        sources = self.sources if self.sources is not None else int(np.clip(budget // 8, 2, 4))
+        sources = self.sources if self.sources is not None else default_sources(budget)
         limit = self.limit if self.limit is not None else sources * dimensions
 
         food = latin_hypercube(rng, sources, dimensions)

@@ -87,6 +87,56 @@ Aynı ACO ayar deneyi (yukarıdaki tablo, ayarlayıcı tohumu 5):
 
 Fark -%24,2'den -%67,4'e kapandı; 24 ayarlık bütçede rastgele arama hâlâ biraz önde (tek tohum, fark gürültü düzeyine yakın). K107'deki öneri (bütçe en az 60 ayar) geçerli.
 
+### Varsayılan bütçe, birkaç tohumla (A-16, K226-K229)
+
+Önceki ACO ölçümü tek ayarlayıcı tohumluydu. Bu ölçüm aynı düzeni sekiz ayarlayıcı tohumuyla (0-7) ve 24, 40, 60, 80 ayarlık bütçelerle tekrarlar.
+
+Kurulum:
+
+- Test fonksiyonları: sphere, Rastrigin, Rosenbrock, Ackley (3, 6 ve 7 boyut) ve 7 boyutlu gürültülü sphere (gürültü standart sapması 2; seçilen noktanın gürültüsüz değeri sayılır), toplam 13 problem. Birim küpte optimum her eksende 0,3'te. 40 tohum (0-39), bütçe 24, 40, 60, 80, 100, 120, 150 ve 300 değerlendirme, kaynak sayısı 2, 3, 4, 5, 6 ve 8.
+- ACO ayarı: 3 eğitim + 4 test problemi, `synthetic.generate(centers=30, days=2, demand_per_day=200, min_fill=0.1)` (30 merkez, 400 talep), tohumlar 1000-1002 (eğitim) ve 2000-2003 (test). Amaç belgenin kendi `objective:` bölümü (maliyet + 1e7 × taşınmayan talep + 1e6 × diğer ihlaller). Temel ayar `ACOConfig(local_search=False)`, çözücü tohumları 0 ve 1, `min_improvement` 0,001. Skor `tune` ile aynı: temel ayara göre göreli fark, eğitim ve test problemlerinde ayrı ayrı.
+- Rastgele aramanın ve kaynak sayısı aynı kalan ABC'nin ilk B değerlendirmesi, B bütçeli çalışmanın değerlendirmelerinin aynısı. Bu yüzden rastgele aramanın 80'lik çalışması 24-80'i, 4 kaynaklı ABC'nin 80'lik çalışması 24 (4 kaynakla) ve 40-80'i, 3 kaynaklı ABC'nin 60'lık çalışması 24-60'ı verir. Bu, test fonksiyonlarında iz iz denetlendi. Küçük bir problemde de `tune` ile birebir aynı ayar ve skor çıktı.
+- Süre: ACO ölçümü 8 süreç paralel çalışırken 71 dakika (rastgele arama 80, ABC 80 ve 24), 3 kaynaklı ABC 18 dakika (bütçe 60). Test fonksiyonları birkaç dakika sürdü.
+- Problemler ve amaç önceki ölçümden farklı (eski betikler saklanmamıştı, amaç artık belgenin içinde). Bu yüzden yüzdelerin düzeyi yukarıdaki tablolarla karşılaştırılamaz, ayarlayıcılar arasındaki fark karşılaştırılabilir.
+
+Test fonksiyonları: ABC'nin ortalama en iyi değerinin rastgele aramaya oranı (13 problemin geometrik ortalaması, parantezde en küçük ve en büyük) ve ABC'nin rastgele aramadan iyi olduğu (problem, tohum) çiftlerinin payı (13 × 40). Küçük daha iyi. K149 kuralında 24'te 3, 32 ve üstünde 4 kaynak var. Yeni kuralda (K227) 24-119'da 3, 120 ve üstünde 4 kaynak var:
+
+| Bütçe | 3 kaynak: oran | 3 kaynak: ABC iyi | 4 kaynak: oran | 4 kaynak: ABC iyi | 3 kaynağın 4'ten iyi olduğu problemler |
+|---|---|---|---|---|---|
+| 24 | 0,87 (0,66 - 1,17) | %57,9 | 0,98 (0,93 - 1,13) | %50,6 | 12 / 13 |
+| 40 | 0,70 (0,50 - 0,88) | %72,9 | 0,82 (0,59 - 1,00) | %64,4 | 13 / 13 |
+| 60 | 0,51 (0,25 - 0,81) | %83,3 | 0,61 (0,35 - 0,81) | %78,3 | 13 / 13 |
+| 80 | 0,42 (0,17 - 0,71) | %89,8 | 0,47 (0,22 - 0,74) | %85,4 | 12 / 13 |
+| 100 | 0,37 (0,11 - 0,68) | %92,3 | 0,38 (0,12 - 0,68) | %90,2 | 11 / 13 |
+| 120 | 0,33 (0,10 - 0,63) | %92,9 | 0,31 (0,06 - 0,64) | %94,0 | 6 / 13 |
+| 150 | 0,29 (0,07 - 0,57) | %93,8 | 0,23 (0,02 - 0,55) | %96,9 | 4 / 13 |
+| 300 | 0,19 (0,02 - 0,47) | %97,1 | 0,09 (0,00 - 0,38) | %99,0 | 2 / 13 |
+
+Geometrik ortalamada 2 kaynak her bütçede 3'ten kötü, 5, 6 ve 8 kaynak hiçbir bütçede en iyi değil (ham kayıtta).
+
+ACO ayarı, 8 ayarlayıcı tohumu: ortalama (parantezde standart sapma), test medyanı, en kötü tohumun testi ve ABC'nin aynı tohumlu rastgele aramadan iyi olduğu tohum sayısı (test / eğitim). Süre, 8 süreç paralel çalışırken bir ayar çalışmasının ortalama süresidir. Denenen ayarların karınca sayısına bağlıdır, satırlar arasında kabaca karşılaştırılır.
+
+| Ayarlayıcı | Bütçe | Eğitim | Görülmemiş test | Test medyanı | En kötü test | ABC iyi (test / eğitim) | Süre |
+|---|---|---|---|---|---|---|---|
+| Rastgele arama | 24 | -%33,65 (0,91) | -%11,70 (0,47) | -%11,84 | -%10,85 | - | 563 sn |
+| Rastgele arama | 40 | -%33,94 (0,66) | -%11,92 (0,24) | -%11,93 | -%11,54 | - | 867 sn |
+| Rastgele arama | 60 | -%34,25 (0,76) | -%12,03 (0,39) | -%12,09 | -%11,39 | - | 1261 sn |
+| Rastgele arama | 80 | -%34,63 (0,69) | -%12,23 (0,45) | -%12,36 | -%11,39 | - | 1661 sn |
+| ABC, 3 kaynak (yeni varsayılan) | 24 | -%31,98 (6,59) | -%11,92 (0,61) | -%11,78 | -%11,02 | 5 / 5 | 382 sn |
+| ABC, 3 kaynak (yeni varsayılan) | 40 | -%34,29 (1,19) | -%12,04 (0,60) | -%12,27 | -%10,96 | 6 / 6 | 661 sn |
+| ABC, 3 kaynak (yeni varsayılan) | 60 | -%34,74 (1,05) | -%10,85 (4,21) | -%12,33 | -%0,49 | 6 / 5 | 964 sn |
+| ABC, 4 kaynak | 24 | -%33,25 (0,98) | -%10,20 (4,18) | -%11,55 | +%0,03 | 3 / 4 | 575 sn |
+| ABC, 4 kaynak (K149 varsayılanı) | 40 | -%33,69 (0,75) | -%10,33 (4,24) | -%11,81 | +%0,11 | 3 / 3 | 1061 sn |
+| ABC, 4 kaynak (K149 varsayılanı) | 60 | -%34,26 (0,91) | -%10,58 (4,33) | -%12,15 | +%0,11 | 4 / 3 | 1653 sn |
+| ABC, 4 kaynak (K149 varsayılanı) | 80 | -%34,76 (0,97) | -%10,80 (4,42) | -%12,42 | +%0,11 | 3 / 3 | 2102 sn |
+
+Sonuç:
+
+- A-16'daki koşul gerçekleşmedi. 24 ayarda rastgele arama önde değil: ABC 8 tohumun 5'inde testte daha iyi, ortalama -%11,92'ye karşı -%11,70. Varsayılan bütçe 40'ta kaldı (K226).
+- ACO ayarında kazancın neredeyse tamamı ilk 24 ayarda geliyor (eğitimde yaklaşık -%34, testte -%12). 40'tan 60'a çıkmak eğitimde 0,3-0,6 puan, test medyanında 0,06-0,34 puan getiriyor, süreyi yaklaşık %50 artırıyor.
+- Test fonksiyonlarında 3 kaynak 24-100 değerlendirmede 4'ten iyi, 120 ve üstünde 4 kaynak iyi. ACO ayarında 40 bütçede 3 kaynaklı ABC rastgele aramayı 8 tohumun 6'sında geçiyor (eğitimde ve testte), 4 kaynaklı ABC yalnız 3'ünde. Kaynak kuralı buna göre değişti (K227).
+- 16 ABC çalışmasının 2'sinde aşırı uyum görüldü. 4 kaynaklı tohum 7 (bütçe 40 ve üstü) eğitimde -%32,55, testte +%0,11 verdi (24'te başka bir ayarla testte +%0,03). 3 kaynaklı tohum 4 (bütçe 60) eğitimde -%33,43, testte -%0,49 verdi. İkisinde de beta temel ayardaki 2'de ya da ona yakın (2,0 ve 2,24). Rastgele aramanın 32 sonucunda bu görülmedi (en kötü test -%10,85). Ayarı görülmemiş problemlerde denemek gerekli (K229).
+
 ## Tahmin motoru (v0.2)
 
 ### Prototip verisiyle denklik

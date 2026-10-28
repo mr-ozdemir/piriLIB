@@ -1,3 +1,4 @@
+import inspect
 import json
 import shutil
 from collections.abc import Callable
@@ -7,7 +8,8 @@ from typing import Any
 import pytest
 import yaml
 
-from pirilib.cli import main
+from pirilib.cli import _parser, main
+from pirilib.tuning import tune
 
 
 def run(capsys: pytest.CaptureFixture[str], *arguments: str) -> tuple[int, str, str]:
@@ -100,6 +102,12 @@ def test_tune(capsys: pytest.CaptureFixture[str], example_path: Path, tmp_path: 
     assert code == 0
     assert "against the base settings" in out
     assert json.loads(output.read_text(encoding="utf-8"))["iterations"] == 2
+
+
+def test_tune_budget_matches_the_library_default() -> None:
+    budget = inspect.signature(tune).parameters["budget"].default
+    assert budget == 40
+    assert _parser().parse_args(["tune", "problem.yaml"]).budget == budget
 
 
 def test_generate_then_solve(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:

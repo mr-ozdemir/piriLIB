@@ -93,6 +93,7 @@ Birlikte okunması gerekenler: K83 + K90 + K109 (ceza ağırlıkları), K55 + K2
 **Soru.** `BeeColony.sources` tipi `int | None` oldu (API değişikliği). Ölçüm (`docs/olcumler.md`): test fonksiyonlarında 24 değerlendirmede rastgele aramadan iyi ya da eşit; gerçek ACO ayarında görülmemiş testte -%24,2'den -%67,4'e çıktı, rastgele arama -%70,0 ile hâlâ biraz önde (tek tohum).
 **Öneri.** Koru (commit edildi). Kılavuz §5 "60 ya da daha fazla ayar verin" diyor; `tune(budget=40)` ve CLI `--budget 40` varsayılanının 60'a çıkarılması değerlendirilsin.
 **Değiştirecek durum.** Birkaç tohumla ölçümde 24 ayarda rastgele arama açıkça önde kalırsa varsayılan bütçe 60 olmalı.
+**Durum.** 8 ayarlayıcı tohumuyla ölçüldü (`docs/olcumler.md`, "Varsayılan bütçe, birkaç tohumla"): test fonksiyonları ve aynı düzende ACO ayarı, bütçe 24, 40, 60 ve 80. 24 ayarda rastgele arama önde değil (ABC testte 8 tohumun 5'inde iyi), koşul gerçekleşmedi; varsayılan bütçe 40'ta kaldı, kılavuz §5 ölçüme göre yazıldı (K226). Ölçümde 3 kaynak 24-100 değerlendirmede 4'ten iyi çıktı; kaynak kuralı 120'nin altında 2..3, 120 ve üstünde 4 oldu (K227). 16 ABC çalışmasının 2'sinde aşırı uyum görüldü (K229). Uygulandı, commit edilmedi; sahibi onaylayacak.
 
 ### 17. K03 — Python >= 3.12; CI Linux 3.12/3.13/3.14, Windows ve macOS 3.14
 **Soru.** Kurumsal ortamlarda 3.10/3.11 yaygın; kod `type` deyimi ve PEP 695 generics kullanıyor, bunları geri almak elle iş. Alfa kullanıcıları büyük olasılıkla Windows 3.12'de.
@@ -227,8 +228,8 @@ K10, K11, K12, K13, K15, K30, K45, K46, K49, K50, K53, K59, K61, K69, K71, K74, 
 
 Geçersiz kılınanlar. Her birinin karar metnine "**Güncel:**" notu eklendi:
 
-1. **K101 → K149.** Varsayılan 6 kaynak yerine bütçeye bağlı 2..4 ve Latin hiperküp. *Commit edildi, ölçüm `docs/olcumler.md`'de.*
-2. **K107 → K149.** Kılavuz §5 güncellendi ("24 ayarda yakın, 60 ya da daha fazla verin"). `tune(budget=40)` ve CLI `--budget 40` varsayılanı A-16'da.
+1. **K101 → K149 → K227.** Varsayılan 6 kaynak yerine bütçeye bağlı 2..4 ve Latin hiperküp; K227 ile 120 değerlendirmenin altında 2..3, 120 ve üstünde 4. *K149 commit edildi, ölçüm `docs/olcumler.md`'de; K227 commit edilmedi.*
+2. **K107 → K149 → K226.** A-16 8 tohumla ölçüldü: `tune(budget=40)` ve CLI `--budget 40` varsayılanı kaldı; kılavuz §5 "60 ya da daha fazla verin" yerine ölçümü anlatıyor (kazancın çoğu ilk 24 ayarda, 60-80 biraz daha iyi). *Commit edilmedi.*
 3. **K97 → K146.** HiGHS çıktısı artık susturuluyor.
 4. **K10 → K145.** Commit'ler yerelde atılıyor.
 5. **K16 → K130.** Şema kimliği `pirilib/linehaul@0.2`.

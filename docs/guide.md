@@ -383,10 +383,14 @@ better = pirilib.ACOSolver(result.config)
 The artificial bee colony searches the space of ACO settings (`aco_space()`).
 Each setting is scored by its mean relative difference to the base setting
 over the training instances and seeds. A setting replaces the base only if it
-is at least 0.1 % better. `RandomSearch` is the baseline tuner. With about 24
-settings the bee colony and random search were close in our measurements;
-give it 60 or more. Check tuned settings on instances you
-did not tune on.
+is at least 0.1 % better. `RandomSearch` is the baseline tuner. The default
+budget is 40 settings. In our measurements with eight tuner seeds most of the
+gain came within the first 24 settings, and 60 or 80 settings helped a little
+more at a proportional cost in time. On ACO settings the bee colony and random
+search were close (the colony slightly ahead at 40); on standard test
+functions the colony was clearly ahead. Check tuned settings on instances you
+did not tune on: in two of sixteen colony runs, a setting that was clearly
+better on the training instances was no better than the base on new ones.
 
 ## 6. Forecast demand
 
