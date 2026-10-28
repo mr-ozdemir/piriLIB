@@ -6,7 +6,7 @@ import pytest
 
 import pirilib
 from pirilib import PlanError, check_plan, evaluate
-from pirilib.planio import read_plan, summary, write_plan
+from pirilib.planio import read_plan, rows, summary, write_plan
 from pirilib.spec import LineHaulInstance
 
 
@@ -94,7 +94,87 @@ def test_excel(tmp_path: Path, solved: pirilib.SolveResult) -> None:
     write_plan(solved.evaluation, path)
     sheet = load_workbook(path).active
     assert sheet.title == "plan"
-    assert sheet.max_row == 1 + sum(max(1, len(d.loads)) for d in solved.plan.dispatches())
+    assert sheet.max_row == 1 + len(list(rows(solved.evaluation)))
+    plan = read_plan(solved.evaluation.instance, path)
+    assert same_plan(plan, solved.plan)
+
+
+HAND_COLUMNS = [
+    "kind",
+    "vehicle_type",
+    "source",
+    "origin",
+    "stops",
+    "demand",
+    "destination",
+    "desi",
+]
+
+
+def test_excel_edited_by_hand(tmp_path: Path, instance: LineHaulInstance) -> None:
+    """Excel turns typed dates and times into its own values; they read as in CSV."""
+    import datetime
+
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.active.title = "notes"
+    sheet = book.create_sheet("plan")
+    sheet.append(["dispatch", "date", "start", *HAND_COLUMNS])
+    sheet.append(
+        [
+            1,
+            datetime.datetime(2026, 1, 5),
+            datetime.time(9, 30),
+            "spot",
+            "big",
+            "fleet.spot[0]",
+            "A",
+            "B",
+            "D000001",
+            "B",
+            900,
+        ]
+    )
+    sheet.append([])
+    sheet.append(
+        [
+            2,
+            datetime.date(2026, 1, 5),
+            datetime.timedelta(hours=26, minutes=30),
+            "spot",
+            "small",
+            "fleet.spot[1]",
+            "A",
+            "C",
+            "D000002",
+            "C",
+            250.5,
+        ]
+    )
+    path = tmp_path / "plan.xlsx"
+    book.save(path)
+    plan = read_plan(instance, path)
+    assert plan.day.tolist() == [0, 0]
+    assert plan.start_minutes.tolist() == [570.0, 1590.0]
+    assert plan.load_quantity[:, 0].tolist() == [900.0, 250.5]
+
+
+def test_excel_problems_name_the_row(tmp_path: Path, instance: LineHaulInstance) -> None:
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.active.append(["dispatch", "date", *HAND_COLUMNS])
+    book.active.append(
+        [1, "2026-01-05", "spot", "big", "fleet.spot[9]", "A", "B", "D000001", "B", 9]
+    )
+    path = tmp_path / "plan.xlsx"
+    book.save(path)
+    with pytest.raises(PlanError, match=r"plan\.xlsx:2: there is no fleet\.spot\[9\]"):
+        read_plan(instance, path)
+    path.write_text("dispatch,date\n", encoding="utf-8")
+    with pytest.raises(PlanError, match="not an Excel workbook"):
+        read_plan(instance, path)
 
 
 def test_summary(solved: pirilib.SolveResult) -> None:
@@ -107,8 +187,8 @@ def test_summary(solved: pirilib.SolveResult) -> None:
 
 def test_start_times_round_trip(tmp_path: Path, document: dict, compile_document: Any) -> None:
     document["schema"] = "pirilib/linehaul@0.2"
-    for vehicle in document["vehicle_types"]:
-        vehicle["speed_kmh"] = 60.0
+    document["vehicle_types"][0]["speed_kmh"] = 60.0
+    document["vehicle_types"][1]["speed_kmh"] = 60.0
     document["fleet"]["owned"][0]["cost"]["per_hour"] = 10.0
     document["demand"][0]["ready"] = "09:00"
     document["rules"] = {"service": {"due_hours": 3, "penalty": 0.4, "max_deferral_days": 1}}
@@ -124,7 +204,8 @@ def test_start_times_round_trip(tmp_path: Path, document: dict, compile_document
     first = evaluate(instance, plan)
     path = tmp_path / "plan.csv"
     write_plan(first, path)
-    starts = [line.split(",")[2] for line in path.read_text("utf-8-sig").splitlines()[1:]]
+    _, first_row, second_row, third_row = path.read_text("utf-8-sig").splitlines()
+    starts = [first_row.split(",")[2], second_row.split(",")[2], third_row.split(",")[2]]
     assert starts == ["10:00", "26:30", "00:00"]
     again = evaluate(instance, read_plan(instance, path))
     assert again.total_cost == pytest.approx(first.total_cost)

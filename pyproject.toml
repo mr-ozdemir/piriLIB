@@ -57,9 +57,10 @@ pyvrp = ["pyvrp>=0.14"]
 pirilib = "pirilib.cli:main"
 
 [dependency-groups]
-test = ["pytest>=8.0", "hypothesis>=6.100", "jsonschema>=4.23", "scipy>=1.14", "openpyxl>=3.1", "lightgbm>=4.0", "scikit-learn>=1.4"]
+test = ["pytest>=8.0", "hypothesis>=6.100", "coverage[toml]>=7.6", "jsonschema>=4.23", "scipy>=1.14", "openpyxl>=3.1", "lightgbm>=4.0", "scikit-learn>=1.4"]
 lint = ["ruff>=0.8", "mypy>=1.13", "types-PyYAML>=6.0"]
 docs = ["mkdocs>=1.6.1,<2", "mkdocs-material>=9.7", "mkdocstrings[python]>=1.0", "mkdocstrings-python>=2.0"]
+mutation = ["cosmic-ray>=8.7"]
 dev = [{ include-group = "test" }, { include-group = "lint" }]
 
 [tool.hatch.version]
@@ -89,6 +90,25 @@ testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 xfail_strict = true
 filterwarnings = ["error"]
+markers = [
+    "unit: tests one unit through its public API, in isolation (set by tests/conftest.py)",
+    "integration: tests several components, files or optional packages together",
+    "system: drives the command line, the documentation examples or the installed package",
+    "fuzz: generates many random or mutated inputs; the oracle is that no unexpected exception escapes",
+    "model: model-based test; a small state model predicts what the library must do",
+    "performance: times a solver against a budget; skipped unless pytest --performance",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["pirilib"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+precision = 1
+fail_under = 95
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
 
 [tool.ruff]
 line-length = 100

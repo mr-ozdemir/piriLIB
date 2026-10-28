@@ -1,5 +1,6 @@
 """Times, lateness, deferral, handling capacity and vehicle limits (schema 0.2)."""
 
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -29,8 +30,8 @@ GOAL = obj.total_cost() + 1e6 * obj.violations()
 def timed(document: dict[str, Any]) -> dict[str, Any]:
     """The test document with speeds, hourly costs, ready times and a 3-hour service."""
     document["schema"] = "pirilib/linehaul@0.2"
-    for vehicle in document["vehicle_types"]:
-        vehicle["speed_kmh"] = 60.0
+    document["vehicle_types"][0]["speed_kmh"] = 60.0
+    document["vehicle_types"][1]["speed_kmh"] = 60.0
     document["fleet"]["owned"][0]["cost"]["per_hour"] = 10.0
     document["demand"][0]["ready"] = "09:00"
     document["rules"] = {
@@ -57,8 +58,7 @@ def agree(instance: LineHaulInstance, chosen: Plan) -> Any:
     evaluation = evaluate(instance, chosen)
     report = check_plan(instance, chosen)
     assert report.total_cost == pytest.approx(evaluation.total_cost, rel=1e-12)
-    for name, amount in report.totals().items():
-        assert evaluation.violations[name] == pytest.approx(amount), name
+    assert evaluation.violations == pytest.approx(report.totals())
     return evaluation
 
 
@@ -139,15 +139,12 @@ def test_times_need_speeds(document: dict[str, Any]) -> None:
     document["demand"][0]["due"] = "2026-01-04T12:00:00"
     with pytest.raises(SpecError) as info:
         parse_spec(document)
-    lines = str(info.value).splitlines()[1:]
+    message = str(info.value)
     assert (
-        "- vehicle_types[0].speed_kmh: is required, because hourly costs or due times are used"
-        in lines
+        "\n- vehicle_types[0].speed_kmh: is required, because hourly costs or due times are used\n"
+        in message
     )
-    assert any(
-        line.startswith("- demand[0].due: 2026-01-04 12:00:00 is before it is ready")
-        for line in lines
-    )
+    assert re.search(r"(?m)^- demand\[0\]\.due: 2026-01-04 12:00:00 is before it is ready", message)
 
 
 def test_unknown_vehicle_limit_type(document: dict[str, Any]) -> None:
@@ -158,7 +155,10 @@ def test_unknown_vehicle_limit_type(document: dict[str, Any]) -> None:
         parse_spec(document)
 
 
-KEPT = ("route", "load_route", "ready", "deferral", "ban", "owned_line", "capacity", "split")
+KEPT = {"route", "load_route", "ready", "deferral", "ban", "owned_line", "capacity", "split"}
+"""Rules the solvers never break, whatever the penalties."""
+CENTER_RULES = {"handling", "vehicle_limit", "ready", "deferral"}
+"""Rules of the centers and the calendar that a plan within the room keeps."""
 QUICK = ACOConfig(ants=6, iterations=8, patience=4)
 
 
@@ -210,10 +210,8 @@ def scheduled_document(seed: int, base: dict[str, Any]) -> dict[str, Any]:
 def test_the_colony_plans_with_handling_capacity() -> None:
     instance = synthetic_case()
     result = ACOSolver().solve(instance, GOAL, seed=0)
-    violations = result.evaluation.violations
     assert result.stats["mode"] == "linear"
-    for name in ("handling", "vehicle_limit", "ready", "deferral"):
-        assert violations[name] == 0, name
+    assert result.evaluation.violated().keys() & CENTER_RULES == set()
     assert result.stats["score"] == pytest.approx(result.objective, rel=1e-6)
 
     roomy = ACOSolver().solve(synthetic_case(250000.0), GOAL, seed=0)
@@ -227,8 +225,7 @@ def test_whole_plans_keep_handling_capacity() -> None:
         synthetic_case(), objective=lambda evaluation: GOAL(evaluation), seed=0
     )
     assert result.stats["mode"] == "general"
-    for name in ("handling", "vehicle_limit", "ready", "deferral"):
-        assert result.evaluation.violations[name] == 0, name
+    assert result.evaluation.violated().keys() & CENTER_RULES == set()
 
 
 @pytest.mark.parametrize("seed", range(16))
@@ -242,10 +239,7 @@ def test_the_score_is_the_evaluated_objective(
     assert result.stats["mode"] == "linear"
     assert result.objective == pytest.approx(GOAL(evaluation))
     assert result.stats["score"] == pytest.approx(result.objective, rel=1e-6)
-    if evaluation.feasible:
-        assert result.stats["score"] == pytest.approx(evaluation.total_cost, rel=1e-6)
-    for name in KEPT:
-        assert evaluation.violations[name] == 0, name
+    assert evaluation.violated().keys() & KEPT == set()
 
 
 def deferral_document(document: dict[str, Any], days: int) -> dict[str, Any]:
@@ -333,9 +327,69 @@ def test_whole_plans_did_not_change() -> None:
     assert len(result.plan) == 52
 
 
-def test_the_exact_solver_does_not_plan_times_yet(
+def test_the_exact_solver_needs_handling_without_time(
     document: dict[str, Any], compile_document: Callable[..., LineHaulInstance]
 ) -> None:
     instance = compile_document(timed(document))
-    with pytest.raises(ValueError, match="not yet supported"):
+    with pytest.raises(ValueError, match="handling takes no time"):
         ExactSolver().solve(instance, GOAL)
+
+
+def no_handling_time(document: dict[str, Any]) -> dict[str, Any]:
+    """Loading and unloading take no time, and demand may be split (for the exact solver)."""
+    document["rules"]["handling"] = {"minutes_per_unit": 0.0}
+    document["rules"]["split_demand"] = True
+    return document
+
+
+@pytest.mark.parametrize("seed", range(8))
+def test_the_exact_score_is_the_evaluated_objective(
+    seed: int, random_document: Callable[[int], dict[str, Any]]
+) -> None:
+    document = no_handling_time(scheduled_document(seed, random_document(seed)))
+    instance = parse_spec(document).compile()
+    assert instance.scheduled
+    result = ExactSolver().solve(instance, GOAL)
+    assert result.objective == pytest.approx(GOAL(result.evaluation))
+    assert result.stats["score"] == pytest.approx(result.objective, rel=1e-9)
+    assert result.evaluation.violated().keys() & KEPT == set()
+
+
+def test_the_exact_solver_defers_what_does_not_fit(
+    document: dict[str, Any], compile_document: Callable[..., LineHaulInstance]
+) -> None:
+    instance = compile_document(no_handling_time(deferral_document(document, 1)))
+    result = ExactSolver().solve(instance, GOAL)
+    evaluation = result.evaluation
+    assert evaluation.feasible
+    assert evaluation.plan.day.tolist() == [0, 1]
+    assert evaluation.plan.load_quantity[:, 0].tolist() == pytest.approx([500.0, 400.0])
+    assert evaluation.start_minute.tolist() == [540.0, 1440.0]
+    assert result.stats["score"] == pytest.approx(evaluation.total_cost, rel=1e-9)
+
+
+def test_the_exact_solver_keeps_vehicle_limits(
+    document: dict[str, Any], compile_document: Callable[..., LineHaulInstance]
+) -> None:
+    document = no_handling_time(timed(document))
+    document["centers"][1]["vehicle_limits"] = {"big": 0}
+    instance = compile_document(document)
+    result = ExactSolver().solve(instance, GOAL)
+    evaluation = result.evaluation
+    assert evaluation.feasible
+    plan = evaluation.plan
+    stop_type = evaluation.vehicle_type[np.repeat(np.arange(len(plan)), np.diff(plan.stop_start))]
+    assert not np.any((plan.stop_center == B) & (stop_type == BIG))
+    colony = ACOSolver(QUICK).solve(instance, GOAL, seed=0)
+    assert result.objective <= colony.objective * (1 + 1e-9)
+
+
+def test_the_exact_solver_prices_lateness(
+    document: dict[str, Any], compile_document: Callable[..., LineHaulInstance]
+) -> None:
+    instance = compile_document(no_handling_time(timed(document)))
+    result = ExactSolver().solve(instance, GOAL)
+    colony = ACOSolver(QUICK).solve(instance, GOAL, seed=0)
+    assert result.evaluation.feasible
+    assert result.objective <= colony.objective * (1 + 1e-9)
+    assert result.stats["score"] == pytest.approx(result.evaluation.total_cost, rel=1e-9)

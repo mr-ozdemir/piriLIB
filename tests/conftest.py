@@ -1,11 +1,13 @@
 import copy
 import datetime as dt
+import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import pytest
+from hypothesis import settings
 
 from pirilib.spec import LineHaulInstance, parse_spec
 
@@ -49,7 +51,15 @@ _DOCUMENT: dict[str, Any] = {
 
 @pytest.fixture
 def document() -> dict[str, Any]:
-    """A small valid problem document with inline tables; every test gets its own copy."""
+    """A small valid problem document with inline tables; every test gets its own copy.
+
+    Three centers on the equator one degree apart (``A``, ``B``, ``C``); ``C`` bans the
+    ``big`` type. ``big`` holds 1000 desi and ``small`` 400. One owned ``big`` vehicle runs
+    ``A`` to ``B`` (fixed 100, 1 per km); the spot market offers ``big`` (fixed 300, 2 per km,
+    unlimited) and ``small`` (fixed 150, 1.5 per km, 3 available). Demand over the two days:
+    ``A`` to ``B`` 900 desi (only ``big`` can carry it), ``A`` to ``C`` 250 desi (``small``
+    carries it, ``big`` may not enter ``C``) and ``B`` to ``A`` 120 desi on the second day.
+    """
     return copy.deepcopy(_DOCUMENT)
 
 
@@ -72,7 +82,40 @@ def instance(document: dict[str, Any]) -> LineHaulInstance:
 
 
 def random_document(seed: int) -> dict[str, Any]:
-    """A small random problem that passes validation, with varied rules."""
+    """A small random problem that passes validation, drawn from ``seed`` alone.
+
+    The same seed always gives the same document. The numbers only need to give a varied,
+    valid problem of a size the solvers finish quickly; none of them carries a meaning of its
+    own beyond the reason given here.
+
+    Centers: 3 to 7, named ``N0``, ``N1``, ... at latitude 38 to 41 and longitude 27 to 33
+    (an area the size of a region, so distances are tens to hundreds of kilometres); each
+    bans the ``big`` type with probability 0.2. Road distances are 1.2 times the haversine
+    distance (a usual road to straight line ratio).
+
+    Vehicle types: ``big`` holds 1000 desi and ``small`` 400. With probability 0.3 the
+    capacities have a second dimension ``kg`` (``big`` 700 kg, ``small`` 300 kg).
+
+    Owned offers: 0 to 2. An offer is ``big`` with probability 0.5 when two centers allow
+    ``big`` and runs between such centers, otherwise ``small`` between any two centers. Each
+    has 1 or 2 vehicles, is mandatory with probability 0.6 and may stop over with
+    probability 0.6; it costs 100 to 600 fixed and 0.5 to 2 per km.
+
+    Spot offers: ``big`` (fixed 900, 3 per km) and ``small`` (fixed 500, 2 per km) are always
+    offered (at least as dear per km as any owned offer); with probability 0.3 the ``small``
+    ones are limited to 1 to 3.
+
+    Demand: 3 to 19 items over 1 to 3 days from 2026-06-01, the calendar ending on the last
+    of those days. With probability 0.7 demand may be split and an item holds 20 to 2500
+    desi, otherwise 20 to the 400 desi a ``small`` vehicle holds, so every item fits one
+    vehicle. With two dimensions an item also weighs 10 kg up to 0.7 times that desi upper
+    bound in kg (the ``kg`` to desi ratio of the ``big`` type).
+
+    Rules: ``min_fill`` for spot vehicles is one of 0, 0.1 and 0.3. Stopovers are enabled
+    with probability 0.8; with probability 0.5 ``max_stretch`` is set to 1.0 to 1.6, with
+    probability 0.3 ``forward_only`` is turned off and with probability 0.3 ``max_stops`` is
+    set to 1 to 3.
+    """
     rng = np.random.default_rng(seed)
     names = [f"N{i}" for i in range(int(rng.integers(3, 8)))]
     two = bool(rng.random() < 0.3)
@@ -162,3 +205,92 @@ def random_document(seed: int) -> dict[str, Any]:
 def random_document_fixture() -> Callable[[int], dict[str, Any]]:
     """A function from a seed to a small random problem document."""
     return random_document
+
+
+EXAMPLES = 100
+"""Examples per Hypothesis test in the ``dev`` and ``ci`` profiles (the Hypothesis default)."""
+
+FUZZ_EXAMPLES = 2000
+"""Examples per Hypothesis test in the long ``fuzz`` profile.
+
+The ``fuzz`` profile is the one exception to the rule that the tests are deterministic: it is
+an exploration run (the weekly quality workflow) and draws new examples on every run on
+purpose, so that it reaches inputs the fixed ``dev`` and ``ci`` runs never see. It keeps no
+example database, so a run leaves no state behind, and ``print_blob`` prints the
+``@reproduce_failure`` line of a failing example, which replays that failure exactly.
+"""
+
+settings.register_profile("dev", deadline=None, derandomize=True, max_examples=EXAMPLES)
+settings.register_profile(
+    "ci", deadline=None, derandomize=True, max_examples=EXAMPLES, print_blob=True
+)
+settings.register_profile(
+    "fuzz", deadline=None, database=None, max_examples=FUZZ_EXAMPLES, print_blob=True
+)
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
+
+
+class SuiteLevels:
+    """The level and technique markers of every test module (decision K235, ``docs/kararlar.md``).
+
+    A module is ``unit`` unless :attr:`levels` names it: ``integration`` modules work with
+    files, optional packages or several components together, ``system`` modules drive the
+    command line, the documentation examples or the installed package. A module directly in
+    ``tests/fuzz``, ``tests/model`` or ``tests/performance`` also carries the marker named
+    after that directory, and every module in ``tests/performance`` is a ``system`` test.
+
+    Attributes:
+        levels: Module name (without ``.py``) to level, for the modules that are not ``unit``
+        directory_levels: Directory name to the level of every module directly in it
+        techniques: Directory names that are technique markers as well
+    """
+
+    levels: ClassVar[dict[str, str]] = {
+        "test_adapters": "integration",
+        "test_bench": "integration",
+        "test_exact": "integration",
+        "test_forecast": "integration",
+        "test_loader": "integration",
+        "test_planio": "integration",
+        "test_schedule": "integration",
+        "test_tuning": "integration",
+        "test_waves": "integration",
+        "test_cli": "system",
+        "test_docs_examples": "system",
+        "test_package": "system",
+    }
+    directory_levels: ClassVar[dict[str, str]] = {"performance": "system"}
+    techniques = frozenset({"fuzz", "model", "performance"})
+
+    @classmethod
+    def markers(cls, path: Path) -> list[str]:
+        """The markers of the module at ``path``: its level, then its technique if it has one."""
+        directory = path.parent.name
+        level = cls.directory_levels.get(directory, cls.levels.get(path.stem, "unit"))
+        return [level, *sorted(cls.techniques & {directory})]
+
+
+@pytest.fixture
+def suite_markers() -> Callable[[Path], list[str]]:
+    """A function from a test module's path to the markers the suite gives its tests."""
+    return SuiteLevels.markers
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Add ``--performance``, which also runs the performance tests."""
+    parser.addoption(
+        "--performance",
+        action="store_true",
+        help="also run the performance tests (marked 'performance'), which time the solvers",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Mark every test with its level and technique; skip performance tests unless asked."""
+    skip = pytest.mark.skip(reason="performance test: run with --performance")
+    run_performance = config.getoption("--performance")
+    for item in items:
+        for name in SuiteLevels.markers(item.path):
+            item.add_marker(name)
+        if "performance" in item.keywords and not run_performance:
+            item.add_marker(skip)

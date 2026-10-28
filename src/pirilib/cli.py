@@ -93,7 +93,7 @@ def _parser() -> argparse.ArgumentParser:
 
     command = commands.add_parser("check", help="check a plan file against a problem")
     command.add_argument("problem")
-    command.add_argument("plan")
+    command.add_argument("plan", help="plan file (.csv, or .xlsx with openpyxl)")
     _table_options(command)
     command.set_defaults(run=_check)
 
@@ -104,6 +104,12 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--seeds", type=int, default=1, help="runs per problem and setting")
     command.add_argument("--tuner", choices=("abc", "random"), default="abc")
     command.add_argument("--config", help="base ACO settings as JSON")
+    command.add_argument(
+        "--validation",
+        nargs="+",
+        default=[],
+        help="problems the best settings must also beat the base on",
+    )
     command.set_defaults(run=_tune)
 
     command = commands.add_parser("generate", help="write a synthetic problem")
@@ -313,6 +319,13 @@ def _forecast(arguments: argparse.Namespace) -> int:
         network, _ = materialize_tables(network, network_path.parent)
         document = planning_document(network, forecast, factors=factors, waves=shares)
         parse_spec(document, source=str(network_path))
+        if factors is None:
+            print(
+                "warning: the problem plans the expected forecast without a buffer, "
+                "so about half of the days get more than planned; "
+                "pass --quantile, for example 0.8",
+                file=sys.stderr,
+            )
         target = Path(arguments.problem or network_path.with_name("problem.yaml"))
         target.write_text(yaml.safe_dump(document, allow_unicode=True, sort_keys=False), "utf-8")
         print(f"problem written to {target}")
@@ -427,7 +440,8 @@ def _tune(arguments: argparse.Namespace) -> int:
     from pirilib.tuning import BeeColony, RandomSearch, tune
 
     specs = [(path, load_spec(path)) for path in arguments.problems]
-    goal = _objective(specs)
+    held_out = [(path, load_spec(path)) for path in arguments.validation]
+    goal = _objective(specs + held_out)
     result = tune(
         [spec.compile() for _, spec in specs],
         goal,
@@ -435,9 +449,15 @@ def _tune(arguments: argparse.Namespace) -> int:
         tuner=BeeColony() if arguments.tuner == "abc" else RandomSearch(),
         base=_config(arguments.config),
         seeds=tuple(range(arguments.seeds)),
+        validation=[spec.compile() for _, spec in held_out],
     )
     settings = asdict(result.config)
     print(f"score {result.score * 100:+.2f}% against the base settings, {result.seconds:.0f} s")
+    if result.validation is not None:
+        print(
+            f"validation {result.validation * 100:+.2f}% against the base settings, "
+            f"{len(result.candidates)} settings checked"
+        )
     print(json.dumps(settings, indent=2))
     if arguments.output:
         Path(arguments.output).write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")

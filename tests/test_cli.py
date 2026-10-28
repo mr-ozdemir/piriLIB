@@ -2,13 +2,14 @@ import inspect
 import json
 import shutil
 from collections.abc import Callable
+from operator import itemgetter
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from pirilib.cli import _parser, main
+from pirilib.cli import main
 from pirilib.tuning import tune
 
 
@@ -104,10 +105,38 @@ def test_tune(capsys: pytest.CaptureFixture[str], example_path: Path, tmp_path: 
     assert json.loads(output.read_text(encoding="utf-8"))["iterations"] == 2
 
 
-def test_tune_budget_matches_the_library_default() -> None:
+def test_tune_with_validation(
+    capsys: pytest.CaptureFixture[str], example_path: Path, tmp_path: Path
+) -> None:
+    base = tmp_path / "base.json"
+    base.write_text(json.dumps({"ants": 4, "iterations": 2, "patience": 1}), encoding="utf-8")
+    arguments = ["tune", str(example_path), "--budget", "3", "--config", str(base)]
+    code, out, _ = run(capsys, *arguments, "--validation", str(example_path))
+    assert code == 0
+    assert "validation " in out
+    assert "settings checked" in out
+    code, out, _ = run(capsys, *arguments)
+    assert "validation" not in out
+
+
+def test_tune_validation_needs_the_same_objective(
+    capsys: pytest.CaptureFixture[str], example_path: Path, example_copy: Path
+) -> None:
+    rewrite(example_copy, lambda document: document["objective"].update(cost=2))
+    arguments = ["tune", str(example_path), "--budget", "1", "--validation", str(example_copy)]
+    code, _, err = run(capsys, *arguments)
+    assert code == 2
+    assert "define different objectives" in err
+
+
+def test_tune_budget_matches_the_library_default(capsys: pytest.CaptureFixture[str]) -> None:
     budget = inspect.signature(tune).parameters["budget"].default
+
+    with pytest.raises(SystemExit):
+        main(["tune", "--help"])
+
     assert budget == 40
-    assert _parser().parse_args(["tune", "problem.yaml"]).budget == budget
+    assert "settings to try (default 40)" in " ".join(capsys.readouterr().out.split())
 
 
 def test_generate_then_solve(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
@@ -134,18 +163,28 @@ def rewrite(path: Path, change: Callable[[dict[str, Any]], None]) -> Path:
     return path
 
 
-def test_solving_needs_the_objective_section(
+def test_a_problem_without_objective_is_still_valid(
     capsys: pytest.CaptureFixture[str], example_copy: Path
 ) -> None:
     rewrite(example_copy, lambda document: document.pop("objective"))
+
     code, _, _ = run(capsys, "validate", str(example_copy))
+
     assert code == 0
-    for command in ("solve", "tune"):
-        code, out, err = run(capsys, command, str(example_copy))
-        assert code == 2
-        assert out == ""
-        assert err.startswith(f"error: {example_copy}: the problem document has no objective:")
-        assert "objective:\n  cost: 1\n  penalties:" in err
+
+
+@pytest.mark.parametrize("command", ["solve", "tune"])
+def test_solving_needs_the_objective_section(
+    capsys: pytest.CaptureFixture[str], example_copy: Path, command: str
+) -> None:
+    rewrite(example_copy, lambda document: document.pop("objective"))
+
+    code, out, err = run(capsys, command, str(example_copy))
+
+    assert code == 2
+    assert out == ""
+    assert err.startswith(f"error: {example_copy}: the problem document has no objective:")
+    assert "objective:\n  cost: 1\n  penalties:" in err
 
 
 def test_tuning_needs_one_objective(
@@ -157,13 +196,23 @@ def test_tuning_needs_one_objective(
     assert "define different objectives" in err
 
 
-def test_the_penalty_option_is_gone(capsys: pytest.CaptureFixture[str], example_path: Path) -> None:
-    for command in ("solve", "tune"):
-        with pytest.raises(SystemExit) as info:
-            main([command, str(example_path), "--penalty", "10"])
-        assert info.value.code == 2
+@pytest.mark.parametrize(
+    "command",
+    [
+        lambda problem: ["solve", problem],
+        lambda problem: ["tune", problem],
+        lambda problem: ["bench", "tiny"],
+    ],
+    ids=["solve", "tune", "bench"],
+)
+def test_the_penalty_option_is_gone(
+    capsys: pytest.CaptureFixture[str],
+    example_path: Path,
+    command: Callable[[str], list[str]],
+) -> None:
     with pytest.raises(SystemExit) as info:
-        main(["bench", "tiny", "--penalty", "10"])
+        main([*command(str(example_path)), "--penalty", "10"])
+
     assert info.value.code == 2
 
 
@@ -216,7 +265,7 @@ def test_backtest(
     assert code == 0
     table = out.splitlines()
     assert table[1].split() == ["model", "WMAPE", "bias", "MAE", "skill"]
-    assert {line.split()[0] for line in table[2:]} == {"seasonal", "naive"}
+    assert sorted(map(lambda line: line.split()[0], table[2:])) == ["naive", "seasonal"]
 
 
 def test_forecast_to_problem(
@@ -249,6 +298,32 @@ def test_forecast_to_problem(
     code, out, _ = run(capsys, "solve", str(problem), "--ants", "4", "--iterations", "5")
     assert code == 0
     assert "total cost" in out
+
+
+def test_forecast_without_buffer_warns(
+    capsys: pytest.CaptureFixture[str], history_files: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    history, holidays, network = history_files
+    problem = tmp_path / "problem.yaml"
+    arguments = [
+        "forecast",
+        str(history),
+        "--holidays",
+        str(holidays),
+        "--model",
+        "seasonal",
+        "--network",
+        str(network),
+        "--problem",
+        str(problem),
+    ]
+    code, _, err = run(capsys, *arguments)
+    assert code == 0
+    assert problem.exists()
+    assert "warning: the problem plans the expected forecast without a buffer" in err
+    code, _, err = run(capsys, *arguments, "--quantile", "0.8", "--buffer-folds", "3")
+    assert code == 0
+    assert "warning" not in err
 
 
 def test_forecast_with_unknown_centers(
@@ -310,9 +385,9 @@ def test_forecast_split_into_waves(
     assert "wave shares of" in out
     lines = forecast.read_text("utf-8").splitlines()
     assert lines[0] == "origin,destination,date,wave,desi"
-    assert {line.split(",")[3] for line in lines[1:]} == {"09:00", "17:00"}
+    assert set(map(lambda line: line.split(",")[3], lines[1:])) == {"09:00", "17:00"}
     document = yaml.safe_load(problem.read_text("utf-8"))
-    assert {row["ready"] for row in document["demand"]} == {"09:00", "17:00"}
+    assert set(map(itemgetter("ready"), document["demand"])) == {"09:00", "17:00"}
     assert len(document["demand"]) == len(lines) - 1
     code, out, _ = run(capsys, "validate", str(problem))
     assert code == 0

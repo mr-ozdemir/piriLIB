@@ -9,6 +9,27 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
 
 ## [Unreleased]
 
+### Added
+
+- `ExactSolver` plans problems with times, deferral, handling capacity and
+  vehicle limits when handling takes no time (`rules.handling.minutes_per_unit`
+  is 0).
+- `read_plan` and `pirilib check` read .xlsx plans, as written by
+  `pirilib solve -o plan.xlsx`.
+- Test levels (`unit`, `integration`, `system`) on every test, fuzz tests of
+  the plan and problem readers, a model-based test of the ledger, opt-in
+  performance tests (`pytest --performance`), branch coverage in CI and a
+  weekly quality workflow with mutation testing.
+- `tune(validation=...)` and `pirilib tune --validation` score the best few
+  settings on validation instances and keep the base unless one beats it there.
+- `pirilib.tuning.default_sources` is public.
+- `docs/testing.md`: how the tests are organised and written, and how to run
+  the fuzz, model-based, performance and mutation tests.
+
+### Changed
+
+- `pirilib forecast --network` warns when no `--quantile` buffer is given.
+
 ## [0.1.0a1] - unreleased
 
 ### Added

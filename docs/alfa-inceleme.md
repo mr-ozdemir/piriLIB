@@ -67,6 +67,7 @@ Birlikte okunması gerekenler: K83 + K90 + K109 (ceza ağırlıkları), K55 + K2
 **Soru.** Varsayılan tahmin beklenen değer; tamponsuz plan günlerin yarısında açık kalır. CLI `--quantile` boşsa tampon yok. 0,8 kantil ölçümde +%25–32 hacimle %79–83 kapsama verdi.
 **Öneri.** Koru, ama CLI `forecast --network` kullanıldığında tampon verilmemişse uyarı bas; kılavuzda 0,8 önerisi zaten var.
 **Değiştirecek durum.** "Plan her zaman tamponlu" deniyorsa `--quantile 0.8` varsayılan olur.
+**Durum.** Uyarı eklendi (K230): `forecast --network` kantilsiz çalışınca stderr'e uyarı basıyor. Varsayılan tampon kararı sende.
 
 ### 12. K129 — Bias (-%6) için varsayılan model değiştirilmedi; `scale=True` deneysel
 **Soru.** Denenen hiçbir düzeltme doğruluğu bozmadan bias'ı gidermiyor (B seçeneği bias -0,7 ama WMAPE +0,8). Tampon bias'ı dolaylı kapatıyor.
@@ -82,7 +83,7 @@ Birlikte okunması gerekenler: K83 + K90 + K109 (ceza ağırlıkları), K55 + K2
 **Soru.** Zamanlı problemde ACO genel yola düşüyor ve yalnız ceza yönlendiriyor (ölçümde elleçleme kapasitesi 172.907 desi aşıldı); kesin çözücü hata veriyor. Alfa bu haliyle mi çıkacak, yoksa 3b önce mi?
 **Öneri.** Alfayı zamansız kapsamla duyur, 0.2 şema alanlarını "ölçülür ama planlanmaz" diye işaretle; 3b alfadan sonra.
 **Değiştirecek durum.** Alfa kullanıcısı dalga/teslim saati senaryosu test edecekse 3b önce gelmeli.
-**Durum.** 3b birleşti (K186–K199): ACO zamanı, elleçleme kapasitesini, araç limitlerini ve ertelemeyi planlıyor; kesin çözücü zamanlı problemi hâlâ reddediyor. Soru artık "3b alfaya deneysel olarak girsin mi?"; öneri: girsin, `docs/stability.md`'deki gibi deneysel etiketle.
+**Durum.** 3b birleşti (K186–K199): ACO zamanı, elleçleme kapasitesini, araç limitlerini ve ertelemeyi planlıyor; kesin çözücü zamanlı problemi hâlâ reddediyor. Soru artık "3b alfaya deneysel olarak girsin mi?"; öneri: girsin, `docs/stability.md`'deki gibi deneysel etiketle. K233 ile kesin çözücü elleçleme süresi sıfır olan zamanlı problemleri de planlıyor; süre varsa hâlâ reddediyor.
 
 ### 15. K142 — Modellenmeyenler: kiralık araçların zorunlu çıkışı (prototip K7), çalışma saatleri, sürücü kuralları, bacaklar arası bekleme
 **Soru.** Prototipin K7 kuralı iş kuralıydı; genel kütüphanede yok. Diğerleri kapsam dışı sayılabilir.
@@ -118,7 +119,7 @@ Birlikte okunması gerekenler: K83 + K90 + K109 (ceza ağırlıkları), K55 + K2
 | K04 | hatchling, src düzeni | onayla |
 | K05 | Çalışma bağımlılıkları numpy, pydantic, pyyaml | onayla |
 | K06 | PEP 735 `[dependency-groups]`, pip >= 25.1 | onayla |
-| K07 | Sürüm `0.0.1.dev0`, `_version.py` | onayla (S04 ile birlikte) |
+| K07 | Sürüm `_version.py`'de; şimdi `0.1.0a1` (K221) | onayla (S04 ile birlikte) |
 | K08 | ruff/mypy strict/pytest uyarı = hata | onayla |
 | K09 | İngilizce kod ve belgeler, README'de Türkçe bölüm | onayla |
 | K14 | pre-commit ruff sabit sürüm | onayla (v0.17.1'e çekildi) |
@@ -187,7 +188,7 @@ Birlikte okunması gerekenler: K83 + K90 + K109 (ceza ağırlıkları), K55 + K2
 | K110 | Plan dosyası yük başına satır, isimlerle | onayla |
 | K111 | Sayılar `repr`; `route_km`/`dispatch_cost` okunmaz | onayla |
 | K112 | `kind`/`vehicle_type` `source` ile tutarlı olmalı | onayla |
-| K113 | Excel yalnız yazılır | onayla |
+| K113 | Excel yalnız yazılır | onayla (K234 ile planlar Excel'den de okunuyor) |
 | K114 | Sentetik üreteç (log-normal, kütle çekim, %10 yasak) | onayla |
 | K116 | `docs/guide.md`; belge sitesi yok | onayla (K162 ile site geldi; S05) |
 | K117 | Yayın iş akışı hazır, çalıştırılmadı | onayla (S02–S04) |
@@ -273,5 +274,5 @@ Metin / kod uyuşmazlıkları:
 14. **K151.** `Service` ve `Handling` modelleri `pirilib.spec`'ten dışa verilmiyordu. *Eklendi; `docs/stability.md` CLI satırı 8 komutun hepsini sayıyor.*
 15. **Kılavuz §2 kısıt tablosu.** *`ready`, `deferral`, `handling`, `vehicle_limit` eklendi; `load_route` artık "day" demiyor.*
 16. **K14.** *pre-commit ruff `v0.17.1`'e çekildi.*
-17. **K143.** Kod ve yapılandırmada `#` yorum yok; README ve kılavuzdaki kod örneklerinde `#` açıklamalar var. *Soru S10'a eklendi.*
+17. **K143.** Kod ve yapılandırmada `#` yorum yok; README ve kılavuzdaki kod örneklerindeki `#` açıklamalar metne taşındı. *S10 kapandı (#7, issue #13).*
 18. **K03.** *Windows 3.12 CI matrisine eklendi.*

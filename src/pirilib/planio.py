@@ -21,8 +21,10 @@ without loads has one row with the load columns empty. Columns:
 """
 
 import csv
+import datetime
 import os
 import re
+import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
@@ -155,8 +157,10 @@ def read_plan(
 ) -> Plan:
     """Read a plan written by :func:`write_plan` (or by hand) for ``instance``.
 
-    Every problem is reported at once in a :class:`~pirilib.PlanError`, with the
-    line it is on.
+    A file ending with ``.xlsx`` is read as Excel (its ``plan`` sheet, or the
+    first one), which needs openpyxl (``pip install "pirilib[excel]"``). Every
+    problem is reported at once in a :class:`~pirilib.PlanError`, with the line
+    (or Excel row) it is on.
     """
     file = Path(path)
     days = {day.isoformat(): position for position, day in enumerate(instance.days)}
@@ -167,39 +171,103 @@ def read_plan(
     order: list[str] = []
     parts: dict[str, dict[str, Any]] = {}
     try:
-        with file.open(newline="", encoding="utf-8-sig") as handle:
-            reader = csv.DictReader(handle, delimiter=delimiter)
-            missing = [
-                name
-                for name in (*_FIXED, *_LOAD, *instance.dimensions)
-                if name not in (reader.fieldnames or []) and name not in _OPTIONAL
-            ]
-            if missing:
-                header = reader.fieldnames or []
-                hint = " (is the delimiter right?)" if len(header) <= 1 else ""
-                raise PlanError(f"{file.name}: missing column(s) {missing}{hint}")
-            for record in reader:
-                where = f"{file.name}:{reader.line_num}"
-                found = _read_row(record, instance, days, centers, demands, sizes, decimal)
-                if isinstance(found, list):
-                    problems += [f"{where}: {problem}" for problem in found]
-                    continue
-                key, dispatch, load = found
-                if key not in parts:
-                    order.append(key)
-                    parts[key] = {"dispatch": dispatch, "loads": []}
-                elif parts[key]["dispatch"] != dispatch:
-                    problems.append(f"{where}: dispatch {key} differs from its first row")
-                if load is not None:
-                    parts[key]["loads"].append(load)
+        if file.suffix.lower() == ".xlsx":
+            header, records = _read_excel(file, decimal)
+        else:
+            header, records = _read_csv(file, delimiter)
     except OSError as exc:
         raise PlanError(f"cannot read {file}: {exc.strerror or exc}") from exc
+    missing = [
+        name
+        for name in (*_FIXED, *_LOAD, *instance.dimensions)
+        if name not in header and name not in _OPTIONAL
+    ]
+    if missing:
+        hint = " (is the delimiter right?)" if len(header) <= 1 else ""
+        raise PlanError(f"{file.name}: missing column(s) {missing}{hint}")
+    for line, record in records:
+        where = f"{file.name}:{line}"
+        found = _read_row(record, instance, days, centers, demands, sizes, decimal)
+        if isinstance(found, list):
+            problems += [f"{where}: {problem}" for problem in found]
+            continue
+        key, dispatch, load = found
+        if key not in parts:
+            order.append(key)
+            parts[key] = {"dispatch": dispatch, "loads": []}
+        elif parts[key]["dispatch"] != dispatch:
+            problems.append(f"{where}: dispatch {key} differs from its first row")
+        if load is not None:
+            parts[key]["loads"].append(load)
     if problems:
         raise PlanError(f"{file.name}: invalid plan\n{bullets(problems)}")
     dispatches = [
         Dispatch(**{**parts[key]["dispatch"], "loads": tuple(parts[key]["loads"])}) for key in order
     ]
     return Plan.from_dispatches(dispatches, len(instance.dimensions))
+
+
+Records = list[tuple[int, dict[str, str | None]]]
+"""Rows of a plan table with their line (or Excel row) numbers."""
+
+
+def _read_csv(file: Path, delimiter: str) -> tuple[list[str], Records]:
+    with file.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        records = [(reader.line_num, record) for record in reader]
+        return list(reader.fieldnames or []), records
+
+
+def _read_excel(file: Path, decimal: str) -> tuple[list[str], Records]:
+    """The ``plan`` sheet (or the first one), every cell as the text a CSV file would hold."""
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        raise ImportError(
+            'reading .xlsx files needs openpyxl: pip install "pirilib[excel]"'
+        ) from None
+    try:
+        book = load_workbook(file, read_only=True, data_only=True)
+    except zipfile.BadZipFile as exc:
+        raise PlanError(f"cannot read {file}: not an Excel workbook") from exc
+    try:
+        sheet = book["plan"] if "plan" in book.sheetnames else book.worksheets[0]
+        values = list(sheet.iter_rows(values_only=True))
+    finally:
+        book.close()
+    if not values:
+        return [], []
+    header = [_cell_text(value, decimal) for value in values[0]]
+    records: Records = [
+        (
+            line,
+            {
+                name: _cell_text(value, decimal)
+                for name, value in zip(header, row, strict=False)
+                if name
+            },
+        )
+        for line, row in enumerate(values[1:], start=2)
+        if any(value not in (None, "") for value in row)
+    ]
+    return header, records
+
+
+def _cell_text(value: Any, decimal: str) -> str:
+    """An Excel value as CSV text: dates as 2026-01-05, times and durations as 09:30."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime.datetime):
+        return value.date().isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    if isinstance(value, datetime.time):
+        return _clock(value.hour * 60.0 + value.minute + value.second / 60.0)
+    if isinstance(value, datetime.timedelta):
+        return _clock(value.total_seconds() / 60.0)
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return _text(value, decimal)
 
 
 def _read_row(
