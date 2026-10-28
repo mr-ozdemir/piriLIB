@@ -1,0 +1,60 @@
+name: Quality
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    env:
+      HYPOTHESIS_PROFILE: fuzz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e . --group test
+      - run: pytest -m "fuzz or model"
+
+  performance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e . --group test
+      - run: pytest -m performance --performance --junitxml=performance.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: performance
+          path: performance.xml
+
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e . --group test --group mutation
+      - run: cosmic-ray baseline mutation/evaluation.toml
+      - run: cosmic-ray init mutation/evaluation.toml session.sqlite
+      - run: cosmic-ray exec mutation/evaluation.toml session.sqlite
+      - run: cr-report session.sqlite --show-pending > mutation-report.txt
+      - run: cr-rate session.sqlite --estimate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mutation
+          path: |
+            session.sqlite
+            mutation-report.txt
