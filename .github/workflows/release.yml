@@ -8,18 +8,37 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install --upgrade pip build
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e . --group dev
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+      - run: pytest
+
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip build packaging
       - name: Check that the tag matches the package version
+        id: version
         run: |
           version=$(python -c "import runpy; print(runpy.run_path('src/pirilib/_version.py')['__version__'])")
           test "v$version" = "$GITHUB_REF_NAME"
+          python -c "from packaging.version import Version; v = Version('$version'); assert str(v) == '$version', 'version is not in normalized PEP 440 form'; print(f'prerelease={str(v.is_prerelease).lower()}')" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
       - run: python -m build
       - name: Smoke test the wheel
         run: |
@@ -32,7 +51,8 @@ jobs:
           path: dist/
 
   testpypi:
-    needs: build
+    name: testpypi (every version)
+    needs: [test, build]
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -47,7 +67,9 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
   pypi:
-    needs: testpypi
+    name: pypi (final versions only)
+    needs: [build, testpypi]
+    if: needs.build.outputs.prerelease == 'false'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
