@@ -387,6 +387,9 @@ from pirilib.tuning import tune
 
 result = tune([instance_a, instance_b], goal, budget=60, seeds=(0, 1))
 better = pirilib.ACOSolver(result.config)
+
+checked = tune([instance_a, instance_b], goal, seeds=(0, 1), validation=[instance_c])
+print(checked.score, checked.validation, len(checked.candidates))
 ```
 
 The artificial bee colony searches the space of ACO settings (`aco_space()`).
@@ -400,6 +403,18 @@ search were close (the colony slightly ahead at 40); on standard test
 functions the colony was clearly ahead. Check tuned settings on instances you
 did not tune on: in two of sixteen colony runs, a setting that was clearly
 better on the training instances was no better than the base on new ones.
+
+`validation` does this check inside `tune`. The best few settings of the search
+(`candidates`, 3 by default) that beat the base on the training instances are
+also solved on the validation instances, with the same seeds, and scored
+against the base there. The one with the best validation score is returned if
+it beats the base there by `min_improvement`; otherwise the base is kept.
+`result.validation` is its validation score and `result.candidates` lists every
+setting checked. These solves come on top of `budget`. Validation catches only
+the failures that its instances show: give it instances other than the training
+ones that look like the ones you will plan, and keep a few more for a final
+test. On the command line, `pirilib tune train.yaml --validation check.yaml`
+does the same.
 
 ## 6. Forecast demand
 
@@ -494,7 +509,8 @@ Date files (`--holidays`, `--unusual`) have one ISO date per line.
 
 `solve`, `tune` and `bench` minimize the objective of the problem files (for
 `bench`, the generated ones). Without an `objective:` section they stop with
-exit status 2; `tune` also needs every training file to define the same one.
+exit status 2; `tune` also needs every training and validation file to define
+the same one.
 `generate` writes `cost: 1` with penalties `coverage: 10000000` and
 `other: 1000000`, and `forecast --network` copies the network's section.
 
