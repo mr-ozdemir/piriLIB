@@ -6,9 +6,20 @@ vehicles on the route, and the continuous share of each stop's demand they
 deliver. Identical vehicles on one route share its loads evenly, so the program
 is exact for the linear objective, minimum fill included.
 
-The result is optimal per subproblem. Subproblems of a day share limited spot
-offers one after another, so with such limits the whole plan may not be
-optimal. Demand that may not be split is not supported.
+On scheduled instances the subproblems come in the order of the
+:class:`~pirilib.solvers.decompose.Coordinator`, against the room the
+:class:`~pirilib.solvers.ledger.Ledger` leaves them. Every route is timed as the
+evaluator times it, so its hourly cost, the lateness of each share it delivers
+and the days it uses each center are fixed per column. Handling and vehicles
+beyond the room are slack columns at their violation weight, and demand that may
+wait costs its deferral estimate. This is exact only while loading and unloading
+take no time (``rules.handling.minutes_per_unit = 0``); with handling time, the
+times of a route depend on its load.
+
+The result is optimal per subproblem. Subproblems share limited spot offers,
+and on scheduled instances the handling capacity and vehicle slots of centers,
+one after another, so with such limits the whole plan may not be optimal.
+Demand that may not be split is not supported.
 """
 
 import ctypes
@@ -29,10 +40,20 @@ from pirilib.constraints import Constraint
 from pirilib.evaluation import TOLERANCE, evaluate
 from pirilib.objective import Objective, linear_form
 from pirilib.plan import OWNED, SPOT
-from pirilib.solvers._colony import Shared
+from pirilib.solvers._colony import Batch, Colony, Shared, scores
 from pirilib.solvers._routing import route_km, route_ok, route_value
+from pirilib.solvers._timing import late_hours, route_timing, timeline
 from pirilib.solvers.base import SolveResult, linear_coefficients, require_objective
-from pirilib.solvers.decompose import UNBOUNDED, PlanBuilder, Routes, Subproblem, subproblems
+from pirilib.solvers.decompose import (
+    MINUTES_PER_DAY,
+    UNBOUNDED,
+    Coordinator,
+    PlanBuilder,
+    Routes,
+    Subproblem,
+    subproblems,
+)
+from pirilib.solvers.ledger import Ledger, Room
 from pirilib.spec.instance import UNLIMITED, LineHaulInstance
 
 
@@ -118,10 +139,10 @@ class ExactSolver:
             raise ValueError(
                 "ExactSolver needs an objective with a linear form and no own constraints"
             )
-        if instance.scheduled:
+        if instance.scheduled and instance.rules.handling.minutes_per_unit > 0:
             raise ValueError(
-                "ExactSolver: times, deferral, handling capacity and vehicle limits are not "
-                "yet supported; use ACOSolver"
+                "ExactSolver plans scheduled instances only when handling takes no time "
+                "(rules.handling.minutes_per_unit = 0); use ACOSolver"
             )
         if not instance.rules.split_demand:
             raise ValueError("ExactSolver does not support rules.split_demand = false")
@@ -134,20 +155,27 @@ class ExactSolver:
         spot_left = {day: limits.copy() for day in range(len(instance.days))}
         builder = PlanBuilder(instance)
         optimal, columns, score = True, 0, 0.0
-        for problem in subproblems(instance):
+        ledger = Ledger(instance) if instance.scheduled else None
+        coordinator = Coordinator(instance) if instance.scheduled else None
+        for problem in coordinator or subproblems(instance):
             available = problem.available.copy()
             spot = problem.kind == SPOT
             left = spot_left[problem.day]
             available[spot] = np.minimum(available[spot], left[problem.source[spot]])
+            room = ledger.room(problem) if ledger is not None else None
             result = solve_subproblem(
-                problem, coefficients, shared, available, self.max_nodes, self.time_limit
+                problem, coefficients, shared, available, self.max_nodes, self.time_limit, room
             )
             builder.add(problem, result.routes)
             used = np.bincount(result.routes.option, minlength=problem.options)
             left[problem.source[spot]] -= used[spot]
             optimal &= result.optimal
             columns += result.columns
-            score += result.value
+            if ledger is not None and coordinator is not None:
+                score += _settle(problem, result.routes, coefficients, shared, room, ledger)
+                coordinator.defer(problem, *problem.leftover(result.routes, True))
+            else:
+                score += result.value
         plan = builder.build()
         evaluation = evaluate(instance, plan)
         return SolveResult(
@@ -199,6 +227,134 @@ def candidate_routes(
     return routes
 
 
+Cell = tuple[float, list[tuple[int, float]]]
+"""The room left in one center cell and the (column, amount) entries that use it."""
+
+
+@dataclass(frozen=True, eq=False, slots=True)
+class ColumnTimes:
+    """When the vehicles of every candidate route run, if handling takes no time.
+
+    Days count from the first day of the room and stop at its last one.
+
+    Attributes:
+        hours: (routes,) from the start of loading to the end of the last unloading
+        late: Per (route, node), the lateness penalty of the route carrying all of
+            the node's demand
+        start: (routes,) day loading starts at the origin
+        arrival: Per (route, node), day the route reaches the stop
+    """
+
+    hours: NDArray[np.float64]
+    late: dict[tuple[int, int], float]
+    start: NDArray[np.int64]
+    arrival: dict[tuple[int, int], int]
+
+    @classmethod
+    def of(
+        cls,
+        problem: Subproblem,
+        shared: Shared,
+        routes: Sequence[tuple[int, tuple[int, ...]]],
+        room: Room | None,
+    ) -> "ColumnTimes":
+        """Untimed instances get zero hours and no lateness."""
+        hours = np.zeros(len(routes))
+        start_day = np.zeros(len(routes), dtype=np.int64)
+        late: dict[tuple[int, int], float] = {}
+        arrival: dict[tuple[int, int], int] = {}
+        if not shared.scheduled:
+            return cls(hours, late, start_day, arrival)
+        first = problem.day if room is None else room.day
+        last = 0 if room is None else room.handling.shape[2] - 1
+
+        def day_of(minute: float) -> int:
+            return min(max(math.floor(minute / MINUTES_PER_DAY) - first, 0), last)
+
+        primary = shared.primary
+        for r, (option, stops) in enumerate(routes):
+            carried = [stop for stop in stops if problem.demand[stop].max() > 0]
+            ready = max((float(problem.node_ready[stop]) for stop in carried), default=-math.inf)
+            unloads = [0.0] * len(stops)
+            start, finishes = route_timing(problem, shared, option, stops, unloads, ready)
+            hours[r] = (finishes[-1] - start) / 60.0
+            start_day[r] = day_of(start)
+            for stop, finish in zip(stops, finishes, strict=True):
+                arrival[(r, stop)] = day_of(finish)
+                if stop in carried:
+                    overdue = late_hours(finish - problem.item_due[stop])
+                    late[(r, stop)] = shared.penalty * float(
+                        np.sum(problem.item_quantity[stop, :, primary] * overdue)
+                    )
+        return cls(hours, late, start_day, arrival)
+
+    def cells(
+        self,
+        problem: Subproblem,
+        routes: Sequence[tuple[int, tuple[int, ...]]],
+        shares: Sequence[tuple[int, int]],
+        coefficients: Mapping[str, float],
+        room: Room | None,
+        primary: int,
+    ) -> tuple[list[Cell], list[Cell]]:
+        """The limited (center, day) handling cells and (center, day, type) vehicle cells.
+
+        Share entries are numbered from 0 after the vehicle counts, as in
+        :func:`solve_subproblem`. Cells whose violation has no weight are left out.
+        """
+        if room is None:
+            return [], []
+        handling: dict[tuple[int, int], list[tuple[int, float]]] = {}
+        if coefficients.get("violation[handling]", 0.0) and np.isfinite(room.limit).any():
+            for index, (r, node) in enumerate(shares):
+                amount = float(problem.demand[node, primary])
+                for place, day in ((0, int(self.start[r])), (1 + node, self.arrival[(r, node)])):
+                    if np.isfinite(room.limit[place]):
+                        handling.setdefault((place, day), []).append((len(routes) + index, amount))
+        vehicles: dict[tuple[int, int, int], list[tuple[int, float]]] = {}
+        if (
+            coefficients.get("violation[vehicle_limit]", 0.0)
+            and (room.slots < UNBOUNDED // 2).any()
+        ):
+            for r, (option, stops) in enumerate(routes):
+                kind = int(problem.vehicle_type[option])
+                places = [(0, int(self.start[r]))]
+                places += [(1 + stop, self.arrival[(r, stop)]) for stop in stops]
+                for place, day in places:
+                    if room.slots[0, place, day, kind] < UNBOUNDED // 2:
+                        vehicles.setdefault((place, day, kind), []).append((r, 1.0))
+        return (
+            [
+                (max(float(room.handling[0, place, day]), 0.0), entries)
+                for (place, day), entries in handling.items()
+            ],
+            [
+                (float(max(int(room.slots[0, place, day, kind]), 0)), entries)
+                for (place, day, kind), entries in vehicles.items()
+            ],
+        )
+
+
+def _settle(
+    problem: Subproblem,
+    routes: Routes,
+    coefficients: Mapping[str, float],
+    shared: Shared,
+    room: Room | None,
+    ledger: Ledger,
+) -> float:
+    """Charge the routes of a scheduled subproblem to the ledger; return their value.
+
+    The value leaves out demand handed to the next day, which is valued there.
+    """
+    remaining, item_left = problem.leftover(routes, True)
+    alone = Batch([problem], shared)
+    final = Colony.single(problem, routes, remaining, item_left)
+    value = float(scores(alone, final, coefficients, shared, room, waiting=False)[0, 0])
+    ledger.charge(problem, timeline(alone, final, shared))
+    return value
+
+
 def solve_subproblem(
     problem: Subproblem,
     coefficients: Mapping[str, float],
@@ -206,8 +362,13 @@ def solve_subproblem(
     available: NDArray[np.int64],
     max_nodes: int = 9,
     time_limit: float | None = None,
+    room: Room | None = None,
 ) -> SubproblemResult:
-    """The optimal routes of one subproblem for a linear objective."""
+    """The optimal routes of one subproblem for a linear objective.
+
+    On scheduled instances routes are timed (handling must take no time), and
+    handling and vehicles beyond ``room`` cost their violation weights.
+    """
     from scipy.optimize import Bounds, LinearConstraint, linprog, milp
     from scipy.sparse import coo_array
 
@@ -221,7 +382,11 @@ def solve_subproblem(
     shares = [(r, node) for r, (_, stops) in enumerate(routes) for node in stops if node in loaded]
     f_base, u_base = x_count, x_count + len(shares)
     s_base = u_base + len(loaded)
-    size = s_base + x_count
+    times = ColumnTimes.of(problem, shared, routes, room)
+    handling, slots = times.cells(problem, routes, shares, coefficients, room, primary)
+    h_base = s_base + x_count
+    v_base = h_base + len(handling)
+    size = v_base + len(slots)
     cost = np.zeros(size)
     upper = np.full(size, np.inf)
     integrality = np.zeros(size)
@@ -245,20 +410,24 @@ def solve_subproblem(
     for r, (option, stops) in enumerate(routes):
         km = route_km(problem, stops)
         empty = np.zeros(dimensions)
-        cost[r] = route_value(problem, coefficients, shared, option, km, empty) - _shortfall_part(
-            problem, coefficients, shared, option, empty
-        )
+        cost[r] = route_value(
+            problem, coefficients, shared, option, km, empty, hours=float(times.hours[r])
+        ) - _shortfall_part(problem, coefficients, shared, option, empty)
         bound = available[option]
         if bound >= UNBOUNDED:
             bound = math.ceil(float(np.max(total / problem.capacity[option]))) + 1
         upper[r] = bound
     kind_of = ["owned" if problem.kind[option] == OWNED else "spot" for option, _ in routes]
+    service = coefficients.get("service", 0.0)
     for index, (r, node) in enumerate(shares):
-        cost[f_base + index] = (
-            -coefficients.get(f"unused[{kind_of[r]}]", 0.0) * demand[node, primary]
-        )
+        cost[f_base + index] = -coefficients.get(f"unused[{kind_of[r]}]", 0.0) * demand[
+            node, primary
+        ] + service * times.late.get((r, node), 0.0)
     for position, node in enumerate(loaded):
-        quantity = demand[node]
+        waits = ~problem.item_final[node]
+        quantity = demand[node] - problem.item_quantity[node][waits].sum(axis=0)
+        waiting = problem.item_quantity[node, waits, primary]
+        deferred = float(np.sum(waiting * problem.defer_cost[node, waits]))
         cost[u_base + position] = (
             coefficients.get("unserved", 0.0) * quantity.sum()
             + sum(
@@ -266,9 +435,12 @@ def solve_subproblem(
                 for column, name in enumerate(shared.dimensions)
             )
             + coefficients.get("violation[coverage]", 0.0) * quantity.sum()
+            + service * deferred
         )
         upper[u_base + position] = 1.0
-    cost[s_base:] = coefficients.get("violation[min_fill]", 0.0)
+    cost[s_base:h_base] = coefficients.get("violation[min_fill]", 0.0)
+    cost[h_base:v_base] = coefficients.get("violation[handling]", 0.0)
+    cost[v_base:] = coefficients.get("violation[vehicle_limit]", 0.0)
 
     by_route: dict[int, list[int]] = {}
     by_node: dict[int, list[int]] = {}
@@ -294,6 +466,10 @@ def solve_subproblem(
         entries = [(r, 1.0) for r, (o, _) in enumerate(routes) if o == option]
         if entries and available[option] < UNBOUNDED:
             add_row(entries, -np.inf, float(available[option]))
+    for position, (left, entries) in enumerate(handling):
+        add_row([*entries, (h_base + position, -1.0)], -np.inf, left)
+    for position, (left, entries) in enumerate(slots):
+        add_row([*entries, (v_base + position, -1.0)], -np.inf, left)
 
     matrix = coo_array((vals, (rows, cols)), shape=(len(lower_bounds), size)).tocsr()
     options: dict[str, float] = {"mip_rel_gap": 1e-9}

@@ -93,7 +93,7 @@ def _parser() -> argparse.ArgumentParser:
 
     command = commands.add_parser("check", help="check a plan file against a problem")
     command.add_argument("problem")
-    command.add_argument("plan")
+    command.add_argument("plan", help="plan file (.csv, or .xlsx with openpyxl)")
     _table_options(command)
     command.set_defaults(run=_check)
 
