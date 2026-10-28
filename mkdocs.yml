@@ -23,6 +23,7 @@ nav:
   - User guide: guide.md
   - Building the objective: objective.md
   - API stability: stability.md
+  - Testing: testing.md
   - API reference:
       - pirilib: api/pirilib.md
       - pirilib.spec: api/spec.md

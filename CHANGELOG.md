@@ -9,6 +9,14 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
 
 ## [Unreleased]
 
+### Added
+
+- `tune(validation=...)` and `pirilib tune --validation` score the best few
+  settings on validation instances and keep the base unless one beats it there.
+- `pirilib.tuning.default_sources` is public.
+- `docs/testing.md`: how the tests are organised and written, and how to run
+  the fuzz, model-based, performance and mutation tests.
+
 ### Changed
 
 - `pirilib forecast --network` warns when no `--quantile` buffer is given.
