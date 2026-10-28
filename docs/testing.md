@@ -79,7 +79,9 @@ installed are not mocked; their tests are skipped with `pytest.importorskip`.
 
 Coverage is measured with branch coverage (`[tool.coverage.run] branch = true`).
 CI fails below 95 %; on 2026-10-28 the suite covered 96.5 % of 5929 statements
-and 1532 branches. Coverage shows what no test runs; it is not the goal and
+and 1532 branches. The coverage job installs the `ortools` and `pyvrp`
+extras, so the adapter tests run there; without them it measures 92.9 %.
+Coverage shows what no test runs; it is not the goal and
 not a proof of quality. A line that is run but whose result is never checked is
 covered and still untested, which mutation testing finds.
 
