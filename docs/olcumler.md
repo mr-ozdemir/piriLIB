@@ -137,6 +137,36 @@ Sonuç:
 - Test fonksiyonlarında 3 kaynak 24-100 değerlendirmede 4'ten iyi, 120 ve üstünde 4 kaynak iyi. ACO ayarında 40 bütçede 3 kaynaklı ABC rastgele aramayı 8 tohumun 6'sında geçiyor (eğitimde ve testte), 4 kaynaklı ABC yalnız 3'ünde. Kaynak kuralı buna göre değişti (K227).
 - 16 ABC çalışmasının 2'sinde aşırı uyum görüldü. 4 kaynaklı tohum 7 (bütçe 40 ve üstü) eğitimde -%32,55, testte +%0,11 verdi (24'te başka bir ayarla testte +%0,03). 3 kaynaklı tohum 4 (bütçe 60) eğitimde -%33,43, testte -%0,49 verdi. İkisinde de beta temel ayardaki 2'de ya da ona yakın (2,0 ve 2,24). Rastgele aramanın 32 sonucunda bu görülmedi (en kötü test -%10,85). Ayarı görülmemiş problemlerde denemek gerekli (K229).
 
+### Doğrulama problemleriyle ayar seçimi (K231)
+
+Küçük ve ucuz bir denetim; yukarıdaki ölçümün yerine geçmez. Amaç, `tune(validation=...)`'ın seçimi ne zaman değiştirdiğini ve görülmemiş testte ne verdiğini görmek.
+
+Kurulum:
+
+- Problemler `synthetic.generate(centers=12, days=1, demand_per_day=60)`: 2 eğitim (tohum 1000-1001), 4 doğrulama (3000-3003), 4 test (2000-2003). Amaç belgenin kendi `objective:` bölümü.
+- Temel ayar `ACOConfig(ants=4, iterations=5, patience=2, local_search=False)`, çözücü tohumları 0 ve 1, ABC (varsayılan ayarlar), bütçe 24, ayarlayıcı tohumları 0-7, `candidates=3`.
+- Her ayarlayıcı tohumu için `tune` doğrulamasız ve doğrulamalı çalıştı; seçilen ayar test problemlerinde temele göre `tune` ile aynı skorla ölçüldü.
+- Süre: 16 ayar çalışması ve test çözümleri tek süreçte 57 saniye. Doğrulama, ayar başına çözüm sayısını yaklaşık %30 artırıyor (100 eğitim çözümüne 32 doğrulama çözümü).
+
+| Tohum | Doğrulamasız: eğitim | Doğrulamasız: test | Doğrulamalı: eğitim | Doğrulamalı: doğrulama | Doğrulamalı: test |
+|---|---|---|---|---|---|
+| 0 | -%6,05 | -%19,16 | -%5,84 | -%19,98 | -%5,98 |
+| 1 | -%8,56 | -%21,18 | -%8,46 | -%30,87 | -%21,88 |
+| 2 | -%2,13 | +%988,91 | -%0,50 | -%5,16 | +%1009,22 |
+| 3 | -%6,79 | -%19,77 | aynı ayar | -%16,81 | -%19,77 |
+| 4 | -%7,81 | -%20,35 | aynı ayar | -%29,77 | -%20,35 |
+| 5 | -%6,46 | +%168,74 | -%6,28 | -%17,45 | -%19,87 |
+| 6 | -%7,63 | -%20,29 | -%7,63 | -%30,19 | -%20,78 |
+| 7 | -%6,32 | +%170,20 | -%6,26 | -%9,57 | +%170,19 |
+
+Sonuç:
+
+- Doğrulama 8 tohumun 6'sında seçimi değiştirdi. Test medyanı -%19,47'den -%19,82'ye, test ortalaması +%153,4'ten +%133,8'e indi.
+- Testteki büyük artılar (+%170, +%989) `min_fill` ihlalinden geliyor (ceza 1e6 × eksik miktar): seçilen ayar bazı test çözümlerinde, temelin kurala uyduğu yerde bir aracı eksik doldurdu. Tohum 5'te doğrulama bunu yakaladı (+%168,74 yerine -%19,87). Tohum 2 ve 7'de doğrulama problemlerinde aynı hata görülmedi, yakalanmadı. Tohum 7'nin ayarı test maliyetinde temelden ucuz, artı yalnız tek bir çözümün cezası.
+- Tohum 0'da doğrulamada daha iyi görünen ayar testte daha kötü (-%5,98, doğrulamasızda -%19,16). Doğrulama da sınırlı sayıda problemdir; ona da aşırı uyulabilir.
+- 2 doğrulama problemiyle (3000-3001) aynı çalışmada seçimler aynı çıktı.
+- Doğrulama, doğrulama problemlerinde görünen aşırı uyumu yakalıyor, garanti vermiyor. Kılavuz §5 ayrıca bir son test önermeye devam ediyor.
+
 ## Tahmin motoru (v0.2)
 
 ### Prototip verisiyle denklik

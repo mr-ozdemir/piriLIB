@@ -23,6 +23,9 @@ ruff check . && ruff format --check . && mypy
 pytest
 ```
 
+New tests follow [docs/testing.md](docs/testing.md): test levels, how to
+write a test, fuzz, model-based, performance and mutation testing.
+
 The code has no `#` comment lines; explanations go into docstrings. Decisions
 that change behaviour are written to `docs/kararlar.md`, measurements to
 `docs/olcumler.md`.
