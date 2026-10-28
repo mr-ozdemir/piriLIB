@@ -25,7 +25,7 @@ pip install "pirilib[forecast]"
 
 - `pirilib` is the core, with numpy, pydantic and PyYAML.
 - `exact` adds the exact solver for small subproblems (scipy).
-- `excel` adds writing plans as .xlsx (openpyxl).
+- `excel` adds writing and reading plans as .xlsx (openpyxl).
 - `forecast` adds the LightGBM and scikit-learn forecasters.
 
 On macOS, LightGBM also needs OpenMP: `brew install libomp`.
@@ -378,7 +378,9 @@ The default solver is the ant colony (`pirilib.ACOSolver`):
 
 `pirilib.solvers.exact.ExactSolver` solves every subproblem to optimality by
 mixed-integer programming. It is meant for small problems and for measuring
-the colony.
+the colony. With times, deferral or center limits it plans the subproblems in
+the colony's order, against the room the earlier ones left, as long as loading
+and unloading take no time (`rules.handling.minutes_per_unit: 0`).
 
 ## 5. Tune
 
@@ -500,7 +502,7 @@ pirilib solve problem.yaml -o plan.csv
 
 - `generate` writes a synthetic problem.
 - `--delimiter ";" --decimal ","` writes the plan for Turkish Excel.
-- `check` exits with status 1 if a rule is broken.
+- `check` reads .csv and .xlsx plans and exits with status 1 if a rule is broken.
 - The last `solve` plans the week that `forecast --problem` wrote.
 - `forecast --network` without `--quantile` warns: the problem then plans the
   expected forecast, and about half of the days get more than that.
@@ -586,8 +588,9 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
   and, rarely, a limit is exceeded (the penalty then shows it). Departures are
   always as early as the loads allow; the solver never sets `start` to wait.
   Planning one by one is slower: 2 to 2.5x the untimed time on a 10-center
-  problem and 4.5x on 81 centers. The exact solver does not support these
-  problems yet.
+  problem and 4.5x on 81 centers. The exact solver plans these problems only
+  when handling takes no time; with handling time the times of a route depend
+  on its load, and it raises an error.
 - Local search runs in plain Python; with cheap pre-checks and remembered
   rejections it takes about 15 to 20 % of solve time on large problems. Most of the
   rest is the colony's construction, in numpy on one core: with 81 centers a

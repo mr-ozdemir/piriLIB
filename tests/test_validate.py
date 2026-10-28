@@ -2,6 +2,7 @@
 
 import datetime as dt
 import math
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -215,20 +216,21 @@ def direct_plan(instance: LineHaulInstance, rng: np.random.Generator) -> Plan:
     return Plan.from_dispatches(dispatches, len(instance.dimensions))
 
 
+@pytest.mark.parametrize("make", [direct_plan, random_plan], ids=["direct", "random"])
 @pytest.mark.parametrize("instance_index", range(len(_INSTANCES)))
 @given(seed=st.integers(0, 2**32 - 1))
 @settings(max_examples=150, deadline=None)
-def test_evaluator_agrees_with_checker(instance_index: int, seed: int) -> None:
+def test_evaluator_agrees_with_checker(
+    make: Callable[[LineHaulInstance, np.random.Generator], Plan], instance_index: int, seed: int
+) -> None:
     instance = _INSTANCES[instance_index]
-    make = direct_plan if seed % 3 == 0 else random_plan
     plan = make(instance, np.random.default_rng(seed))
     evaluation = evaluate(instance, plan)
     report = check_plan(instance, plan)
     assert evaluation.total_cost == pytest.approx(report.total_cost, rel=1e-12)
-    for name, amount in report.totals().items():
-        assert evaluation.violations[name] == pytest.approx(amount, rel=1e-9, abs=1e-6), name
+    assert evaluation.violations == pytest.approx(report.totals(), rel=1e-9, abs=1e-6)
     assert evaluation.feasible == report.feasible
-    assert np.all(evaluation.route_km >= evaluation.direct_km * (1 - 1e-12))
+    np.testing.assert_array_equal(evaluation.route_km >= evaluation.direct_km * (1 - 1e-12), True)
     assert list(Plan.from_dispatches(plan.dispatches(), plan.dimensions).dispatches()) == list(
         plan.dispatches()
     )
