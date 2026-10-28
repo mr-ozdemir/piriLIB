@@ -121,3 +121,7 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   `solve`, `tune` and `bench` read it from the documents, and their `--penalty`
   option was removed. Generated documents and the example carry an explicit
   `objective:` section.
+- `BeeColony` without `sources` uses three food sources from 24 to 119
+  evaluations and four from 120 (before: four from 32), which did better on
+  test functions and on ACO tuning at the default budget of 40 settings. The
+  default budget stays 40.
