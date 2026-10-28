@@ -439,7 +439,7 @@ tuned = tune([training.compile()], training.build_objective(), budget=6, base=ba
 better = ACOSolver(tuned.config)
 ```
 
-A real run needs a budget of 60 or more and several instances (see the
+A real run needs a budget of 40 or more and several instances (see the
 [user guide](guide.md#5-tune)). Settings are compared by their relative
 difference to the base setting. A large penalty that no setting can avoid,
 such as the 80 desi of minimum fill above, inflates every objective and makes

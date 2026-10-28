@@ -100,7 +100,7 @@ def _parser() -> argparse.ArgumentParser:
     command = commands.add_parser("tune", help="tune ACO settings on training problems")
     command.add_argument("problems", nargs="+")
     command.add_argument("-o", "--output", help="write the settings as JSON")
-    command.add_argument("--budget", type=int, default=40, help="settings to try")
+    command.add_argument("--budget", type=int, default=40, help="settings to try (default 40)")
     command.add_argument("--seeds", type=int, default=1, help="runs per problem and setting")
     command.add_argument("--tuner", choices=("abc", "random"), default="abc")
     command.add_argument("--config", help="base ACO settings as JSON")

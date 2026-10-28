@@ -1,9 +1,23 @@
 # Public API and stability
 
-pirilib is pre-alpha: everything may still change. This page records which
-names are meant to become the stable 1.0 API, which stay experimental, and what
-has to happen before the API is frozen. It is reviewed together with the
-decision log at the first alpha.
+This page records which names are meant to become the stable 1.0 API, which
+stay experimental, and what has to happen before the API is frozen. It is
+reviewed together with the decision log during the alpha.
+
+## Alpha notice
+
+pirilib 0.1.0a1 is the first alpha release. Until 1.0, everything may change
+in any release, alphas and betas included: public names, the problem documents
+and their schema ids, plan files, command line options and the internal
+structure. The lists below are the intent for 1.0, not a promise for the
+releases before it.
+
+The default domain of pirilib is fleet optimization in general, built on one
+core of solver, tuner, objective and adapters. Line-haul planning (schema
+`pirilib/linehaul@0.2`, example `examples/linehaul_mini`) is the first
+supported problem type, not the permanent shape of the library: its models
+and arrays may be reorganized as other problem types are added, and the
+library stays open to problems outside fleet optimization.
 
 ## Rules after 1.0
 

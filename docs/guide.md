@@ -3,9 +3,18 @@
 pirilib plans line-haul transport: which vehicles leave which center on which
 day, where they stop and what they carry, so that your objective is as small as
 possible and your rules hold. It also forecasts the demand to plan. This guide
-covers the pre-alpha versions 0.1 (planning) and 0.2 (forecasting).
+covers the first alpha, 0.1.0a1, in which line-haul planning is the first
+supported problem type; everything may still change before 1.0.
 
 ## Install
+
+The alpha is published on TestPyPI only, with its dependencies from PyPI:
+
+```bash
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ "pirilib==0.1.0a1"
+```
+
+From the first final release on, the package and its extras come from PyPI:
 
 ```bash
 pip install pirilib
@@ -383,10 +392,14 @@ better = pirilib.ACOSolver(result.config)
 The artificial bee colony searches the space of ACO settings (`aco_space()`).
 Each setting is scored by its mean relative difference to the base setting
 over the training instances and seeds. A setting replaces the base only if it
-is at least 0.1 % better. `RandomSearch` is the baseline tuner. With about 24
-settings the bee colony and random search were close in our measurements;
-give it 60 or more. Check tuned settings on instances you
-did not tune on.
+is at least 0.1 % better. `RandomSearch` is the baseline tuner. The default
+budget is 40 settings. In our measurements with eight tuner seeds most of the
+gain came within the first 24 settings, and 60 or 80 settings helped a little
+more at a proportional cost in time. On ACO settings the bee colony and random
+search were close (the colony slightly ahead at 40); on standard test
+functions the colony was clearly ahead. Check tuned settings on instances you
+did not tune on: in two of sixteen colony runs, a setting that was clearly
+better on the training instances was no better than the base on new ones.
 
 ## 6. Forecast demand
 

@@ -1,27 +1,30 @@
 # pirilib
 
-Demand forecasting and ACO-ABC based distribution optimization for logistics
-planning, driven by your own data, constraints and objective.
+Fleet optimization with an ant colony solver and a bee colony tuner, driven by
+your own data, constraints and objective.
 
-> **Status: pre-alpha (0.0.x).** Nothing here is ready for production use and
-> the API will change without notice.
+> **Status: first alpha (0.1.0a1).** Everything may still change before 1.0,
+> the public API and the internal structure alike. Fleet optimization is the
+> default domain, and line-haul planning is the first supported problem type,
+> not a fixed contract. See
+> [Public API and stability](https://github.com/mr-ozdemir/piriLIB/blob/master/docs/stability.md).
 
 pirilib (short name *piri*) generalizes the solution built for the TEKNOFEST
 2026 Hepsiburada intercity logistics challenge into a reusable library.
 
 ## What it does
 
-- **Line-haul and fleet planning** (0.1): heterogeneous fleets of owned
-  vehicles bound to lines and on-demand spot vehicles, multi-dimensional
-  capacities, one-way multi-stop routes, split deliveries, bans, minimum fill
-  and stopover rules.
+- **Line-haul fleet planning**, the first problem type: heterogeneous fleets
+  of owned vehicles bound to lines and on-demand spot vehicles,
+  multi-dimensional capacities, one-way multi-stop routes, split deliveries,
+  bans, minimum fill and stopover rules.
 - **Ant Colony Optimization** as the solver, vectorized with numpy, with local
   search and an optional exact solver for small subproblems; an **Artificial
   Bee Colony** tuner for its settings. Solvers and tuners are swappable.
 - **Your objective, your rules**: building blocks for objectives and
   constraints, one evaluator shared by every solver, and an independent plan
   checker.
-- **Demand forecasting** (0.2) of daily desi per origin-destination line:
+- **Demand forecasting** of daily desi per origin-destination line:
   cleaning, mandatory seasonal baselines, any scikit-learn-style regressor,
   the prototype's LightGBM-Tweedie, walk-forward backtests, ABC tuning, and a
   quantile-buffered bridge from the forecast to a planning problem.
@@ -29,10 +32,23 @@ pirilib (short name *piri*) generalizes the solution built for the TEKNOFEST
 Read the [user guide](https://github.com/mr-ozdemir/piriLIB/blob/master/docs/guide.md) for the problem format, the rules, the
 objective building blocks, solving, tuning and the command line.
 
+## Install
+
+The alpha is published on TestPyPI only. Install it from there and take its
+dependencies from PyPI:
+
+```bash
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ "pirilib==0.1.0a1"
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ "pirilib[exact,excel]==0.1.0a1"
+```
+
+The extras are `exact` (scipy), `excel` (openpyxl), `forecast` (LightGBM and
+scikit-learn), `pyvrp` and `ortools`. `pip install pirilib` from PyPI works from
+the first final release on.
+
 ## Command line
 
 ```bash
-pip install pirilib
 pirilib generate sample --centers 20 --days 3
 pirilib solve sample/problem.yaml -o plan.csv
 pirilib check sample/problem.yaml plan.csv
@@ -170,25 +186,23 @@ mkdocs build --strict
 
 ### Releasing
 
-Pushing a version tag such as `v0.1.0` runs `.github/workflows/release.yml`.
-The workflow builds the package and publishes it to TestPyPI and then to PyPI,
-using trusted publishing, so no tokens are stored in the repository. Before
-the first release:
-
-1. Add the repository and the workflow as a trusted publisher on test.pypi.org
-   and on pypi.org.
-2. Create the GitHub environments `testpypi` and `pypi`.
-3. Give `pypi` a required reviewer, so that a person approves each release.
+Pushing a version tag such as `v0.1.0a1` runs `.github/workflows/release.yml`,
+which tests, builds and publishes the package with trusted publishing.
+Pre-releases go to TestPyPI only, final releases to TestPyPI and then, after an
+approval, to PyPI. The steps and the one-time setup are in
+[CONTRIBUTING.md](https://github.com/mr-ozdemir/piriLIB/blob/master/CONTRIBUTING.md#releasing).
 
 ## Roadmap
 
+pirilib is heading towards a general fleet optimization library: one solver,
+tuner and objective core with problem types on top of it. Which problem types
+follow line-haul is not decided yet.
+
 | Version | Scope |
 |---|---|
-| 0.1 | Problem specification, evaluator, constraint catalog, numpy ACO, local search, decomposition with an exact oracle, validator, ABC tuner, CLI |
-| 0.2 | Forecast engine and the forecast-to-plan bridge |
-| 0.3 | Time waves, service-level penalties, shared hub resources, deferral |
-| 0.4 | Benchmark suite and baseline adapters (PyVRP, OR-Tools); in progress |
-| 1.0 | Stable API |
+| 0.1.0a1 | First alpha, the code as it is today: the line-haul problem type (schema `pirilib/linehaul@0.2` with times, service, deferral and center limits), evaluator, constraint catalog and plan checker, numpy ACO with local search and an optional exact oracle, ABC tuner, demand forecasting with the forecast-to-plan bridge, benchmarks with PyVRP and OR-Tools baselines, CLI |
+| Later alphas and betas | Changes from alpha feedback; the API and the internal structure may still change |
+| 1.0 | Stable API, as listed in [Public API and stability](https://github.com/mr-ozdemir/piriLIB/blob/master/docs/stability.md) |
 
 ## License
 
@@ -206,5 +220,7 @@ Problem YAML ile tanımlanır; büyük tablolar CSV'den okunabilir (noktalı vir
 ondalık virgül, `gg.aa.yyyy` tarih ve Türkçe sütun adları desteklenir). Tüm
 hatalar tek seferde, CSV satır numarasıyla raporlanır. Planlar `pirilib solve`
 ile üretilir, `pirilib check` ile denetlenir; plan dosyaları Türkçe Excel
-biçiminde (`--delimiter ";" --decimal ","`) yazılıp okunabilir. Proje henüz
-erken geliştirme aşamasındadır.
+biçiminde (`--delimiter ";" --decimal ","`) yazılıp okunabilir. Bu ilk alfa
+sürümüdür (0.1.0a1): 1.0'a kadar iç yapı dahil her şey değişebilir; hat taşıma
+(line-haul) ilk problem türüdür, varsayılan alan genel olarak filo
+optimizasyonudur.
