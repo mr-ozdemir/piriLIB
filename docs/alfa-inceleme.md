@@ -67,6 +67,7 @@ Birlikte okunması gerekenler: K83 + K90 + K109 (ceza ağırlıkları), K55 + K2
 **Soru.** Varsayılan tahmin beklenen değer; tamponsuz plan günlerin yarısında açık kalır. CLI `--quantile` boşsa tampon yok. 0,8 kantil ölçümde +%25–32 hacimle %79–83 kapsama verdi.
 **Öneri.** Koru, ama CLI `forecast --network` kullanıldığında tampon verilmemişse uyarı bas; kılavuzda 0,8 önerisi zaten var.
 **Değiştirecek durum.** "Plan her zaman tamponlu" deniyorsa `--quantile 0.8` varsayılan olur.
+**Durum.** Uyarı eklendi (K230): `forecast --network` kantilsiz çalışınca stderr'e uyarı basıyor. Varsayılan tampon kararı sende.
 
 ### 12. K129 — Bias (-%6) için varsayılan model değiştirilmedi; `scale=True` deneysel
 **Soru.** Denenen hiçbir düzeltme doğruluğu bozmadan bias'ı gidermiyor (B seçeneği bias -0,7 ama WMAPE +0,8). Tampon bias'ı dolaylı kapatıyor.

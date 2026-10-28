@@ -183,6 +183,7 @@ dağıtım adı.
 | K127 | CLI `forecast` tahmini ağ dosyasıyla birleştirir; ağdaki CSV tabloları satır olarak gömülür, çıkan problem doğrulanmadan yazılmaz; tampon için varsayılan 4 katlamalık backtest | Bağımsız, taşınabilir problem dosyası | Ağı dosya referansıyla bırakmak | `cli.py` | açık |
 | K128 | Bulgu: prototip verisinde walk-forward tahminler yaklaşık %6 düşük (bias -5,8); düzeltme (örneğin bias çarpanı) henüz yok | Ölçüm sonucu | Otomatik bias düzeltmesi | `docs/olcumler.md` | açık |
 | K129 | Bias incelemesi sonucu varsayılan tahmin modeli değiştirilmedi; ölçekli hedef `Regression(scale=True)` deneysel ve isteğe bağlı eklendi; planlamada eksik tahmin kantil tamponuyla karşılanır (0,8 önerilir) | Ölçüm: hiçbir düzeltme doğruluğu bozmadan bias'ı gidermiyor | Kayan kalibrasyonu varsayılan yapmak (bias -0,7, WMAPE +0,8) | `forecast/models.py`, `docs/olcumler.md` | açık |
+| K230 | CLI `forecast --network` `--quantile` verilmezse stderr'e uyarı basar (çıkış kodu 0, problem yine yazılır); kantil verilince uyarı yok | Tamponsuz plan beklenen değeri planlar, günlerin yaklaşık yarısında talep plandan fazla gelir (K125); alfa incelemesi 11. maddenin önerisi | `--quantile 0.8`'i varsayılan yapmak, uyarısız bırakmak | `cli.py`, `tests/test_cli.py`, `docs/guide.md` | açık |
 
 ## v0.3 adım 3a: Zaman, gecikme, erteleme, elleçleme ve araç limitleri (şema, değerlendirici, doğrulayıcı)
 

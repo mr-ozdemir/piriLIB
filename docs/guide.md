@@ -487,6 +487,8 @@ pirilib solve problem.yaml -o plan.csv
 - `--delimiter ";" --decimal ","` writes the plan for Turkish Excel.
 - `check` exits with status 1 if a rule is broken.
 - The last `solve` plans the week that `forecast --problem` wrote.
+- `forecast --network` without `--quantile` warns: the problem then plans the
+  expected forecast, and about half of the days get more than that.
 
 Date files (`--holidays`, `--unusual`) have one ISO date per line.
 

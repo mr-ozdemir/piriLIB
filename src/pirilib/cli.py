@@ -313,6 +313,13 @@ def _forecast(arguments: argparse.Namespace) -> int:
         network, _ = materialize_tables(network, network_path.parent)
         document = planning_document(network, forecast, factors=factors, waves=shares)
         parse_spec(document, source=str(network_path))
+        if factors is None:
+            print(
+                "warning: the problem plans the expected forecast without a buffer, "
+                "so about half of the days get more than planned; "
+                "pass --quantile, for example 0.8",
+                file=sys.stderr,
+            )
         target = Path(arguments.problem or network_path.with_name("problem.yaml"))
         target.write_text(yaml.safe_dump(document, allow_unicode=True, sort_keys=False), "utf-8")
         print(f"problem written to {target}")

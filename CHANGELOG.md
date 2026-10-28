@@ -9,6 +9,10 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
 
 ## [Unreleased]
 
+### Changed
+
+- `pirilib forecast --network` warns when no `--quantile` buffer is given.
+
 ## [0.1.0a1] - unreleased
 
 ### Added

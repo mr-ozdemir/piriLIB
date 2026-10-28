@@ -251,6 +251,32 @@ def test_forecast_to_problem(
     assert "total cost" in out
 
 
+def test_forecast_without_buffer_warns(
+    capsys: pytest.CaptureFixture[str], history_files: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    history, holidays, network = history_files
+    problem = tmp_path / "problem.yaml"
+    arguments = [
+        "forecast",
+        str(history),
+        "--holidays",
+        str(holidays),
+        "--model",
+        "seasonal",
+        "--network",
+        str(network),
+        "--problem",
+        str(problem),
+    ]
+    code, _, err = run(capsys, *arguments)
+    assert code == 0
+    assert problem.exists()
+    assert "warning: the problem plans the expected forecast without a buffer" in err
+    code, _, err = run(capsys, *arguments, "--quantile", "0.8", "--buffer-folds", "3")
+    assert code == 0
+    assert "warning" not in err
+
+
 def test_forecast_with_unknown_centers(
     capsys: pytest.CaptureFixture[str], history_files: tuple[Path, Path, Path], tmp_path: Path
 ) -> None:
