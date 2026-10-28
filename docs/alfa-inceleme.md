@@ -119,7 +119,7 @@ Birlikte okunması gerekenler: K83 + K90 + K109 (ceza ağırlıkları), K55 + K2
 | K04 | hatchling, src düzeni | onayla |
 | K05 | Çalışma bağımlılıkları numpy, pydantic, pyyaml | onayla |
 | K06 | PEP 735 `[dependency-groups]`, pip >= 25.1 | onayla |
-| K07 | Sürüm `0.0.1.dev0`, `_version.py` | onayla (S04 ile birlikte) |
+| K07 | Sürüm `_version.py`'de; şimdi `0.1.0a1` (K221) | onayla (S04 ile birlikte) |
 | K08 | ruff/mypy strict/pytest uyarı = hata | onayla |
 | K09 | İngilizce kod ve belgeler, README'de Türkçe bölüm | onayla |
 | K14 | pre-commit ruff sabit sürüm | onayla (v0.17.1'e çekildi) |
@@ -274,5 +274,5 @@ Metin / kod uyuşmazlıkları:
 14. **K151.** `Service` ve `Handling` modelleri `pirilib.spec`'ten dışa verilmiyordu. *Eklendi; `docs/stability.md` CLI satırı 8 komutun hepsini sayıyor.*
 15. **Kılavuz §2 kısıt tablosu.** *`ready`, `deferral`, `handling`, `vehicle_limit` eklendi; `load_route` artık "day" demiyor.*
 16. **K14.** *pre-commit ruff `v0.17.1`'e çekildi.*
-17. **K143.** Kod ve yapılandırmada `#` yorum yok; README ve kılavuzdaki kod örneklerinde `#` açıklamalar var. *Soru S10'a eklendi.*
+17. **K143.** Kod ve yapılandırmada `#` yorum yok; README ve kılavuzdaki kod örneklerindeki `#` açıklamalar metne taşındı. *S10 kapandı (#7, issue #13).*
 18. **K03.** *Windows 3.12 CI matrisine eklendi.*
