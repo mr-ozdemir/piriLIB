@@ -18,6 +18,7 @@ Conventions of the page that these tests rely on:
 """
 
 import copy
+import doctest
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -37,6 +38,9 @@ from pirilib.spec import LineHaulInstance, LineHaulSpec, parse_spec
 
 ROOT = Path(__file__).parents[1]
 PAGE = ROOT / "docs" / "objective.md"
+README = ROOT / "README.md"
+SESSION = re.compile(r"^```pycon\n(?P<session>.*?)^```", re.MULTILINE | re.DOTALL)
+"""The interactive session of the README's quick start."""
 SCENARIOS = ROOT / "examples" / "objectives"
 FENCE = re.compile(r"^```(?P<info>[^\n]*)\n(?P<body>.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 TITLED_YAML = re.compile(r'^yaml title="(?P<path>[^"]+)"$')
@@ -257,6 +261,17 @@ def test_python_blocks_run(at_root: Path, capsys: pytest.CaptureFixture[str]) ->
 
     capsys.readouterr()
     assert "goal" in namespace
+
+
+def test_the_readme_session_is_current(at_root: Path) -> None:
+    session = SESSION.search(README.read_text(encoding="utf-8"))
+    assert session is not None
+    parser = doctest.DocTestParser()
+    example = parser.get_doctest(session["session"], {}, "README", str(README), 0)
+
+    results = doctest.DocTestRunner().run(example)
+
+    assert results == doctest.TestResults(failed=0, attempted=4)
 
 
 def test_the_page_shows_repository_files() -> None:
