@@ -28,6 +28,9 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
 
 ### Changed
 
+- The README is short: what pirilib does, installation, a quick start whose
+  output is tested, features and links. The development setup moved to
+  `CONTRIBUTING.md` and the roadmap to `docs/stability.md`.
 - `pirilib forecast --network` warns when no `--quantile` buffer is given.
 
 ## [0.1.0a1] - unreleased

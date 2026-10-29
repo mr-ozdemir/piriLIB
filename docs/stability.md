@@ -90,3 +90,15 @@ in their docstrings.
    `cli.main` and others shown without text on the reference pages).
 5. Settle the open decisions of the alpha review (`docs/kararlar.md`).
 6. Freeze schema `pirilib/linehaul@1.0` and keep reading 0.1 and 0.2.
+
+## Roadmap
+
+pirilib is heading towards a general fleet optimization library: one solver,
+tuner and objective core with problem types on top of it. Which problem types
+follow line-haul is not decided yet.
+
+| Version | Scope |
+|---|---|
+| 0.1.0a1 | The line-haul problem type (schema `pirilib/linehaul@0.2` with times, service, deferral and center limits), evaluator, constraint catalog and plan checker, numpy ACO with local search and an exact solver, ABC tuner, demand forecasting with the forecast-to-plan bridge, benchmarks with PyVRP and OR-Tools baselines, command line |
+| Later alphas and betas | Changes from alpha feedback; the API and the internal structure may still change |
+| 1.0 | Stable API, as listed on this page |

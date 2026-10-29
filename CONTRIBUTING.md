@@ -16,6 +16,33 @@ Keep commit messages short and in the imperative, for example
 "Add wave splitting to forecasts". Every task has one author, who makes its
 commits.
 
+## Development setup
+
+Create a virtual environment, activate it (`.venv\Scripts\activate` on Windows,
+`source .venv/bin/activate` elsewhere) and install the package with the
+development tools. pip 25.1 or newer is needed for `--group`.
+
+```bash
+python -m venv .venv
+python -m pip install --upgrade pip
+python -m pip install -e . --group dev
+```
+
+After changing the specification models, regenerate the JSON Schema:
+
+```bash
+python -m pirilib.spec.schema schemas/linehaul-0.2.schema.json
+```
+
+The documentation is built with MkDocs from `mkdocs.yml` and `docs/`;
+`mkdocs serve` shows a live preview at http://127.0.0.1:8000.
+
+```bash
+python -m pip install --group docs
+mkdocs serve
+mkdocs build --strict
+```
+
 ## Before a pull request
 
 ```bash
