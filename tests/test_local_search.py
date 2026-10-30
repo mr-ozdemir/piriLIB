@@ -3,9 +3,9 @@
 Requirement sources: the docstrings of :mod:`pirilib.solvers.local_search` (the moves and
 the rules every route keeps) and of :func:`~pirilib.solvers.local_search.improve` (the
 returned change is never positive, ``remaining`` is what the routes leave uncarried,
-``room`` limits the moves), and decisions K89 (the six moves), K90 (drop follows the
-objective), K192 (moves check the vehicle slots of the day) and K201/K202 (the cheap checks
-and remembered rejections leave plans and scores unchanged) in ``docs/kararlar.md``.
+``room`` limits the moves): six moves, drop follows the objective, moves check the vehicle
+slots of the day, and the cheap checks and remembered rejections leave plans and scores
+unchanged.
 
 Risk reduced: the colony hands its best routes to this search, so a move that breaks a rule,
 misses a saving or reports a wrong change of the objective reaches every linear-objective
@@ -21,8 +21,8 @@ route (drop below, keep above) and the vehicle slots of the day (0 blocks, 1 all
 Blind spots, on purpose: demand that may not be split (``item_left``, item slots), timed
 routes of scheduled instances (hours, lateness), owned lines and ``forward_only`` ordering are
 tested through the solvers in ``test_aco.py`` and ``test_schedule.py``, not here. Speed (the
-point of K201/K202) is measured in ``tests/performance``. The search is single threaded
-(K203), so there is no parallel behaviour. Floating point: costs are compared with a stated
+point of the cheap checks) is measured in ``tests/performance``. The search is single threaded,
+so there is no parallel behaviour. Floating point: costs are compared with a stated
 relative tolerance and loads rounded to :data:`AMOUNT_DECIMALS`; the relocate saving uses a
 planar distance and a looser tolerance. Whole plans are only checked by the regression pin
 at the end; passing these tests does not show that every move is right on every subproblem.
@@ -98,7 +98,7 @@ AMOUNT_DECIMALS = 6
 """Decimals loads are rounded to by :func:`described`, so a shifted load compares exactly."""
 
 PINNED_TOLERANCE = 1e-12
-"""Relative tolerance of the regression pin; K201 says scores stay the same to the bit."""
+"""Relative tolerance of the regression pin; scores stay the same to the bit."""
 
 Stops = list[tuple[int, float]]
 """The stops of one route: (node, desi unloaded there)."""
@@ -409,7 +409,7 @@ def test_change_vehicle_is_taken_only_with_a_vehicle_slot_left_on_the_day(
     expected_option: int,
     expected_change: float,
 ) -> None:
-    """K192: the cheaper ``small`` vehicle needs one of the ``small`` slots left at ``A``."""
+    """The cheaper ``small`` vehicle needs one of the ``small`` slots left at ``A``."""
     instance, problem = scenario(document, compile_document, {"B": 100.0}, BIG_AND_SMALL)
     start = routes((BIG, [(NODE_B, 100.0)]))
     room = small_slots_at_the_origin(slots)
@@ -446,7 +446,7 @@ def test_no_routes_and_nothing_left_stay_empty(
 
 
 def test_colony_plan_with_local_search_matches_the_recorded_regression_plan() -> None:
-    """Regression pin (K201, K202): the cheap checks and remembered rejections change nothing.
+    """Regression pin: the cheap checks and remembered rejections change nothing.
 
     The score and the number of dispatches were recorded with the local search before it
     remembered rejected moves; that search tried every move afresh, so the recording is the

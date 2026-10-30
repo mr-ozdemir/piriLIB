@@ -1,6 +1,6 @@
 """Performance tests: wall-clock time of ``ACOSolver.solve`` on two fixed synthetic problems.
 
-They run only with ``pytest --performance`` (K240).
+They run only with ``pytest --performance``.
 
 KPI (service oriented, measured through the public API only): the response time of one
 ``ACOSolver().solve(instance, GOAL, seed=SOLVER_SEED)`` call, i.e. computation time. The
@@ -11,7 +11,7 @@ the metric because a user waits for a single solve. Time is wall-clock
 user + system) is recorded beside it as an efficiency indicator, not asserted.
 
 Each case has a target and a threshold. The target is the time measured for the same
-problem in ``docs/olcumler.md`` (Windows 10, Python 3.14.3, one core) and is only
+problem on Windows 10, Python 3.14.3, one core, and is only
 recorded. The threshold, ``budget``, is an upper bound on the median of ``RUNS`` runs and
 is what the test asserts. Budgets are tens of times the target so that a shared CI runner
 does not fail them; they catch order-of-magnitude regressions, and the recorded numbers
@@ -25,8 +25,8 @@ CPU count, numpy and pirilib versions, commit) is recorded once.
 
 If a median exceeds its budget: do not release; rerun on an idle machine to rule out noise
 (the recorded minimum and maximum show it); profile the case with ``cProfile`` to name the
-slow function; then fix it, or decide a new budget in ``docs/kararlar.md`` (K240) with the
-measurement in ``docs/olcumler.md``.
+slow function; then fix it, or set a new budget from a new
+measurement.
 """
 
 import os
@@ -59,24 +59,24 @@ SOLVER_SEED = 0
 """Colony seed of every run, so that every run does the same work."""
 
 PROBLEM = {"centers": 10, "days": 2, "demand_per_day": 40, "seed": 3}
-"""``synthetic.generate`` arguments of the problem measured in ``docs/olcumler.md``
-(v0.3 steps 3a and 3b): 10 centers, 2 days, 80 demands, untimed objective 855,347."""
+"""``synthetic.generate`` arguments of the measured problem: 10 centers, 2 days, 80
+demands, untimed objective 855,347."""
 
 SPEED_KMH = 70.0
-"""Speed given to every vehicle type in the scheduled problem, as in ``docs/olcumler.md``."""
+"""Speed given to every vehicle type in the scheduled problem."""
 
 DUE_HOURS = 24
 """Hours after which a demand is late in the scheduled problem."""
 
 LATENESS_PENALTY = 0.5
-"""Cost per unit of lateness in the scheduled problem, as in ``docs/olcumler.md``."""
+"""Cost per unit of lateness in the scheduled problem."""
 
 HANDLING_MINUTES_PER_UNIT = 0.01
 """Handling time per desi in the scheduled problem: 100 desi per minute."""
 
 HANDLING_CAPACITY = 250000.0
 """Daily handling capacity of center M001 (index 0) in the scheduled problem: the smallest
-measured capacity with a feasible plan (``docs/olcumler.md`` 3b, K199)."""
+measured capacity with a feasible plan."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +87,7 @@ class Case:
         name: Test id and prefix of the recorded properties
         build: Returns the compiled problem; not timed
         scheduled: Whether the problem is expected to take the scheduled solver path
-        target: Seconds measured for the problem in ``docs/olcumler.md``; recorded only
+        target: Seconds measured for the problem; recorded only
         budget: Seconds the median of the runs must not exceed (upper bound)
     """
 
@@ -116,11 +116,11 @@ def scheduled() -> LineHaulInstance:
 
 
 UNTIMED = Case("untimed-10-centers", untimed, scheduled=False, target=0.23, budget=10.0)
-"""Target: ``docs/olcumler.md`` 3b, "Zamansız", fast path, 0.23 s for this exact problem."""
+"""Target: 0.23 s measured for this exact problem on the fast path."""
 
 SCHEDULED = Case("scheduled-10-centers", scheduled, scheduled=True, target=0.58, budget=20.0)
-"""Target: ``docs/olcumler.md`` 3b, "250.000 desi", 0.58 s; that problem also has hourly
-costs and ready hours, so the target is the closest documented measurement."""
+"""Target: 0.58 s measured with a handling capacity of 250,000 desi; that problem also has
+hourly costs and ready hours, so the target is the closest measurement."""
 
 CASES = [UNTIMED, SCHEDULED]
 

@@ -11,10 +11,9 @@ Every generator draws from a bounded space (the sizes are named below) and runs 
 budget of the active Hypothesis profile (``tests/conftest.py``): 100 fixed (derandomized)
 examples in ``dev`` and ``ci``, 2000 random ones in the weekly ``fuzz`` run. The generated
 inputs are text, because the readers take files a person writes. Inputs that broke the
-contract are kept as explicit cases, marked ``xfail`` while the defect they found is open: a
-plan file that is not UTF-8, a plan cell past the CSV field limit and YAML nested deeper than
-the Python stack (outside the generated space), and a vehicle count past the 64-bit range
-(drawn by the ``fuzz`` profile, which therefore fails until that defect is fixed).
+contract once are kept as explicit regression cases: a plan file that is not
+UTF-8, a plan cell past the CSV field limit, YAML nested deeper than the Python stack and a
+vehicle count past the 64-bit range.
 
 The input categories of a fuzz run, and where each one is drawn:
 
@@ -422,10 +421,6 @@ def test_random_yaml_files_are_rejected_with_spec_error(text: str, tmp_path: Pat
         load_spec(path)
 
 
-@pytest.mark.xfail(
-    raises=RecursionError,
-    reason="open defect: load_spec lets the RecursionError of deeply nested YAML escape",
-)
 def test_deeply_nested_yaml_is_rejected_with_spec_error(tmp_path: Path) -> None:
     path = tmp_path / "problem.yaml"
     path.write_text("[" * DEEP_NESTING, encoding="utf-8", newline="")
@@ -434,10 +429,6 @@ def test_deeply_nested_yaml_is_rejected_with_spec_error(tmp_path: Path) -> None:
         load_spec(path)
 
 
-@pytest.mark.xfail(
-    raises=csv.Error,
-    reason="open defect: read_plan lets csv.Error escape for a cell past the CSV field limit",
-)
 def test_a_plan_cell_past_the_csv_field_limit_is_rejected_with_plan_error(
     instance: LineHaulInstance, tmp_path: Path
 ) -> None:
@@ -447,10 +438,6 @@ def test_a_plan_cell_past_the_csv_field_limit_is_rejected_with_plan_error(
         read_plan(instance, path)
 
 
-@pytest.mark.xfail(
-    raises=UnicodeDecodeError,
-    reason="open defect: read_plan lets UnicodeDecodeError escape for a file that is not UTF-8",
-)
 def test_a_plan_file_that_is_not_utf8_is_rejected_with_plan_error(
     instance: LineHaulInstance, tmp_path: Path
 ) -> None:
@@ -462,10 +449,6 @@ def test_a_plan_file_that_is_not_utf8_is_rejected_with_plan_error(
         read_plan(instance, path)
 
 
-@pytest.mark.xfail(
-    raises=OverflowError,
-    reason="open defect: compile lets OverflowError escape for a vehicle count past int64",
-)
 @pytest.mark.parametrize(
     "path",
     [("fleet", "owned", 0, "count"), ("fleet", "spot", 1, "available")],

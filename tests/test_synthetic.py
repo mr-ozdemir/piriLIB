@@ -1,6 +1,6 @@
 """Synthetic problems: :func:`pirilib.synthetic.generate` and :func:`pirilib.synthetic.write`.
 
-Unit tests (level marker ``unit``, decision K235, given by ``tests/conftest.py``) of the public
+Unit tests (level marker ``unit``, given by ``tests/conftest.py``) of the public
 :mod:`pirilib.synthetic` module. The expected behavior comes from the docstrings of the module,
 of :func:`~pirilib.synthetic.generate`, :data:`~pirilib.synthetic.OBJECTIVE` and
 :func:`~pirilib.synthetic.write`, and from ``docs/guide.md`` (``generate`` writes ``cost: 1``

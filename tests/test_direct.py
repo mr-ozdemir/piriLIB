@@ -2,7 +2,7 @@
 
 The expected behavior comes from the module docstring of :mod:`pirilib.solvers.direct`, the
 "Baselines" list of ``docs/guide.md`` ("full vehicles first, then the cheapest vehicle that fits.
-It keeps bans, owned lines and spot limits") and decision K177 (``docs/kararlar.md``). The tests
+It keeps bans, owned lines and spot limits"). The tests
 compile documents in memory and observe the plan, its evaluation and the independent
 :func:`pirilib.check_plan` through public names only.
 
@@ -537,7 +537,7 @@ def test_minimum_fill_shortfall_is_reported_only_when_no_vehicle_reaches_it(
     document: dict[str, Any],
     compile_document: CompileDocument,
 ) -> None:
-    """The same problem as above; the demand is carried even below the fill (K177).
+    """The same problem as above; the demand is carried even below the fill.
 
     With 0.95 the ``big`` vehicle carries 350 of the 950 desi it needs: 600 desi short.
     """

@@ -231,7 +231,7 @@ settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 
 class SuiteLevels:
-    """The level and technique markers of every test module (decision K235, ``docs/kararlar.md``).
+    """The level and technique markers of every test module.
 
     A module is ``unit`` unless :attr:`levels` names it: ``integration`` modules work with
     files, optional packages or several components together, ``system`` modules drive the

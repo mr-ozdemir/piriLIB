@@ -5,16 +5,16 @@ It learns only from days before ``start`` and predicts ``start .. start +
 days - 1``. A forecaster keeps no state between calls, so walk-forward
 backtests are honest.
 
-- :class:`SeasonalMean` (the prototype baseline) and :class:`SeasonalNaive`
+- :class:`SeasonalMean` and :class:`SeasonalNaive`
   are the baselines every model must beat.
 - :class:`Regression` turns any regressor with ``fit``/``predict`` (scikit-learn,
   LightGBM, XGBoost, ...) into a forecaster over the features of
   :mod:`pirilib.forecast.prepare`.
-- :func:`lightgbm_tweedie` is the prototype's tuned champion (needs
+- :func:`lightgbm_tweedie` is LightGBM with a Tweedie loss and tuned settings (needs
   ``pirilib[forecast]``).
 
 Lines are only forecast on weekdays when they had a record in the last
-``presence_days`` days before the start (as in the prototype); elsewhere the
+``presence_days`` days before the start; elsewhere the
 forecast is 0.
 """
 
@@ -31,7 +31,7 @@ from pirilib.forecast.prepare import FEATURES, LAGS, Calendar, clean, features, 
 
 PRESENCE_DAYS: Final = 35
 
-PROTOTYPE_TWEEDIE: Final[Mapping[str, Any]] = {
+TWEEDIE_SETTINGS: Final[Mapping[str, Any]] = {
     "n_estimators": 200,
     "learning_rate": 0.1,
     "num_leaves": 47,
@@ -44,7 +44,7 @@ PROTOTYPE_TWEEDIE: Final[Mapping[str, Any]] = {
     "reg_lambda": 0.001,
     "tweedie_variance_power": 1.3,
 }
-"""LightGBM settings the prototype tuned with ABC for daily desi per line."""
+"""LightGBM settings tuned with the bee colony for daily desi per line."""
 
 
 @dataclass(frozen=True, eq=False, slots=True)
@@ -134,7 +134,7 @@ def _result(history: History, start: dt.date, values: NDArray[np.float64]) -> Fo
 
 @dataclass(frozen=True, slots=True)
 class SeasonalMean:
-    """Mean of the last ``weeks`` usual records of the same weekday (the prototype baseline)."""
+    """Mean of the last ``weeks`` usual records of the same weekday."""
 
     weeks: int = 4
     presence_days: int | None = PRESENCE_DAYS
@@ -271,11 +271,11 @@ def _scaled(x: NDArray[np.float64], level: NDArray[np.float64]) -> NDArray[np.fl
 
 
 def lightgbm_tweedie(train_from: dt.date | None = None, **settings: Any) -> Regression:
-    """The prototype's champion: LightGBM with a Tweedie loss on cleaned daily desi.
+    """LightGBM with a Tweedie loss on cleaned daily desi.
 
-    ``settings`` override :data:`PROTOTYPE_TWEEDIE`. Needs ``pip install "pirilib[forecast]"``.
+    ``settings`` override :data:`TWEEDIE_SETTINGS`. Needs ``pip install "pirilib[forecast]"``.
     """
-    params = {**PROTOTYPE_TWEEDIE, **settings}
+    params = {**TWEEDIE_SETTINGS, **settings}
 
     def make() -> Any:
         try:

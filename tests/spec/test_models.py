@@ -303,6 +303,48 @@ def test_a_capacity_must_be_positive(document: dict[str, Any]) -> None:
     assert found == ["vehicle_types[0].capacity.desi: Input should be greater than 0"]
 
 
+@pytest.mark.parametrize(
+    ("group", "index", "field"),
+    [("owned", 0, "count"), ("spot", 1, "available")],
+    ids=["owned-count", "spot-available"],
+)
+def test_a_billion_vehicles_are_accepted(
+    document: dict[str, Any], group: str, index: int, field: str
+) -> None:
+    document["fleet"][group][index][field] = 1_000_000_000
+
+    spec = parse_spec(document)
+
+    assert getattr(getattr(spec.fleet, group)[index], field) == 1_000_000_000
+
+
+@pytest.mark.parametrize(
+    ("group", "index", "field"),
+    [("owned", 0, "count"), ("spot", 1, "available")],
+    ids=["owned-count", "spot-available"],
+)
+def test_more_than_a_billion_vehicles_are_rejected(
+    document: dict[str, Any], group: str, index: int, field: str
+) -> None:
+    document["fleet"][group][index][field] = 1_000_000_001
+
+    found = reported_problems(document)
+
+    assert found == [
+        f"fleet.{group}[{index}].{field}: Input should be less than or equal to 1000000000"
+    ]
+
+
+def test_a_vehicle_limit_above_a_billion_is_rejected(document: dict[str, Any]) -> None:
+    document["centers"][0]["vehicle_limits"] = {"big": 1_000_000_001}
+
+    found = reported_problems(document)
+
+    assert found == [
+        "centers[0].vehicle_limits.big: Input should be less than or equal to 1000000000"
+    ]
+
+
 def test_a_demand_quantity_may_be_zero(document: dict[str, Any]) -> None:
     document["demand"][1]["quantity"]["desi"] = 0.0
 

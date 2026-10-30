@@ -1,10 +1,8 @@
 # Testing
 
-The test suite follows a test-writing protocol taken from the course
-"Software Testing and Quality Assurance" (YZ304/BS450): test levels, unit
-testing practice, test doubles, larger tests, coverage criteria, fuzzing,
-model-based, performance and mutation testing. This page says how each of them
-is used in pirilib and how to run them.
+This page describes how pirilib is tested: test levels, how a test is
+written, test doubles, coverage, fuzzing, model-based, performance and mutation
+testing, and how to run each of them.
 
 ## Running the tests
 

@@ -9,30 +9,6 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
 
 ## [Unreleased]
 
-### Added
-
-- `ExactSolver` plans problems with times, deferral, handling capacity and
-  vehicle limits when handling takes no time (`rules.handling.minutes_per_unit`
-  is 0).
-- `read_plan` and `pirilib check` read .xlsx plans, as written by
-  `pirilib solve -o plan.xlsx`.
-- Test levels (`unit`, `integration`, `system`) on every test, fuzz tests of
-  the plan and problem readers, a model-based test of the ledger, opt-in
-  performance tests (`pytest --performance`), branch coverage in CI and a
-  weekly quality workflow with mutation testing.
-- `tune(validation=...)` and `pirilib tune --validation` score the best few
-  settings on validation instances and keep the base unless one beats it there.
-- `pirilib.tuning.default_sources` is public.
-- `docs/testing.md`: how the tests are organised and written, and how to run
-  the fuzz, model-based, performance and mutation tests.
-
-### Changed
-
-- The README is short: what pirilib does, installation, a quick start whose
-  output is tested, features and links. The development setup moved to
-  `CONTRIBUTING.md` and the roadmap to `docs/stability.md`.
-- `pirilib forecast --network` warns when no `--quantile` buffer is given.
-
 ## [0.1.0a1] - unreleased
 
 ### Added
@@ -86,7 +62,7 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
 - `pirilib.synthetic`: synthetic problems with a gravity demand model.
 - User guide in `docs/guide.md`; release workflow with trusted publishing.
 - `pirilib.forecast`: daily demand per line from a history CSV; cleaning
-  without look-ahead, the prototype's features, seasonal baselines,
+  without look-ahead, calendar and lag features, seasonal baselines,
   `Regression` adapter for scikit-learn-style models, `lightgbm_tweedie` (extra
   `pirilib[forecast]`), walk-forward `backtest`/`compare`, tuning with the bee
   colony, and `planning_document` with quantile buffers to plan a forecast.
@@ -131,9 +107,28 @@ uses [Semantic Versioning](https://semver.org/) written in PEP 440 form.
   distance-aware, the worked example), and `tests/test_docs_examples.py`,
   which solves them, runs the page's Python blocks and checks its rule table
   against `CATALOG` and its error messages against the code.
+- `ExactSolver` plans problems with times, deferral, handling capacity and
+  vehicle limits when handling takes no time (`rules.handling.minutes_per_unit`
+  is 0).
+- `read_plan` and `pirilib check` read .xlsx plans, as written by
+  `pirilib solve -o plan.xlsx`.
+- Test levels (`unit`, `integration`, `system`) on every test, fuzz tests of
+  the plan and problem readers, a model-based test of the ledger, opt-in
+  performance tests (`pytest --performance`), branch coverage in CI and a
+  weekly quality workflow with mutation testing.
+- `tune(validation=...)` and `pirilib tune --validation` score the best few
+  settings on validation instances and keep the base unless one beats it there.
+- `pirilib.tuning.default_sources` is public.
+- `docs/testing.md`: how the tests are organised and written, and how to run
+  the fuzz, model-based, performance and mutation tests.
+- `SECURITY.md`, `CODE_OF_CONDUCT.md`, and issue and pull request templates.
 
 ### Changed
 
+- The README is short: what pirilib does, installation, a quick start whose
+  output is tested, features and links. The development setup moved to
+  `CONTRIBUTING.md` and the roadmap to `docs/stability.md`.
+- `pirilib forecast --network` warns when no `--quantile` buffer is given.
 - The ant colony builds its solutions about 1.5 to 1.7 times faster, with the
   same plans and scores to the last bit: per-option and per-node values are
   laid out once per build, the weights of opening a route are kept and updated
