@@ -126,6 +126,7 @@
         },
         "vehicle_limits": {
           "additionalProperties": {
+            "maximum": 1000000000,
             "minimum": 0,
             "type": "integer"
           },
@@ -473,7 +474,8 @@
         },
         "count": {
           "description": "Vehicles available on the line every day.",
-          "exclusiveMinimum": 0,
+          "maximum": 1000000000,
+          "minimum": 1,
           "title": "Count",
           "type": "integer"
         },
@@ -612,7 +614,8 @@
         "available": {
           "anyOf": [
             {
-              "exclusiveMinimum": 0,
+              "maximum": 1000000000,
+              "minimum": 1,
               "type": "integer"
             },
             {

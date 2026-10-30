@@ -2,9 +2,9 @@
 
 The expected behaviour comes from the docstring of :func:`pirilib.geo.haversine_matrix`
 (``lat`` and ``lon`` are 1-D sequences of equal length in decimal degrees, entry ``[i, j]`` is
-the great-circle distance in km from point ``i`` to point ``j``), from decision K34
-(``docs/kararlar.md``: the earth radius is 6371 km) and from spherical geometry, which gives
-the expected distances independently of the code under test.
+the great-circle distance in km from point ``i`` to point ``j``), from the mean earth radius of
+6371 km and from spherical geometry, which gives the expected distances independently of the
+code under test.
 
 Input classes: valid coordinates (no point, one point, several points; coincident points,
 points on one meridian, on the equator, across the antimeridian, over a pole, antipodes) and
@@ -28,10 +28,10 @@ Coordinates = tuple[NDArray[np.float64], NDArray[np.float64]]
 """A ``(lat, lon)`` pair of equal-length coordinate arrays in decimal degrees."""
 
 MEAN_EARTH_RADIUS_KM = 6371.0
-"""The earth radius of decision K34, written out rather than taken from the code under test."""
+"""The mean earth radius, written out rather than taken from the code under test."""
 
 DEGREE_KM = MEAN_EARTH_RADIUS_KM * math.pi / 180.0
-"""The length of one degree of a great circle on the K34 sphere."""
+"""The length of one degree of a great circle on that sphere."""
 
 RELATIVE_TOLERANCE = 1e-12
 """Relative error allowed on a nonzero distance: a few thousand float64 roundings."""
@@ -86,7 +86,7 @@ coordinates = st.integers(1, MAX_POINTS).flatmap(
 def test_distance_between_two_points_is_their_great_circle_distance(
     lat: list[float], lon: list[float], expected_km: float
 ) -> None:
-    """Entry ``[0, 1]`` is the great-circle distance on the K34 sphere.
+    """Entry ``[0, 1]`` is the great-circle distance on the mean earth sphere.
 
     Each expected value is an arc of a great circle in degrees: along the equator or a
     meridian, the difference of the coordinates; over the pole, ``(90 - 60) * 2``; from
@@ -145,8 +145,8 @@ def test_radius_argument_sets_the_sphere() -> None:
     assert km[0, 1] == pytest.approx(math.pi / 2.0, rel=RELATIVE_TOLERANCE)
 
 
-def test_earth_radius_is_the_k34_mean_radius() -> None:
-    """The exported default radius is the mean earth radius chosen in decision K34."""
+def test_earth_radius_is_the_mean_radius() -> None:
+    """The exported default radius is the mean earth radius, 6371 km."""
     radius = EARTH_RADIUS_KM
 
     assert radius == MEAN_EARTH_RADIUS_KM
@@ -226,7 +226,7 @@ def test_distances_are_not_negative(points: Coordinates) -> None:
 
 @given(coordinates)
 def test_distances_are_at_most_half_a_great_circle(points: Coordinates) -> None:
-    """No two points are further apart than antipodes, ``pi`` times the K34 radius."""
+    """No two points are further apart than antipodes, ``pi`` times the earth radius."""
     lat, lon = points
 
     km = haversine_matrix(lat, lon)

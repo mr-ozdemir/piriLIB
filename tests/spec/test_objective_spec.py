@@ -1,10 +1,9 @@
 """Tests of the ``objective:`` section of a problem document (:class:`ObjectiveSpec`).
 
-The requirement is the docstring of :class:`pirilib.spec.ObjectiveSpec` and decisions K206 and
-K207 in ``docs/kararlar.md``: ``cost`` is a positive weight of the total cost, the extra terms
-default to 0 and are left out at 0, every built-in rule of :data:`pirilib.constraints.CATALOG`
-needs a penalty by name or through ``other``, and :meth:`LineHaulSpec.build_objective` fails
-with an example when the section is missing.
+The requirement is the docstring of :class:`pirilib.spec.ObjectiveSpec`: ``cost`` is a positive
+weight of the total cost, the extra terms default to 0 and are left out at 0, every built-in
+rule of :data:`pirilib.constraints.CATALOG` needs a penalty by name or through ``other``, and
+:meth:`LineHaulSpec.build_objective` fails with an example when the section is missing.
 
 The plans are written on the ``document`` fixture of ``tests/conftest.py``: centers ``A``, ``B``
 and ``C`` are indices 0, 1 and 2, vehicle type ``small`` (400 desi) is index 1.

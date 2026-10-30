@@ -1,10 +1,10 @@
 """Tests of the package surface: what ``import pirilib`` gives an application and costs it.
 
-Requirements: the ``pirilib`` package docstring and decision K11 (importing prints nothing,
+Requirements: the ``pirilib`` package docstring (importing prints nothing,
 and its only side effect is one ``logging.NullHandler`` on the ``"pirilib"`` logger),
-decisions K48, K70 and K88 (the fifteen top level names), ``docs/stability.md`` (every
+the fifteen top level names, ``docs/stability.md`` (every
 error caused by user input is a ``PirilibError``: ``SpecError`` and ``PlanError``, both also
-``ValueError``), decision K224 (the package ships the ``py.typed`` marker) and the version
+``ValueError``), the ``py.typed`` marker the package ships, and the version
 kept in ``src/pirilib/_version.py``, which hatch writes into the distribution metadata.
 
 Level: system (``SuiteLevels`` in ``tests/conftest.py``); the silence test starts a fresh
@@ -15,7 +15,7 @@ top level names it did not ask for, cannot catch input errors as documented, can
 check against the package, or reads a version that differs from the installed one.
 
 Blind spots, left out on purpose: the file list of the built wheel (with ``PYTHONPATH=src``
-the marker is looked up in the source tree; the wheel is checked when it is built, K224),
+the marker is looked up in the source tree; the wheel is checked when it is built),
 whether each exported name works (the tests of its own module) and the import time.
 """
 
@@ -46,7 +46,7 @@ PUBLIC_NAMES = [
     "load_spec",
     "solve",
 ]
-"""The fifteen top level names of decisions K48, K70 and K88, sorted."""
+"""The fifteen top level names, sorted."""
 
 IMPORT_TIMEOUT_SECONDS = 60
 """Upper bound for a fresh interpreter to import pirilib; the import takes about a second."""
@@ -83,7 +83,7 @@ def test_import_prints_and_warns_nothing() -> None:
 def test_import_leaves_one_null_handler_on_the_library_logger() -> None:
     """The ``"pirilib"`` logger has exactly one handler, a ``logging.NullHandler``.
 
-    Configuring log output is left to the application (K11), and importing the package
+    Configuring log output is left to the application, and importing the package
     more than once must not stack handlers.
     """
     logger = logging.getLogger("pirilib")

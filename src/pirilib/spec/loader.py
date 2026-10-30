@@ -35,6 +35,8 @@ def load_spec(path: str | os.PathLike[str]) -> LineHaulSpec:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise SpecError(f"{file}: invalid YAML: {exc}") from exc
+    except RecursionError:
+        raise SpecError(f"{file}: invalid YAML: nested too deeply") from None
     if not isinstance(data, Mapping):
         raise SpecError(f"{file}: the top level must be a mapping of fields")
     try:
