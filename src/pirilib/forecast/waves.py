@@ -345,7 +345,7 @@ class WaveShares:
 
 @dataclass(frozen=True, slots=True)
 class WaveSplitter:
-    """Learns wave shares per line and weekday, as the prototype's wave split.
+    """Learns wave shares per line and weekday.
 
     For every line and weekday, the last ``weeks`` usual days of that weekday
     before the start on which the line had a positive quantity are used; the
@@ -356,8 +356,8 @@ class WaveSplitter:
     not learned from.
 
     Attributes:
-        weeks: Recent days of the same weekday to learn from (4 in the prototype)
-        min_days: Days needed before a share is trusted (2 in the prototype)
+        weeks: Recent days of the same weekday to learn from
+        min_days: Days needed before a share is trusted
     """
 
     weeks: int = 4

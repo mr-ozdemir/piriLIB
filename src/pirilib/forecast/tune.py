@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 
 from pirilib.forecast.evaluate import backtest
 from pirilib.forecast.history import History
-from pirilib.forecast.models import PROTOTYPE_TWEEDIE, Forecaster
+from pirilib.forecast.models import TWEEDIE_SETTINGS, Forecaster
 from pirilib.forecast.prepare import Calendar
 from pirilib.tuning.bee_colony import BeeColony, SearchResult
 from pirilib.tuning.space import Choice, SearchSpace
@@ -19,7 +19,7 @@ from pirilib.tuning.tune import Tuner
 
 
 def lightgbm_space() -> SearchSpace:
-    """The prototype's LightGBM grid, plus the Tweedie variance power."""
+    """The LightGBM search space, with the Tweedie variance power."""
     return SearchSpace(
         {
             "n_estimators": Choice((200, 300, 400, 600, 800, 1000, 1200, 1500)),
@@ -105,7 +105,7 @@ def tune_lightgbm(
     """Tune :func:`~pirilib.forecast.lightgbm_tweedie` over :func:`lightgbm_space`."""
     from pirilib.forecast.models import lightgbm_tweedie
 
-    base = {key: value for key, value in PROTOTYPE_TWEEDIE.items() if key != "subsample_freq"}
+    base = {key: value for key, value in TWEEDIE_SETTINGS.items() if key != "subsample_freq"}
     return tune_forecaster(
         history,
         lambda settings: lightgbm_tweedie(train_from=train_from, **settings),

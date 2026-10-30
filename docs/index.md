@@ -7,12 +7,8 @@ your own data, constraints and objective.
 
     Everything may still change before 1.0, the public API and the internal
     structure alike. Fleet optimization is the default domain, and line-haul
-    planning is the first supported problem type, not a fixed contract. The
-    alpha is published on TestPyPI only; the [user guide](guide.md#install)
-    shows how to install it. See [Public API and stability](stability.md).
-
-pirilib (short name *piri*) generalizes the solution built for the TEKNOFEST
-2026 Hepsiburada intercity logistics challenge into a reusable library.
+    planning is the first supported problem type, not a fixed contract. See
+    [Public API and stability](stability.md).
 
 ## What it does
 
@@ -28,7 +24,7 @@ pirilib (short name *piri*) generalizes the solution built for the TEKNOFEST
   checker.
 - **Demand forecasting** of daily desi per origin-destination line: cleaning,
   mandatory seasonal baselines, any scikit-learn-style regressor, the
-  prototype's LightGBM-Tweedie, walk-forward backtests, ABC tuning, and a
+  LightGBM-Tweedie, walk-forward backtests, ABC tuning, and a
   quantile-buffered bridge from the forecast to a planning problem.
 
 ## Quick start
