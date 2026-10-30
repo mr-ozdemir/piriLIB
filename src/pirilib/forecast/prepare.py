@@ -1,6 +1,6 @@
 """Calendar, cleaning and features of a demand history, all in numpy.
 
-Cleaning follows the prototype:
+Cleaning has two steps:
 
 1. Days the calendar marks as *unusual* (holidays, month ends, outages), and
    days without a record, are *imputed*: they get the median of the line on
@@ -8,7 +8,7 @@ Cleaning follows the prototype:
 2. Values above ``median + z / 0.6745 * MAD`` of the line and weekday are cut
    down to that cap (winsorizing), so single spikes do not drive the models.
 
-Unlike the prototype, the medians use only days before the forecast start, so
+The medians use only days before the forecast start, so
 backtests do not peek at the future. Days before a line's first record stay
 missing (NaN): the line did not exist yet.
 """

@@ -7,9 +7,6 @@ edit_uri: edit/master/docs/
 copyright: Copyright Muhammet Ozdemir, Apache-2.0
 
 exclude_docs: |
-  alfa-inceleme.md
-  kararlar.md
-  olcumler.md
   extensions/
 
 validation:

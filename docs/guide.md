@@ -446,7 +446,7 @@ become features. Holidays are usually unusual as well, so list them in both.
     the baselines. `compare` always runs them.
   - `Regression(make, target)` turns any regressor with `fit`/`predict` into a
     forecaster. `target="log1p"` uses Duan smearing.
-  - `lightgbm_tweedie()` is the prototype's tuned champion
+  - `lightgbm_tweedie()` is LightGBM with a Tweedie loss and tuned settings
     (`pip install "pirilib[forecast]"`).
 - **Presence.** Lines are forecast only on weekdays on which they had a record
   in the last 35 days.
@@ -603,8 +603,8 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
   offer) pairs whose limit was used up; above zero, the greedy sharing may have
   bound the plan.
 - Forecasts cover one quantity dimension, up to 7 days ahead, per day; time
-  waves come from shares learned per line and weekday, not from a model. On the prototype data, walk-forward forecasts ran about 6 % low
-  because of week-to-week swings around holidays. None of the corrections
-  tried kept the accuracy (see `docs/olcumler.md`), so plan with a quantile
+  waves come from shares learned per line and weekday, not from a model. In walk-forward tests on real demand, forecasts ran about
+  6 % low because of week-to-week swings around holidays. None of the
+  corrections tried kept the accuracy, so plan with a quantile
   buffer, for example 0.8. `Regression(scale=True)` (learning shapes relative
   to the line's recent level) is available as an experiment.

@@ -1,6 +1,6 @@
 """Artificial bee colony (ABC) minimization over the unit cube.
 
-Karaboga's algorithm, with the corrections the prototype needed:
+Karaboga's algorithm, with these changes:
 
 - onlookers choose food sources by *rank*, not by ``1 / (1 + f)``, which made
   the choice almost uniform once objective values were large;

@@ -60,7 +60,7 @@ in their docstrings.
 - `pirilib.solvers.exact.ExactSolver` and `ACOConfig.exact_nodes`.
 - Time, service and capacity rules of schema 0.2 in the solvers, until they
   have been measured on more than synthetic problems.
-- `Regression(scale=True)`, `lightgbm_tweedie`, `PROTOTYPE_TWEEDIE`,
+- `Regression(scale=True)`, `lightgbm_tweedie`, `TWEEDIE_SETTINGS`,
   `lightgbm_space`, `tune_forecaster`, `tune_lightgbm`, `ForecastTuning`.
 - The forecast-to-plan bridge: `buffer_factors`, `planning_document`,
   `demand_rows`.
@@ -88,7 +88,7 @@ in their docstrings.
 4. Mark the experimental names in their docstrings, and give the public
    methods that have none a docstring (`ACOSolver.solve`, `Plan.dispatches`,
    `cli.main` and others shown without text on the reference pages).
-5. Settle the open decisions of the alpha review (`docs/kararlar.md`).
+5. Settle the open decisions of the alpha review.
 6. Freeze schema `pirilib/linehaul@1.0` and keep reading 0.1 and 0.2.
 
 ## Roadmap

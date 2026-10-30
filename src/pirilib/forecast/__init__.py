@@ -18,7 +18,7 @@ from pirilib.forecast.evaluate import (
 )
 from pirilib.forecast.history import History, load_history
 from pirilib.forecast.models import (
-    PROTOTYPE_TWEEDIE,
+    TWEEDIE_SETTINGS,
     Forecast,
     Forecaster,
     Regression,
@@ -39,7 +39,7 @@ from pirilib.forecast.waves import (
 
 __all__ = [
     "FEATURES",
-    "PROTOTYPE_TWEEDIE",
+    "TWEEDIE_SETTINGS",
     "Backtest",
     "Backtester",
     "Calendar",
