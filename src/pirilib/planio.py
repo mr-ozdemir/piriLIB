@@ -177,6 +177,10 @@ def read_plan(
             header, records = _read_csv(file, delimiter)
     except OSError as exc:
         raise PlanError(f"cannot read {file}: {exc.strerror or exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise PlanError(f"{file}: not valid UTF-8 text: {exc.reason} at byte {exc.start}") from exc
+    except csv.Error as exc:
+        raise PlanError(f"{file.name}: invalid CSV: {exc}") from exc
     missing = [
         name
         for name in (*_FIXED, *_LOAD, *instance.dimensions)

@@ -1,7 +1,7 @@
 """Tests of :mod:`pirilib.spec.schema`, the JSON Schema of problem documents.
 
 The expected behaviour comes from the docstring of
-:func:`pirilib.spec.schema.document_json_schema` and from decision K47 (``docs/kararlar.md``):
+:func:`pirilib.spec.schema.document_json_schema`:
 the schema is the one of :class:`pirilib.spec.LineHaulSpec`, ``centers``, ``demand`` and
 ``matrix.arcs`` may also be a :class:`pirilib.spec.TableSource` file reference, the keys of
 ``objective.penalties`` are the built-in rule names and ``other``, and the committed file in
@@ -22,7 +22,7 @@ from jsonschema.validators import validator_for
 from pirilib.spec.schema import document_json_schema, render
 
 SCHEMA_FILE = Path(__file__).parents[2] / "schemas" / "linehaul-0.2.schema.json"
-"""The committed schema file (decision K47)."""
+"""The committed schema file."""
 
 REGENERATE = "regenerate it: python -m pirilib.spec.schema schemas/linehaul-0.2.schema.json"
 """What to do when the committed schema file is out of date."""
@@ -82,7 +82,7 @@ def as_json(data: Any) -> Any:
 
 
 def test_committed_schema_file_is_the_rendered_schema() -> None:
-    """Regression (golden file) test: ``schemas/`` holds the output of ``render()`` (K47)."""
+    """Regression (golden file) test: ``schemas/`` holds the output of ``render()``."""
     committed = SCHEMA_FILE.read_text(encoding="utf-8")
 
     rendered = render()

@@ -1,6 +1,6 @@
 """Loading a problem file: the YAML document, the CSV tables it refers to and the problems found.
 
-Integration tests (level marker ``integration``, decision K235): each test writes its files into
+Integration tests (level marker ``integration``): each test writes its files into
 its own ``tmp_path`` and reads them back through the public :func:`pirilib.load_spec`. The
 expected behavior and message formats come from ``docs/guide.md`` ("Tables from CSV" and
 "Validation") and the docstrings of :func:`pirilib.load_spec` and

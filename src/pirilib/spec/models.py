@@ -53,6 +53,15 @@ def _normalize_name(value: str) -> str:
 Name = Annotated[str, StringConstraints(min_length=1), AfterValidator(_normalize_name)]
 """An identifier with surrounding whitespace removed and Unicode NFC-normalized."""
 
+_MAX_VEHICLES: Final = 1_000_000_000
+"""Largest number of vehicles a document may give; the solvers count vehicles in 64-bit integers."""
+
+Vehicles = Annotated[int, Field(ge=1, le=_MAX_VEHICLES)]
+"""A number of vehicles, from 1 to one billion."""
+
+VehicleLimit = Annotated[int, Field(ge=0, le=_MAX_VEHICLES)]
+"""A limit on vehicles, from 0 to one billion."""
+
 
 class _Model(BaseModel):
     """Base of the specification models: unknown fields and non-finite numbers are errors."""
@@ -78,7 +87,7 @@ class Center(_Model):
             "null means no limit."
         ),
     )
-    vehicle_limits: dict[Name, NonNegativeInt] = Field(
+    vehicle_limits: dict[Name, VehicleLimit] = Field(
         default_factory=dict,
         description=(
             "Vehicle type -> most vehicles of that type that may leave from, stop at or "
@@ -118,7 +127,7 @@ class OwnedVehicles(_Model):
     type: Name
     origin: Name
     destination: Name
-    count: PositiveInt = Field(description="Vehicles available on the line every day.")
+    count: Vehicles = Field(description="Vehicles available on the line every day.")
     cost: Cost
     mandatory: bool = Field(
         default=True, description="The fixed cost is paid every day, even when the vehicle is idle."
@@ -133,7 +142,7 @@ class SpotOffer(_Model):
 
     type: Name
     cost: Cost
-    available: PositiveInt | None = Field(
+    available: Vehicles | None = Field(
         default=None, description="Vehicles per day; null means unlimited."
     )
 

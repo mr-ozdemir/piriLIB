@@ -1,11 +1,11 @@
-"""Model-based test of :class:`~pirilib.solvers.ledger.Ledger` (decision K239).
+"""Model-based test of :class:`~pirilib.solvers.ledger.Ledger`.
 
 The model is a plain table, written here from the problem document and not from the
 compiled instance: what every center can still handle and how many vehicle slots it has
 left, per ledger day. The same inputs go to the model and to the ledger, and after every
 step their state and the room the ledger hands out for a subproblem must agree.
 
-Model (table model, not a finite state machine; see K239):
+Model (table model, not a finite state machine):
 
 - State: ``handling`` (centers, ledger days) primary quantity left, inf where unlimited,
   and ``slots`` (centers, ledger days, vehicle types) vehicles left, compared only on the
