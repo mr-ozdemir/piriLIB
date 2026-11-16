@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, develop]
+    branches: [develop]
   pull_request:
 
 permissions:
@@ -12,19 +12,29 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  SKIP: ${{ github.event_name == 'pull_request' && github.head_ref == 'develop' && github.base_ref == 'master' }}
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - if: env.SKIP != 'true'
+        uses: actions/checkout@v4
+      - if: env.SKIP != 'true'
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e . --group lint
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: mypy
+      - if: env.SKIP != 'true'
+        run: python -m pip install --upgrade pip
+      - if: env.SKIP != 'true'
+        run: python -m pip install -e . --group lint
+      - if: env.SKIP != 'true'
+        run: ruff check .
+      - if: env.SKIP != 'true'
+        run: ruff format --check .
+      - if: env.SKIP != 'true'
+        run: mypy
 
   test:
     strategy:
@@ -42,18 +52,23 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       HYPOTHESIS_PROFILE: ci
+      COVERAGE: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - if: env.SKIP != 'true'
+        uses: actions/checkout@v4
+      - if: env.SKIP != 'true'
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install --upgrade pip
-      - if: runner.os == 'macOS'
+      - if: env.SKIP != 'true'
+        run: python -m pip install --upgrade pip
+      - if: env.SKIP != 'true' && runner.os == 'macOS'
         run: brew install libomp
-      - run: python -m pip install -e . --group test
-      - if: matrix.os != 'ubuntu-latest' || matrix.python-version != '3.12'
+      - if: env.SKIP != 'true'
+        run: python -m pip install -e . --group test
+      - if: env.SKIP != 'true' && env.COVERAGE != 'true'
         run: pytest
-      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+      - if: env.SKIP != 'true' && env.COVERAGE == 'true'
         run: |
           python -m pip install -e ".[ortools,pyvrp]"
           coverage run -m pytest
@@ -62,10 +77,31 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - if: env.SKIP != 'true'
+        uses: actions/checkout@v4
+      - if: env.SKIP != 'true'
+        uses: actions/setup-python@v5
         with:
           python-version: "3.14"
-      - run: python -m pip install --upgrade pip
-      - run: python -m pip install --group docs
-      - run: mkdocs build --strict
+      - if: env.SKIP != 'true'
+        run: python -m pip install --upgrade pip
+      - if: env.SKIP != 'true'
+        run: python -m pip install --group docs
+      - if: env.SKIP != 'true'
+        run: mkdocs build --strict
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - if: env.SKIP != 'true'
+        uses: actions/checkout@v4
+      - if: env.SKIP != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - if: env.SKIP != 'true'
+        run: python -m pip install --upgrade pip build twine
+      - if: env.SKIP != 'true'
+        run: python -m build
+      - if: env.SKIP != 'true'
+        run: twine check --strict dist/*

@@ -3,6 +3,7 @@
 Fleet optimization with an ant colony solver, a bee colony tuner and your own objective.
 
 [![CI](https://github.com/mr-ozdemir/piriLIB/actions/workflows/ci.yml/badge.svg)](https://github.com/mr-ozdemir/piriLIB/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/pirilib?label=PyPI&cacheSeconds=3600)](https://pypi.org/project/pirilib/)
 [![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)](https://github.com/mr-ozdemir/piriLIB/blob/master/pyproject.toml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/mr-ozdemir/piriLIB/blob/master/LICENSE)
 
@@ -10,17 +11,18 @@ Describe the fleet, the demand and the rules in YAML, write what a good plan
 means, and pirilib searches for the plan that serves the demand at the lowest
 cost. One evaluator scores every plan the same way, whichever solver made it.
 
-> **Alpha.** pirilib 0.1.0a1 is the first alpha; the API may change before 1.0.
+> **Alpha.** pirilib 0.1 is the first alpha; the API may change before 1.0.
 > See [Public API and stability](https://github.com/mr-ozdemir/piriLIB/blob/master/docs/stability.md).
 
 ## Installation
 
 ```bash
-pip install "pirilib @ git+https://github.com/mr-ozdemir/piriLIB"
+pip install pirilib
 ```
 
-Optional extras: `exact` (scipy), `excel` (openpyxl), `forecast` (LightGBM,
-scikit-learn), `pyvrp` and `ortools`.
+pirilib needs Python 3.12+. Optional extras: `exact` (scipy), `excel`
+(openpyxl), `forecast` (LightGBM, scikit-learn), `pyvrp` and `ortools`, for
+example `pip install "pirilib[exact,excel]"`.
 
 ## Quick start
 

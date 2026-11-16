@@ -23,23 +23,18 @@ jobs:
       - run: pytest
 
   build:
+    needs: test
     runs-on: ubuntu-latest
-    outputs:
-      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install --upgrade pip build packaging
       - name: Check that the tag matches the package version
-        id: version
-        run: |
-          version=$(python -c "import runpy; print(runpy.run_path('src/pirilib/_version.py')['__version__'])")
-          test "v$version" = "$GITHUB_REF_NAME"
-          python -c "from packaging.version import Version; v = Version('$version'); assert str(v) == '$version', 'version is not in normalized PEP 440 form'; print(f'prerelease={str(v.is_prerelease).lower()}')" >> "$GITHUB_OUTPUT"
-          cat "$GITHUB_OUTPUT"
+        run: test "${GITHUB_REF_NAME#v}" = "$(python -c "import runpy; print(runpy.run_path('src/pirilib/_version.py')['__version__'])")"
+      - run: python -m pip install --upgrade pip build twine
       - run: python -m build
+      - run: twine check --strict dist/*
       - name: Smoke test the wheel
         run: |
           python -m pip install dist/*.whl
@@ -50,11 +45,12 @@ jobs:
           name: dist
           path: dist/
 
-  testpypi:
-    name: testpypi (every version)
-    needs: [test, build]
+  publish:
+    needs: build
     runs-on: ubuntu-latest
-    environment: testpypi
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pirilib/
     permissions:
       id-token: write
     steps:
@@ -63,20 +59,25 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
 
-  pypi:
-    name: pypi (final versions only)
-    needs: [build, testpypi]
-    if: needs.build.outputs.prerelease == 'false'
+  github-release:
+    needs: publish
     runs-on: ubuntu-latest
-    environment: pypi
     permissions:
-      id-token: write
+      contents: write
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: actions/checkout@v4
+      - name: Take the release notes from the changelog
+        run: |
+          python - <<'PY'
+          import os, pathlib, re
+          version = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          section = re.search(rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)", text, re.M | re.S)
+          if section is None:
+              raise SystemExit(f"CHANGELOG.md has no section for {version}")
+          pathlib.Path("notes.md").write_text(section[1].strip() + "\n", encoding="utf-8")
+          PY
+      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}

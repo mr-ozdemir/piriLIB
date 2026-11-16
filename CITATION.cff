@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: If you use pirilib in your research, please cite it as below.
+title: "pirilib: fleet optimization with an ant colony solver and a bee colony tuner"
+type: software
+authors:
+  - family-names: Ozdemir
+    given-names: Muhammet
+  - family-names: Altun
+    given-names: Melek
+license: Apache-2.0
+repository-code: https://github.com/mr-ozdemir/piriLIB
+version: 0.1.0
+date-released: 2026-11-16
