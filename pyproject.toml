@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
-authors = [{ name = "Muhammet Ozdemir" }]
+authors = [{ name = "Muhammet Ozdemir", email = "mr.ozdemir34@gmail.com" }]
 keywords = [
     "fleet optimization",
     "ant colony optimization",
