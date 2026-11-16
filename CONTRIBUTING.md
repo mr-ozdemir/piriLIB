@@ -62,33 +62,25 @@ Commit messages are short and in the imperative, for example
 
 ## Releasing
 
-Versions are written in PEP 440 form: `0.1.0a1`, `0.1.0b1` and `0.1.0rc1` are
-pre-releases, `0.1.0` is a final release. A pre-release is published to
-TestPyPI only, a final release to TestPyPI and then to PyPI.
+Versions follow [Semantic Versioning](https://semver.org/): `0.2.0` adds
+features, `0.1.1` only fixes bugs.
 
 1. Set `__version__` in `src/pirilib/_version.py`.
-2. In `CHANGELOG.md`, add `## [X.Y.Z] - YYYY-MM-DD` under `## [Unreleased]`
-   and update the link references.
+2. In `CHANGELOG.md`, rename `[Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add an
+   empty `[Unreleased]` above it and update the link references.
 3. Merge into `develop`, then `develop` into `master`.
 4. Tag the merge commit on `master` and push the tag:
 
    ```bash
    git switch master
    git pull
-   git tag -a v0.1.0a1 -m "pirilib 0.1.0a1"
-   git push origin v0.1.0a1
+   git tag -a v0.2.0 -m "pirilib 0.2.0"
+   git push origin v0.2.0
    ```
 
-The tag starts `.github/workflows/release.yml`: it checks that the tag matches
-`__version__`, runs the lint and the tests, builds and installs the wheel, and
-publishes to TestPyPI with trusted publishing. A final version then waits for
-an approval in the `pypi` environment and is published to PyPI. A version
-cannot be uploaded twice; after a wrong upload, release the next number.
-
-One-time setup before the first tag:
-
-1. On test.pypi.org and pypi.org, add a trusted publisher for `pirilib`:
-   repository `mr-ozdemir/piriLIB`, workflow `release.yml`, environment
-   `testpypi` on TestPyPI and `pypi` on PyPI.
-2. In the repository settings, create the environments `testpypi` and `pypi`,
-   and add a required reviewer to `pypi`.
+The tag starts `.github/workflows/release.yml`: it runs the lint and the tests,
+checks that the tag matches `__version__`, builds the sdist and the wheel, checks
+them with `twine`, installs the wheel and runs `pirilib --help`, publishes to
+[PyPI](https://pypi.org/project/pirilib/) with trusted publishing and creates the
+GitHub release with the changelog section as its notes. A version cannot be
+uploaded twice; after a wrong upload, release the next number.

@@ -6,8 +6,8 @@ reviewed together with the decision log during the alpha.
 
 ## Alpha notice
 
-pirilib 0.1.0a1 is the first alpha release. Until 1.0, everything may change
-in any release, alphas and betas included: public names, the problem documents
+pirilib 0.1 is the first alpha release. Until 1.0, everything may change
+in any release: public names, the problem documents
 and their schema ids, plan files, command line options and the internal
 structure. The lists below are the intent for 1.0, not a promise for the
 releases before it.
@@ -99,6 +99,6 @@ follow line-haul is not decided yet.
 
 | Version | Scope |
 |---|---|
-| 0.1.0a1 | The line-haul problem type (schema `pirilib/linehaul@0.2` with times, service, deferral and center limits), evaluator, constraint catalog and plan checker, numpy ACO with local search and an exact solver, ABC tuner, demand forecasting with the forecast-to-plan bridge, benchmarks with PyVRP and OR-Tools baselines, command line |
-| Later alphas and betas | Changes from alpha feedback; the API and the internal structure may still change |
+| 0.1 | The line-haul problem type (schema `pirilib/linehaul@0.2` with times, service, deferral and center limits), evaluator, constraint catalog and plan checker, numpy ACO with local search and an exact solver, ABC tuner, demand forecasting with the forecast-to-plan bridge, benchmarks with PyVRP and OR-Tools baselines, command line |
+| 0.x | Changes from alpha feedback; the API and the internal structure may still change |
 | 1.0 | Stable API, as listed on this page |

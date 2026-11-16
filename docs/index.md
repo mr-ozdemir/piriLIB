@@ -3,7 +3,7 @@
 Fleet optimization with an ant colony solver and a bee colony tuner, driven by
 your own data, constraints and objective.
 
-!!! warning "Status: first alpha (0.1.0a1)"
+!!! warning "Status: first alpha (0.1)"
 
     Everything may still change before 1.0, the public API and the internal
     structure alike. Fleet optimization is the default domain, and line-haul
