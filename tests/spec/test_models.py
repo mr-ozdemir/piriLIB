@@ -674,3 +674,106 @@ def test_long_reports_list_fifty_problems_and_count_the_rest(
     assert len(found) == lines
     assert found[0] == "demand[0].origin: unknown center 'X'"
     assert found[-1] == last
+
+
+@pytest.mark.parametrize(
+    ("text", "time"),
+    [
+        ("00:00", dt.time(0, 0)),
+        ("09:00", dt.time(9, 0)),
+        ("9:00", dt.time(9, 0)),
+        ("9:05:30", dt.time(9, 5, 30)),
+        ("17:00", dt.time(17, 0)),
+        ("23:59:59", dt.time(23, 59, 59)),
+    ],
+)
+def test_ready_is_the_time_of_day_that_is_written(
+    document: dict[str, Any], text: str, time: dt.time
+) -> None:
+    """The earliest and latest time of day, with and without seconds; ``9:00`` is 09:00."""
+    document["demand"][0]["ready"] = text
+
+    spec = parse_spec(document)
+
+    assert spec.demand[0].ready == time
+
+
+@pytest.mark.parametrize("text", ["24:00", "9:60", "9", "17"])
+def test_ready_that_is_not_a_time_of_day_is_rejected(document: dict[str, Any], text: str) -> None:
+    """An hour past 23, a minute past 59 and a bare hour; the reason keeps the pydantic wording."""
+    document["demand"][0]["ready"] = text
+
+    with pytest.raises(
+        SpecError, match=r"(?m)^- demand\[0\]\.ready: Input should be in a valid time format"
+    ):
+        parse_spec(document)
+
+
+@pytest.mark.parametrize(
+    ("number", "shown"), [(0, "0"), (1020, "1020"), (1020.5, "1020.5")], ids=["0", "1020", "1020.5"]
+)
+def test_a_number_as_ready_time_is_rejected(
+    document: dict[str, Any], number: float, shown: str
+) -> None:
+    """A YAML 1.1 reader gives the unquoted ``17:00`` as 1020; read as seconds it would be 00:17."""
+    document["demand"][0]["ready"] = number
+
+    found = reported_problems(document)
+
+    assert found == [
+        f"demand[0].ready: {shown} is a number, not a time; "
+        'write the time in quotes, for example "17:00"'
+    ]
+
+
+@pytest.mark.parametrize(
+    ("number", "shown"),
+    [(1020, "1020"), (1778605200.5, "1778605200.5")],
+    ids=["1020", "1778605200.5"],
+)
+def test_a_number_as_due_time_is_rejected(
+    document: dict[str, Any], number: float, shown: str
+) -> None:
+    """A small number and one that would be a moment in 2026 as seconds since 1970."""
+    document["demand"][0]["due"] = number
+
+    found = reported_problems(document)
+
+    assert found == [
+        f"demand[0].due: {shown} is a number, not a time; "
+        'write the time in quotes, for example "2026-05-12 17:00"'
+    ]
+
+
+@pytest.mark.parametrize(
+    ("field", "text"),
+    [
+        ("ready", "17:00:00+03:00"),
+        ("ready", "17:00:00Z"),
+        ("due", "2026-01-05T17:00:00+03:00"),
+        ("due", "2026-01-05T17:00:00Z"),
+    ],
+    ids=["ready-offset", "ready-utc", "due-offset", "due-utc"],
+)
+def test_a_time_with_a_utc_offset_is_rejected(
+    document: dict[str, Any], field: str, text: str
+) -> None:
+    """Times are local times of the centers, so a document cannot give an offset or ``Z``."""
+    document["demand"][0][field] = text
+
+    found = reported_problems(document)
+
+    assert found == [
+        f"demand[0].{field}: must not have a UTC offset; times are local times of the centers"
+    ]
+
+
+def test_ready_with_a_utc_offset_is_rejected_next_to_a_due_time(document: dict[str, Any]) -> None:
+    """Only the offset is reported; the two times are not compared."""
+    document["demand"][0].update(ready="17:00:00+03:00", due="2026-01-05 18:00")
+
+    found = reported_problems(document)
+
+    assert found == [
+        "demand[0].ready: must not have a UTC offset; times are local times of the centers"
+    ]

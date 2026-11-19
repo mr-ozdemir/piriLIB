@@ -40,6 +40,21 @@ def write_problem(folder: Path, document: dict[str, Any]) -> Path:
     return path
 
 
+RAW = "RAW-YAML-VALUE"
+"""Placeholder that :func:`write_problem_with_raw_value` replaces by YAML text."""
+
+
+def write_problem_with_raw_value(folder: Path, document: dict[str, Any], text: str) -> Path:
+    """Write ``document`` with ``text`` in place of the value :data:`RAW` and return the path.
+
+    ``yaml.safe_dump`` quotes a value such as ``17:00``. To get the file an author would type,
+    the document is written with the placeholder, which is then replaced by ``text`` as it is.
+    """
+    path = write_problem(folder, document)
+    path.write_text(path.read_text(encoding="utf-8").replace(RAW, text), encoding="utf-8")
+    return path
+
+
 def write_table(folder: Path, name: str, text: str) -> None:
     """Write ``text`` as the UTF-8 file ``folder/name``."""
     (folder / name).write_text(text, encoding="utf-8")
@@ -427,4 +442,97 @@ def test_arc_problems_name_file_and_line(tmp_path: Path, document: dict[str, Any
         f"{path}: invalid problem specification",
         "- arcs.csv:4: destination: unknown center 'D'",
         "- matrix.arcs: no distance for B -> C, C -> B",
+    ]
+
+
+def test_writing_a_raw_value_puts_the_text_in_the_file_unquoted(
+    tmp_path: Path, document: dict[str, Any]
+) -> None:
+    """The helper's own test: the name becomes the plain scalar ``17:00``, not ``'17:00'``."""
+    document["name"] = RAW
+
+    path = write_problem_with_raw_value(tmp_path, document, "17:00")
+
+    assert "name: 17:00\n" in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("text", "time"),
+    [
+        ("17:00", dt.time(17, 0)),
+        ('"17:00"', dt.time(17, 0)),
+        ("'17:00'", dt.time(17, 0)),
+        ("9:00", dt.time(9, 0)),
+        ("09:00", dt.time(9, 0)),
+        ("23:59", dt.time(23, 59)),
+        ("17:30:15", dt.time(17, 30, 15)),
+    ],
+    ids=[
+        "unquoted",
+        "double-quoted",
+        "single-quoted",
+        "one-digit-hour",
+        "leading-zero",
+        "last-minute",
+        "with-seconds",
+    ],
+)
+def test_ready_time_is_read_as_written_with_or_without_quotes(
+    tmp_path: Path, document: dict[str, Any], text: str, time: dt.time
+) -> None:
+    """YAML 1.1 reads the unquoted ``17:00`` as the base-60 number 1020 and ``9:00`` as 540.
+
+    Read as seconds they would be 00:17 and 00:09; the file must give the time that is written.
+    """
+    document["demand"][0]["ready"] = RAW
+    path = write_problem_with_raw_value(tmp_path, document, text)
+
+    spec = load_spec(path)
+
+    assert spec.demand[0].ready == time
+
+
+def test_unquoted_ready_time_reaches_the_instance_in_minutes(
+    tmp_path: Path, document: dict[str, Any]
+) -> None:
+    """17:00 on the first calendar day is minute 17 x 60 = 1020, an exact float."""
+    document["demand"][0]["ready"] = RAW
+    path = write_problem_with_raw_value(tmp_path, document, "17:00")
+
+    instance = load_spec(path).compile()
+
+    assert instance.demand_ready[0] == 1020.0
+
+
+@pytest.mark.parametrize("text", ["1:30", "1:30.5"], ids=["whole", "fraction"])
+def test_unquoted_colon_value_is_not_a_base_60_number(
+    tmp_path: Path, document: dict[str, Any], text: str
+) -> None:
+    """YAML 1.1 reads ``1:30`` as 90 and ``1:30.5`` as 90.5; here both are text, not hours."""
+    document["rules"] = {"service": {"due_hours": RAW}}
+    path = write_problem_with_raw_value(tmp_path, document, text)
+
+    with pytest.raises(SpecError) as info:
+        load_spec(path)
+
+    assert str(info.value).splitlines() == [
+        f"{path}: invalid problem specification",
+        "- rules.service.due_hours: Input should be a valid number, "
+        "unable to parse string as a number",
+    ]
+
+
+def test_unquoted_due_time_with_a_utc_offset_is_reported(
+    tmp_path: Path, document: dict[str, Any]
+) -> None:
+    """YAML reads the unquoted timestamp as a datetime with an offset; it is a problem, no crash."""
+    document["demand"][0]["due"] = RAW
+    path = write_problem_with_raw_value(tmp_path, document, "2026-01-05T17:00:00+03:00")
+
+    with pytest.raises(SpecError) as info:
+        load_spec(path)
+
+    assert str(info.value).splitlines() == [
+        f"{path}: invalid problem specification",
+        "- demand[0].due: must not have a UTC offset; times are local times of the centers",
     ]

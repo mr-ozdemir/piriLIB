@@ -140,6 +140,10 @@ without it, the due time is `due_hours` after the demand is ready, and there is
 none when `due_hours` is not set. A `minutes_per_unit` of
 0.01 handles 100 desi a minute.
 
+`ready` is a local time of day (`17:00`, `9:00` or `17:00:30`) and `due` a
+local date and time; both may be written with or without quotes. A number, or
+a time with a UTC offset such as `+03:00` or `Z`, is reported as a problem.
+
 - **Timeline of a dispatch.**
   - Loading starts at the dispatch's `start` (minutes after 00:00 of its day;
     by default as soon as every load is ready).

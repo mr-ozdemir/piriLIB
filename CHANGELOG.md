@@ -4,10 +4,25 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses [Semantic Versioning](https://semver.org/).
 
-[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mr-ozdemir/piriLIB/releases/tag/v0.1.0
 
 ## [Unreleased]
+
+## [0.1.1] - 2026-11-19
+
+### Fixed
+
+- An unquoted time of day in a problem file, such as `ready: 17:00`, was read
+  as a base-60 number and became 00:17. A value with a colon is now read as the
+  text that is written, with or without quotes, in problem files and in the
+  network file of `pirilib forecast`; `9:00` is read as 09:00.
+- A number given as `ready` was read as seconds after midnight. It is now
+  reported as a problem.
+- A `due` time that was a number or had a UTC offset stopped validation with a
+  `TypeError`. Both are now reported as problems, as is a UTC offset on
+  `ready`: times are local times of the centers.
 
 ## [0.1.0] - 2026-11-16
 
