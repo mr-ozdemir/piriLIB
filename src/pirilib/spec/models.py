@@ -11,6 +11,7 @@ can be served at all.
 """
 
 import datetime as dt
+import re
 import unicodedata
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Final, Literal, Self
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Final, Literal, Self
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     NonNegativeFloat,
@@ -61,6 +63,40 @@ Vehicles = Annotated[int, Field(ge=1, le=_MAX_VEHICLES)]
 
 VehicleLimit = Annotated[int, Field(ge=0, le=_MAX_VEHICLES)]
 """A limit on vehicles, from 0 to one billion."""
+
+_ONE_DIGIT_HOUR: Final = re.compile(r"\d:[0-5]\d(?::[0-5]\d)?")
+
+
+def _refuse_number(value: object, example: str) -> None:
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        raise ValueError(
+            f'{value!r} is a number, not a time; write the time in quotes, for example "{example}"'
+        )
+
+
+def _time_text(value: object) -> object:
+    _refuse_number(value, "17:00")
+    if isinstance(value, str) and _ONE_DIGIT_HOUR.fullmatch(value):
+        return f"0{value}"
+    return value
+
+
+def _datetime_text(value: object) -> object:
+    _refuse_number(value, "2026-05-12 17:00")
+    return value
+
+
+def _local[T: (dt.time, dt.datetime)](value: T) -> T:
+    if value.tzinfo is not None:
+        raise ValueError("must not have a UTC offset; times are local times of the centers")
+    return value
+
+
+TimeOfDay = Annotated[dt.time, BeforeValidator(_time_text), AfterValidator(_local)]
+"""A local time of day, such as ``17:00`` or ``9:00``; a number or a UTC offset is an error."""
+
+Moment = Annotated[dt.datetime, BeforeValidator(_datetime_text), AfterValidator(_local)]
+"""A local date and time; a number or a UTC offset is an error."""
 
 
 class _Model(BaseModel):
@@ -167,10 +203,10 @@ class Demand(_Model):
     quantity: dict[Name, NonNegativeFloat] = Field(
         min_length=1, description="Quantity per dimension; every capacity dimension is required."
     )
-    ready: dt.time | None = Field(
+    ready: TimeOfDay | None = Field(
         default=None, description="Time of day the demand can be loaded; null means 00:00."
     )
-    due: dt.datetime | None = Field(
+    due: Moment | None = Field(
         default=None,
         description=(
             "When it must be unloaded; null means rules.service.due_hours after it is "

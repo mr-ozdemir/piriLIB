@@ -9,6 +9,18 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- An unquoted time of day in a problem file, such as `ready: 17:00`, was read
+  as a base-60 number and became 00:17. A value with a colon is now read as the
+  text that is written, with or without quotes, in problem files and in the
+  network file of `pirilib forecast`; `9:00` is read as 09:00.
+- A number given as `ready` was read as seconds after midnight. It is now
+  reported as a problem.
+- A `due` time that was a number or had a UTC offset stopped validation with a
+  `TypeError`. Both are now reported as problems, as is a UTC offset on
+  `ready`: times are local times of the centers.
+
 ## [0.1.0] - 2026-11-16
 
 ### Added

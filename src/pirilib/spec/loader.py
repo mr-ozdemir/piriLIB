@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
+from pirilib import _yaml
 from pirilib.errors import SpecError
 from pirilib.spec._format import Origins, format_validation_errors
 from pirilib.spec.models import LineHaulSpec
@@ -23,6 +24,9 @@ def load_spec(path: str | os.PathLike[str]) -> LineHaulSpec:
     :class:`~pirilib.spec.TableSource`); their paths are relative to the YAML
     file, and problems in their rows are reported with file name and line.
     Every problem found is reported in one :class:`~pirilib.SpecError`.
+
+    A value with a colon, such as ``17:00``, is read as the text that was
+    written, with or without quotes; it is never a base-60 number.
     """
     file = Path(path)
     try:
@@ -32,7 +36,7 @@ def load_spec(path: str | os.PathLike[str]) -> LineHaulSpec:
     except UnicodeDecodeError as exc:
         raise SpecError(f"{file}: not valid UTF-8 text: {exc.reason} at byte {exc.start}") from exc
     try:
-        data = yaml.safe_load(text)
+        data = _yaml.load(text)
     except yaml.YAMLError as exc:
         raise SpecError(f"{file}: invalid YAML: {exc}") from exc
     except RecursionError:
