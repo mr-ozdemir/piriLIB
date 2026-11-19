@@ -33,6 +33,7 @@ from typing import Any
 
 import yaml
 
+from pirilib import _yaml
 from pirilib import objective as obj
 from pirilib._version import __version__
 from pirilib.errors import PirilibError, SpecError
@@ -315,7 +316,7 @@ def _forecast(arguments: argparse.Namespace) -> int:
         print(f"forecast written to {arguments.output}")
     if arguments.network:
         network_path = Path(arguments.network)
-        network = yaml.safe_load(network_path.read_text(encoding="utf-8"))
+        network = _yaml.load(network_path.read_text(encoding="utf-8"))
         network, _ = materialize_tables(network, network_path.parent)
         document = planning_document(network, forecast, factors=factors, waves=shares)
         parse_spec(document, source=str(network_path))

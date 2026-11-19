@@ -351,6 +351,33 @@ def test_forecast_with_unknown_centers(
     assert not (tmp_path / "problem.yaml").exists()
 
 
+def test_forecast_network_does_not_read_base_60_numbers(
+    capsys: pytest.CaptureFixture[str], history_files: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    """``due_hours: 1:30`` in the network file is text, not 90 hours, so no problem is written."""
+    import yaml
+
+    history, _, network = history_files
+    document = yaml.safe_load(network.read_text("utf-8"))
+    document["rules"] = {"service": {"due_hours": "HOURS"}}
+    text = yaml.safe_dump(document, sort_keys=False).replace("HOURS", "1:30")
+    network.write_text(text, "utf-8")
+    code, _, err = run(
+        capsys,
+        "forecast",
+        str(history),
+        "--model",
+        "seasonal",
+        "--network",
+        str(network),
+        "--problem",
+        str(tmp_path / "problem.yaml"),
+    )
+    assert code == 1
+    assert "rules.service.due_hours: Input should be a valid number" in err
+    assert not (tmp_path / "problem.yaml").exists()
+
+
 def test_forecast_split_into_waves(
     capsys: pytest.CaptureFixture[str], history_files: tuple[Path, Path, Path], tmp_path: Path
 ) -> None:
