@@ -191,6 +191,36 @@ class Summary:
 
 
 @dataclass(frozen=True, slots=True)
+class Spread:
+    """How the objective of one solver varies over its runs on one instance.
+
+    Quartiles are interpolated between the sorted objectives of the solved
+    runs; with one solved run all five numbers are that run's objective.
+
+    Attributes:
+        runs: Runs, solved or skipped
+        solved: Runs the solver did not refuse
+        best: Lowest objective; NaN when no run was solved, as are the next five
+        worst: Highest objective
+        gap: Of the median to the best objective known for the instance,
+            ``(median - best) / max(|best|, 1)``
+        median_seconds: Over solved runs; NaN when none
+    """
+
+    instance: str
+    solver: str
+    runs: int
+    solved: int
+    best: float
+    lower_quartile: float
+    median: float
+    upper_quartile: float
+    worst: float
+    gap: float
+    median_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
 class ResultTable:
     """The records of a benchmark run."""
 
@@ -274,6 +304,40 @@ class ResultTable:
             )
         return Summary(rows=tuple(rows), best_known=best)
 
+    def spread(self, best_known: Mapping[str, float] | None = None) -> tuple[Spread, ...]:
+        """Per instance and solver, the distribution of the objective over the runs.
+
+        One :class:`Spread` per pair, instances and solvers in the order they
+        first appear. ``best_known`` is used as in :meth:`summary`.
+        """
+        best = self.best_known()
+        for name, value in (best_known or {}).items():
+            best[name] = min(value, best.get(name, math.inf))
+        runs: dict[tuple[str, str], list[Record]] = {}
+        for record in self.records:
+            runs.setdefault((record.instance, record.solver), []).append(record)
+        rows = []
+        for (instance, solver), group in runs.items():
+            solved = [record for record in group if record.solved]
+            lower, median, upper = _quartiles([record.objective for record in solved])
+            reference = best.get(instance, math.nan)
+            rows.append(
+                Spread(
+                    instance=instance,
+                    solver=solver,
+                    runs=len(group),
+                    solved=len(solved),
+                    best=min((record.objective for record in solved), default=math.nan),
+                    lower_quartile=lower,
+                    median=median,
+                    upper_quartile=upper,
+                    worst=max((record.objective for record in solved), default=math.nan),
+                    gap=(median - reference) / max(abs(reference), 1.0),
+                    median_seconds=_quartiles([record.seconds for record in solved])[1],
+                )
+            )
+        return tuple(rows)
+
     def to_csv(self, path: str | os.PathLike[str]) -> Path:
         """Write one row per record, with :data:`COLUMNS` as the header."""
         target = Path(path)
@@ -311,6 +375,15 @@ class ResultTable:
                 if all(getattr(record, name) == value for name, value in values.items())
             )
         )
+
+
+def _quartiles(values: Sequence[float]) -> tuple[float, float, float]:
+    if not values:
+        return math.nan, math.nan, math.nan
+    if len(values) == 1:
+        return values[0], values[0], values[0]
+    lower, median, upper = statistics.quantiles(values, n=4, method="inclusive")
+    return lower, median, upper
 
 
 def _mean(values: Sequence[float]) -> float:

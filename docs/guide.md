@@ -532,9 +532,10 @@ from pirilib.spec import parse_spec
 instances = FAMILIES.get("small").instances(10)
 goal = parse_spec(instances[0].document).build_objective()
 benchmark = Benchmark(SOLVERS.make(["direct", "aco", "exact"]), objective=goal, seeds=(0, 1))
-table = benchmark.run(instances)
-table.to_csv("results.csv")
-print(table.summary())
+report = benchmark.report(instances)
+report.to_json("report.json")
+report.table.to_csv("results.csv")
+print(report.summary())
 ```
 
 - **Families.** A `Family` holds ranges of settings for
@@ -550,6 +551,15 @@ print(table.summary())
 - **Summary.** Per solver it gives the mean and median gap to the best
   objective any run reached on the instance, the share of runs that reached
   it, the share of solved runs without violations, and the mean seconds.
+- **Report.** `Benchmark.report` runs as `Benchmark.run` does and returns
+  the records together with the conditions of the run: the instances and
+  their generator settings, the solvers and their settings, the objective,
+  the seeds, the machine and the versions of pirilib, Python and the solver
+  packages. `Report.spread` gives, per instance and solver, the best,
+  quartiles, median and worst objective over the seeds and the gap of the
+  median to the best known objective. `to_json` writes all of it to one
+  file and `Report.from_json` reads it back, so a later run can be compared
+  with it.
 - **Baselines.**
   - `pirilib.solvers.direct.DirectShipping` sends every line straight: full
     vehicles first, then the cheapest vehicle that fits. It keeps bans, owned
@@ -564,6 +574,7 @@ print(table.summary())
 
 ```bash
 pirilib bench small --solvers direct,aco,aco-exact,exact -o results.csv --summary summary.csv
+pirilib bench small --solvers direct,aco --seeds 5 --report report.json
 ```
 
 ## Library structure

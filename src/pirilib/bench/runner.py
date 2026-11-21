@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import Final
 
 from pirilib.bench.families import BenchInstance
+from pirilib.bench.report import Report
 from pirilib.bench.results import Record, ResultTable
 from pirilib.constraints import Constraint
 from pirilib.evaluation import evaluate
@@ -70,6 +71,27 @@ class Benchmark:
                     if progress is not None:
                         progress(record)
         return ResultTable(tuple(records))
+
+    def report(
+        self,
+        instances: Iterable[BenchInstance],
+        progress: Callable[[Record], None] | None = None,
+    ) -> Report:
+        """Run as :meth:`run` does and return the records with the conditions of the run.
+
+        The report names the instances and their generator settings, the solvers
+        and their settings, the objective, the seeds, the machine and the
+        package versions, so that the run can be repeated and compared.
+        """
+        items = list(instances)
+        return Report.of(
+            self.run(items, progress),
+            solvers=self.solvers,
+            objective=self.objective,
+            constraints=self.constraints,
+            seeds=self.seeds,
+            instances=items,
+        )
 
     def run_one(self, item: BenchInstance, name: str, solver: Solver, seed: int) -> Record:
         """One run of ``solver`` on ``item``."""
