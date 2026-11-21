@@ -79,6 +79,11 @@ def owned_without_stopovers(document: dict[str, Any]) -> None:
         group["stopovers"] = False
 
 
+def spot_without_stopovers(document: dict[str, Any]) -> None:
+    for offer in document["fleet"]["spot"]:
+        offer["stopovers"] = False
+
+
 def no_split(document: dict[str, Any]) -> None:
     document["rules"]["split_demand"] = False
     for row in document["demand"]:
@@ -143,6 +148,7 @@ SCENARIOS: dict[str, tuple[Change, ...]] = {
     "two-stops": (no_min_fill, two_stops),
     "any-direction": (no_min_fill, any_direction),
     "owned-without-stopovers": (no_min_fill, owned_without_stopovers),
+    "spot-without-stopovers": (no_min_fill, spot_without_stopovers),
     "no-split": (no_min_fill, no_split),
     "spot-limits": (no_min_fill, spot_limits),
     "two-dimensions": (no_min_fill, two_dimensions),

@@ -777,3 +777,24 @@ def test_ready_with_a_utc_offset_is_rejected_next_to_a_due_time(document: dict[s
     assert found == [
         "demand[0].ready: must not have a UTC offset; times are local times of the centers"
     ]
+
+
+def test_owned_vehicles_and_spot_offers_may_stop_over_by_default(document: dict[str, Any]) -> None:
+    """The fixture gives ``stopovers`` nowhere: one owned group and two spot offers."""
+    spec = parse_spec(document)
+
+    assert [group.stopovers for group in spec.fleet.owned] == [True]
+    assert [offer.stopovers for offer in spec.fleet.spot] == [True, True]
+
+
+def test_stopovers_can_be_switched_off_per_owned_group_and_spot_offer(
+    document: dict[str, Any],
+) -> None:
+    """The owned group and the second spot offer say ``false``; the first offer says nothing."""
+    document["fleet"]["owned"][0]["stopovers"] = False
+    document["fleet"]["spot"][1]["stopovers"] = False
+
+    instance = parse_spec(document).compile()
+
+    assert instance.owned_stopovers.tolist() == [False]
+    assert instance.spot_stopovers.tolist() == [True, False]

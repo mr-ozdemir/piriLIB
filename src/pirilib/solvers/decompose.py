@@ -302,9 +302,7 @@ def _subproblem(
         line_end=np.concatenate(
             [[index[int(c)] for c in instance.owned_destination[groups]], np.full(spot.size, -1)]
         ).astype(np.int64),
-        stopovers=np.concatenate(
-            [instance.owned_stopovers[groups], np.ones(spot.size, dtype=np.bool_)]
-        )
+        stopovers=np.concatenate([instance.owned_stopovers[groups], instance.spot_stopovers[spot]])
         & rules.stopover.enabled,
         allowed=allowed,
         per_hour=np.concatenate([instance.owned_per_hour[groups], instance.spot_per_hour[spot]]),

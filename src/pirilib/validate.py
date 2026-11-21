@@ -181,6 +181,12 @@ class _Checker:
                     1,
                     f"{label} has {len(stops)} stops; the group may not stop on the way",
                 )
+            elif not owned and not instance.spot_stopovers[source]:
+                self.add(
+                    "stopover",
+                    1,
+                    f"{label} has {len(stops)} stops; the offer serves one destination",
+                )
         limit = rules.stopover.max_stops
         if limit is not None and len(stops) > limit:
             self.add(

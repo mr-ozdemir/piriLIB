@@ -402,6 +402,7 @@ class _Context:
     def _stopover(self) -> int:
         allowed = np.full(len(self.plan), self.instance.rules.stopover.enabled)
         allowed[self.owned_rows] &= self.instance.owned_stopovers[self.owned_source]
+        allowed[self.spot_rows] &= self.instance.spot_stopovers[self.spot_source]
         return int(np.count_nonzero((self.counts > 1) & ~allowed))
 
     def _max_stops(self) -> int:

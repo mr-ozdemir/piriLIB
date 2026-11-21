@@ -11,8 +11,18 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `stopovers` on a spot offer (default `true`): with `false` every vehicle of
+  the offer goes to one destination. The `stopover` rule counts routes that
+  break it, and every solver keeps it.
+
 ### Changed
 
+- `stopovers` of an owned group now defaults to `true`: owned vehicles may
+  drop loads at centers on the way of their line unless the group says
+  `stopovers: false`. A problem file that leaves the field out can get a
+  different, cheaper plan than before.
 - With `decimal: ","`, a `.` in a number of a CSV table or a plan file is
   accepted only where it groups thousands, as in `1.234,5`. A value such as
   `12.5` was read as 125 and is now reported as a problem. Plan files also

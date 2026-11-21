@@ -97,7 +97,7 @@ penalty prices a desi and a kg alike. 1300 desi and 600 kg left behind are a
 | `vehicle_limit` | count | Vehicles of a type at a center beyond its daily limit. |
 | `capacity` | quantity | Load above vehicle capacity, summed over dimensions. |
 | `min_fill` | quantity | Load missing to reach the minimum fill of the primary dimension. |
-| `stopover` | count | Dispatches with more than one stop although stopovers are disabled, or not allowed for the owned group. |
+| `stopover` | count | Dispatches with more than one stop although stopovers are disabled, or not allowed for the owned group or the spot offer. |
 | `max_stops` | count | Stops beyond `rules.stopover.max_stops`. |
 | `stretch` | km | Route length above `max_stretch` times the direct distance to the last stop. |
 | `forward_only` | count | Stops that are not farther from the origin than the stop before them. |
