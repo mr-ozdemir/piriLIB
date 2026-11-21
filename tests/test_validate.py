@@ -12,6 +12,7 @@ from hypothesis import strategies as st
 
 from pirilib import Dispatch, Load, Plan, check_plan, evaluate
 from pirilib.spec import LineHaulInstance, parse_spec
+from pirilib.validate import Violation
 
 
 def test_messages_explain_violations(instance: LineHaulInstance) -> None:
@@ -31,6 +32,29 @@ def test_messages_explain_violations(instance: LineHaulInstance) -> None:
         "- coverage: demand D000003: 120 desi not carried",
     ]
     assert report.totals()["coverage"] == 1020.0
+
+
+def test_a_spot_offer_without_stopovers_is_named_in_the_message(
+    document: dict[str, Any], compile_document: Callable[..., LineHaulInstance]
+) -> None:
+    """Spot ``small`` carries demand 1 to ``C`` by way of ``B``; its offer serves one stop."""
+    document["fleet"]["spot"][1]["stopovers"] = False
+    instance = compile_document(document)
+    dispatch = Dispatch(
+        day=0, kind="spot", source=1, origin=0, stops=(1, 2), loads=(Load(1, (250.0,)),)
+    )
+
+    report = check_plan(instance, Plan.from_dispatches([dispatch], 1))
+
+    assert (
+        Violation(
+            "stopover",
+            1,
+            "dispatch 0 (2026-01-05, spot small from A) has 2 stops; "
+            "the offer serves one destination",
+        )
+        in report.violations
+    )
 
 
 _CENTERS = [(0.0, 0.0), (0.1, 1.0), (-0.1, 2.0), (0.2, 3.0), (0.0, 4.0)]
@@ -96,12 +120,18 @@ def _document(rules: dict[str, Any], timed: bool = False) -> dict[str, Any]:
                     "destination": "A",
                     "count": 1,
                     "mandatory": False,
+                    "stopovers": False,
                     "cost": {"fixed": 200.0, "per_km": 1.0},
                 },
             ],
             "spot": [
                 {"type": "big", "cost": {"fixed": 1500.0, "per_km": 5.0}},
-                {"type": "small", "cost": {"fixed": 600.0, "per_km": 2.5}, "available": 4},
+                {
+                    "type": "small",
+                    "cost": {"fixed": 600.0, "per_km": 2.5},
+                    "available": 4,
+                    "stopovers": False,
+                },
             ],
         },
         "demand": demand,

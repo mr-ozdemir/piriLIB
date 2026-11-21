@@ -30,6 +30,8 @@ class LineHaulInstance:
         capacity: (vehicle types, dimensions)
         banned: (centers, vehicle types): True if the type may not use the center
         spot_available: Vehicles per day, or UNLIMITED
+        spot_stopovers: A vehicle of the offer may serve several destinations
+        owned_stopovers: A vehicle of the group may stop on the way of its line
         demand_quantity: (demands, dimensions)
         speed_kmh: (vehicle types,), NaN where not given
         handling_capacity: (centers,) primary quantity per day, inf: no limit
@@ -51,6 +53,7 @@ class LineHaulInstance:
     spot_fixed: NDArray[np.float64]
     spot_per_km: NDArray[np.float64]
     spot_available: NDArray[np.int64]
+    spot_stopovers: NDArray[np.bool_]
     owned_type: NDArray[np.int64]
     owned_origin: NDArray[np.int64]
     owned_destination: NDArray[np.int64]
@@ -136,6 +139,7 @@ def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
         spot_available=_ints(
             UNLIMITED if offer.available is None else offer.available for offer in spot
         ),
+        spot_stopovers=_bools(offer.stopovers for offer in spot),
         owned_type=_ints(type_index[group.type] for group in owned),
         owned_origin=_ints(center_index[group.origin] for group in owned),
         owned_destination=_ints(center_index[group.destination] for group in owned),

@@ -16,7 +16,12 @@ def solved(example_path: Path) -> pirilib.SolveResult:
     return pirilib.solve(spec.compile(), spec.build_objective(), seed=1)
 
 
-def same_plan(first: pirilib.Plan, second: pirilib.Plan) -> bool:
+EXCEL_DIGITS = 1e-14
+"""Relative error of a number kept by Excel, which stores 15 significant digits."""
+
+
+def same_plan(first: pirilib.Plan, second: pirilib.Plan, tolerance: float = 0.0) -> bool:
+    """Same dispatches, stops and loads; quantities may differ by ``tolerance``, relatively."""
     return all(
         np.array_equal(getattr(first, name), getattr(second, name))
         for name in (
@@ -27,9 +32,8 @@ def same_plan(first: pirilib.Plan, second: pirilib.Plan) -> bool:
             "stop_start",
             "stop_center",
             "load_demand",
-            "load_quantity",
         )
-    )
+    ) and np.allclose(first.load_quantity, second.load_quantity, rtol=tolerance, atol=0.0)
 
 
 @pytest.mark.parametrize(("delimiter", "decimal"), [(",", "."), (";", ",")])
@@ -96,7 +100,7 @@ def test_excel(tmp_path: Path, solved: pirilib.SolveResult) -> None:
     assert sheet.title == "plan"
     assert sheet.max_row == 1 + len(list(rows(solved.evaluation)))
     plan = read_plan(solved.evaluation.instance, path)
-    assert same_plan(plan, solved.plan)
+    assert same_plan(plan, solved.plan, tolerance=EXCEL_DIGITS)
 
 
 HAND_COLUMNS = [

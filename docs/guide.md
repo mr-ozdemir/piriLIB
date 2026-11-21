@@ -49,7 +49,7 @@ vehicle_types:
 fleet:
   owned:
     - {type: tir, origin: Istanbul, destination: Ankara, count: 2,
-       cost: {fixed: 7500, per_km: 12}, mandatory: true, stopovers: false}
+       cost: {fixed: 7500, per_km: 12}, mandatory: true, stopovers: true}
   spot:
     - {type: tir, cost: {fixed: 12000, per_km: 24}}
     - {type: kamyon, cost: {fixed: 8000, per_km: 20}, available: 5}
@@ -89,12 +89,17 @@ What the fields mean:
   - With `mandatory: true`, the default, their fixed cost is paid every day,
     used or not; a dispatch then only costs `per_km`. With `mandatory: false`
     a dispatch pays `fixed` too, and idle vehicles cost nothing.
-  - With `stopovers: true` they may drop loads at centers on the way, but they
-    always end at the line's destination.
+  - With `stopovers: true`, the default, they may drop loads at centers on the
+    way, but they always end at the line's destination. With
+    `stopovers: false` they carry loads for that destination only.
 - **Spot offers** are vehicles hired per dispatch.
   - Each dispatch costs `fixed + per_km x route km`.
   - `available` limits vehicles per day; leave it out for unlimited.
   - There is one offer per vehicle type.
+  - With `stopovers: true`, the default, a vehicle may serve several
+    destinations on one route. With `stopovers: false` every vehicle of the
+    offer goes to one destination, as a vehicle hired for a single delivery
+    does.
 - **Demand** is shipped on its date. Ids are generated (`D000001`, ...) when left out.
 - **Routes** are one-way: from the origin through the stops in order. There is no return trip.
 - **Minimum fill.** `min_fill` is the share of capacity a vehicle must carry,

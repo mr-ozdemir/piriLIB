@@ -108,11 +108,15 @@ class Case:
         dispatches: The plan
         rules: The document's ``rules`` section; empty for the schema defaults
         mandatory: Whether the owned group's fixed cost is paid every day (the default)
+        owned_stopovers: Whether the owned group may stop on the way (the default)
+        spot_stopovers: Whether the spot offers may serve several stops (the default)
     """
 
     dispatches: tuple[Dispatch, ...]
     rules: dict[str, Any] = field(default_factory=dict)
     mandatory: bool = True
+    owned_stopovers: bool = True
+    spot_stopovers: bool = True
 
     @property
     def plan(self) -> Plan:
@@ -123,9 +127,11 @@ class Case:
 def compile_case(
     document: dict[str, Any], compile_document: Callable[..., LineHaulInstance], case: Case
 ) -> LineHaulInstance:
-    """The fixture's problem with the rules and the owned group setting of ``case``."""
+    """The fixture's problem with the rules and the fleet settings of ``case``."""
     document["rules"] = case.rules
     document["fleet"]["owned"][OWNED_GROUP]["mandatory"] = case.mandatory
+    document["fleet"]["owned"][OWNED_GROUP]["stopovers"] = case.owned_stopovers
+    document["fleet"]["spot"][SMALL]["stopovers"] = case.spot_stopovers
     return compile_document(document)
 
 
@@ -264,6 +270,12 @@ NO_STOPOVERS = Case(
 )
 """Demand 1 by way of ``B`` while the rules disable stopovers."""
 
+SPOT_VIA_B = Case(NO_STOPOVERS.dispatches)
+"""The same plan under the default rules: the spot ``small`` offer may stop over."""
+
+SPOT_SINGLE_DESTINATION = Case(NO_STOPOVERS.dispatches, spot_stopovers=False)
+"""The same plan while the spot ``small`` offer serves one destination per vehicle."""
+
 OWNED_DETOUR = Case(
     (
         Dispatch(
@@ -276,7 +288,8 @@ OWNED_DETOUR = Case(
         ),
         SMALL_A_TO_C,
         SMALL_B_TO_A,
-    )
+    ),
+    owned_stopovers=False,
 )
 """The owned vehicle to ``B`` by way of ``C``, though its group may not stop over.
 
@@ -718,6 +731,28 @@ def test_disabled_stopovers_forbid_a_second_stop(
     instance = compile_case(document, compile_document, NO_STOPOVERS)
 
     evaluation = evaluate(instance, NO_STOPOVERS.plan)
+
+    assert evaluation.violated() == {"stopover": 1}
+
+
+def test_spot_offer_may_stop_over_by_default(
+    document: dict[str, Any], compile_document: Callable[..., LineHaulInstance]
+) -> None:
+    """``C`` is farther from ``A`` than ``B``, so the two-stop route breaks no rule."""
+    instance = compile_case(document, compile_document, SPOT_VIA_B)
+
+    evaluation = evaluate(instance, SPOT_VIA_B.plan)
+
+    assert evaluation.violated() == {}
+
+
+def test_spot_offer_without_stopovers_may_not_stop_twice(
+    document: dict[str, Any], compile_document: Callable[..., LineHaulInstance]
+) -> None:
+    """One dispatch of the offer has two stops; the rules themselves allow stopovers."""
+    instance = compile_case(document, compile_document, SPOT_SINGLE_DESTINATION)
+
+    evaluation = evaluate(instance, SPOT_SINGLE_DESTINATION.plan)
 
     assert evaluation.violated() == {"stopover": 1}
 

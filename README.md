@@ -31,7 +31,7 @@ example `pip install "pirilib[exact,excel]"`.
 >>> spec = pirilib.load_spec("examples/linehaul_mini/problem.yaml")
 >>> result = pirilib.solve(spec.compile(), spec.build_objective(), seed=1)
 >>> result.evaluation
-Evaluation(total_cost=178394.63, dispatches=18, total_km=2891.0, feasible)
+Evaluation(total_cost=156388.28, dispatches=16, total_km=2756.9, feasible)
 ```
 
 Or from the command line:

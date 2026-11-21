@@ -62,7 +62,7 @@ CATALOG: Final[Mapping[str, str]] = MappingProxyType(
         "min_fill": "Load missing to reach the minimum fill of the primary dimension (quantity).",
         "stopover": (
             "Dispatches with more than one stop although stopovers are disabled, or not "
-            "allowed for the owned group (count)."
+            "allowed for the owned group or the spot offer (count)."
         ),
         "max_stops": "Stops beyond rules.stopover.max_stops (count).",
         "stretch": (

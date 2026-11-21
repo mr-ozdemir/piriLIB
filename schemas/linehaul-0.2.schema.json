@@ -489,8 +489,8 @@
           "type": "boolean"
         },
         "stopovers": {
-          "default": false,
-          "description": "The vehicles may also drop loads at centers on the way.",
+          "default": true,
+          "description": "The vehicles may also drop loads at centers on the way; false: they only serve the destination of their line.",
           "title": "Stopovers",
           "type": "boolean"
         }
@@ -625,6 +625,12 @@
           "default": null,
           "description": "Vehicles per day; null means unlimited.",
           "title": "Available"
+        },
+        "stopovers": {
+          "default": true,
+          "description": "A vehicle may serve several destinations on one route; false: every vehicle of the offer goes to one destination.",
+          "title": "Stopovers",
+          "type": "boolean"
         }
       },
       "required": [

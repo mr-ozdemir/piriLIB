@@ -169,7 +169,11 @@ class OwnedVehicles(_Model):
         default=True, description="The fixed cost is paid every day, even when the vehicle is idle."
     )
     stopovers: bool = Field(
-        default=False, description="The vehicles may also drop loads at centers on the way."
+        default=True,
+        description=(
+            "The vehicles may also drop loads at centers on the way; false: they only "
+            "serve the destination of their line."
+        ),
     )
 
 
@@ -180,6 +184,13 @@ class SpotOffer(_Model):
     cost: Cost
     available: Vehicles | None = Field(
         default=None, description="Vehicles per day; null means unlimited."
+    )
+    stopovers: bool = Field(
+        default=True,
+        description=(
+            "A vehicle may serve several destinations on one route; false: every vehicle "
+            "of the offer goes to one destination."
+        ),
     )
 
 
