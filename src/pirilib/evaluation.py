@@ -262,7 +262,13 @@ class _Context:
         per_km = self._per_kind(instance.owned_per_km, instance.spot_per_km, np.float64)
         per_hour = self._per_kind(instance.owned_per_hour, instance.spot_per_hour, np.float64)
         hours = (self.end_minute - self.start_minute) / 60.0
-        return np.asarray(fixed + per_km * self.route_km + per_hour * hours, dtype=np.float64)
+        per_unit = np.zeros_like(self.load)
+        per_unit[self.owned_rows] = instance.owned_per_unit[self.owned_source]
+        per_unit[self.spot_rows] = instance.spot_per_unit[self.spot_source]
+        carried = (per_unit * self.load).sum(axis=1)
+        return np.asarray(
+            fixed + per_km * self.route_km + per_hour * hours + carried, dtype=np.float64
+        )
 
     def violations(self) -> dict[str, float]:
         amounts = {

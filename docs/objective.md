@@ -121,8 +121,10 @@ groups are mandatory by default: a group is `mandatory: true` unless you write
 `mandatory: false`.
 
 - **Dispatches.** Each dispatch costs `fixed + per_km × route km + per_hour ×
-  hours`, with the costs of its owned group or spot offer. Hours run from the
-  start of loading at the origin to the end of unloading at the last stop. A
+  hours + per_unit × quantity carried`, with the costs of its owned group or
+  spot offer. Hours run from the start of loading at the origin to the end of
+  unloading at the last stop. `per_unit` is a price per quantity dimension;
+  the quantities a dispatch carries are priced whatever the distance. A
   dispatch of a mandatory owned group does not pay `fixed`; that is paid in the
   next part. A dispatch of a group with `mandatory: false` pays `fixed` like a
   spot dispatch.

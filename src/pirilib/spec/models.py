@@ -148,15 +148,23 @@ class VehicleType(_Model):
 
 
 class Cost(_Model):
-    """Cost of one vehicle dispatch: a fixed part, a part per km and a part per hour.
+    """Cost of one vehicle dispatch: fixed, per km, per hour and per unit carried.
 
     Hours run from the start of loading at the origin to the end of unloading at
-    the last stop.
+    the last stop. Units are the quantities the dispatch carries, whatever the
+    distance.
     """
 
     fixed: NonNegativeFloat = 0.0
     per_km: NonNegativeFloat = 0.0
     per_hour: NonNegativeFloat = 0.0
+    per_unit: dict[Name, NonNegativeFloat] = Field(
+        default_factory=dict,
+        description=(
+            "Cost per unit carried, by quantity dimension, for example {desi: 0.8}; a "
+            "dimension that is left out costs nothing."
+        ),
+    )
 
 
 class OwnedVehicles(_Model):
@@ -677,6 +685,21 @@ def _fleet_issues(spec: LineHaulSpec) -> list[Issue]:
                 )
         if group.origin == group.destination:
             issues.append((loc, f"origin and destination are both '{group.origin}'"))
+    dimensions = spec.dimensions
+    costs: tuple[tuple[str, Sequence[Cost]], ...] = (
+        ("owned", [group.cost for group in spec.fleet.owned]),
+        ("spot", [offer.cost for offer in spec.fleet.spot]),
+    )
+    for kind, entries in costs:
+        for position, cost in enumerate(entries):
+            unknown = [name for name in cost.per_unit if name not in dimensions]
+            if unknown:
+                issues.append(
+                    (
+                        ("fleet", kind, position, "cost", "per_unit"),
+                        f"unknown dimension(s) {unknown}; the dimensions are {list(dimensions)}",
+                    )
+                )
     issues += [
         (("fleet", "spot", position, "type"), f"unknown vehicle type '{offer.type}'")
         for position, offer in enumerate(spec.fleet.spot)

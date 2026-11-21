@@ -112,6 +112,8 @@ class Batch:
         self.day = np.array([problem.day for problem in self.problems], dtype=np.int64)
         self.vehicle_type = np.zeros((count, n), dtype=np.int64)
         self.per_hour = np.zeros((count, n))
+        self.per_unit = np.zeros((count, n, dimensions))
+        self.unit_priced = any(problem.unit_priced for problem in self.problems)
         self.speed = np.full((count, n), np.nan)
         self.item_ready = np.full((count, k, items), -np.inf)
         self.item_due = np.full((count, k, items), np.inf)
@@ -125,6 +127,7 @@ class Batch:
             self.item_quantity[index, :size, :width] = problem.item_quantity
             self.vehicle_type[index, :options] = problem.vehicle_type
             self.per_hour[index, :options] = problem.per_hour
+            self.per_unit[index, :options] = problem.per_unit
             self.speed[index, :options] = problem.speed
             self.item_ready[index, :size, :width] = problem.item_ready
             self.item_due[index, :size, :width] = problem.item_due
@@ -206,6 +209,9 @@ def _first_choices(
         with np.errstate(invalid="ignore", divide="ignore"):
             hours = np.where(np.isfinite(speed), km / speed, 0.0)
         cost = cost + problem.per_hour[:, None] * hours
+    if problem.unit_priced:
+        carried = np.minimum(problem.demand[None, :, :], problem.capacity[:, None, :])
+        cost = cost + (problem.per_unit[:, None, :] * carried).sum(axis=2)
     return ok, cost
 
 
@@ -974,6 +980,8 @@ def scores(
     timing = timeline(batch, colony, shared) if shared.scheduled else None
     if timing is not None:
         cost = cost + batch.per_hour[of, option] * timing.hours
+    if batch.unit_priced:
+        cost = cost + (batch.per_unit[of, option] * colony.route_load).sum(axis=1)
     capacity = batch.capacity_primary[of, option]
     load = colony.route_load[:, shared.primary]
     every = np.ones(option.size, dtype=np.bool_)

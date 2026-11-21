@@ -113,7 +113,7 @@ def _document(rules: dict[str, Any], timed: bool = False) -> dict[str, Any]:
                     "destination": "D",
                     "count": 2,
                     "stopovers": True,
-                    "cost": {"fixed": 900.0, "per_km": 3.0},
+                    "cost": {"fixed": 900.0, "per_km": 3.0, "per_unit": {"kg": 0.1}},
                 },
                 {
                     "type": "small",
@@ -129,7 +129,7 @@ def _document(rules: dict[str, Any], timed: bool = False) -> dict[str, Any]:
                 {"type": "big", "cost": {"fixed": 1500.0, "per_km": 5.0}},
                 {
                     "type": "small",
-                    "cost": {"fixed": 600.0, "per_km": 2.5},
+                    "cost": {"fixed": 600.0, "per_km": 2.5, "per_unit": {"desi": 0.4, "kg": 0.25}},
                     "available": 4,
                     "stopovers": False,
                 },

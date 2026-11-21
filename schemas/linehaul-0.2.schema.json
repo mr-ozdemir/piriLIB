@@ -146,7 +146,7 @@
     },
     "Cost": {
       "additionalProperties": false,
-      "description": "Cost of one vehicle dispatch: a fixed part, a part per km and a part per hour.\n\nHours run from the start of loading at the origin to the end of unloading at\nthe last stop.",
+      "description": "Cost of one vehicle dispatch: fixed, per km, per hour and per unit carried.\n\nHours run from the start of loading at the origin to the end of unloading at\nthe last stop. Units are the quantities the dispatch carries, whatever the\ndistance.",
       "properties": {
         "fixed": {
           "default": 0.0,
@@ -165,6 +165,18 @@
           "minimum": 0,
           "title": "Per Hour",
           "type": "number"
+        },
+        "per_unit": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Cost per unit carried, by quantity dimension, for example {desi: 0.8}; a dimension that is left out costs nothing.",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Per Unit",
+          "type": "object"
         }
       },
       "title": "Cost",

@@ -24,6 +24,12 @@ uses [Semantic Versioning](https://semver.org/).
   of the `min_fill` rule. The evaluator, the checker and every solver use the
   same definition.
 
+- `cost.per_unit` on spot offers and owned groups: a price per unit carried,
+  by quantity dimension, as in `per_unit: {desi: 0.8}`. It is part of the
+  dispatch cost in the evaluator and the checker, and the ant colony, the
+  exact solver and direct shipping count it when they pick a vehicle. The
+  PyVRP and OR-Tools adapters refuse problems that use it.
+
 ### Changed
 
 - `stopovers` of an owned group now defaults to `true`: owned vehicles may

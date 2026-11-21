@@ -434,6 +434,10 @@ def solve_subproblem(
         cost[f_base + index] = -coefficients.get(f"unused[{kind_of[r]}]", 0.0) * demand[
             node, primary
         ] + service * times.late.get((r, node), 0.0)
+        if problem.unit_priced:
+            cost[f_base + index] += coefficients.get(f"cost[{kind_of[r]}]", 0.0) * float(
+                problem.per_unit[routes[r][0]] @ demand[node]
+            )
     for position, node in enumerate(loaded):
         waits = ~problem.item_final[node]
         quantity = demand[node] - problem.item_quantity[node][waits].sum(axis=0)

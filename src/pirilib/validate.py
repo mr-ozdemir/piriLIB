@@ -128,11 +128,13 @@ class _Checker:
             fixed = 0.0 if instance.owned_mandatory[source] else float(instance.owned_fixed[source])
             per_km = float(instance.owned_per_km[source])
             per_hour = float(instance.owned_per_hour[source])
+            per_unit = instance.owned_per_unit[source]
         else:
             vehicle = int(instance.spot_type[source])
             fixed = float(instance.spot_fixed[source])
             per_km = float(instance.spot_per_km[source])
             per_hour = float(instance.spot_per_hour[source])
+            per_unit = instance.spot_per_unit[source]
         type_name = instance.vehicle_types[vehicle]
         label = (
             f"dispatch {position} ({instance.days[dispatch.day]}, {dispatch.kind} {type_name} "
@@ -216,7 +218,12 @@ class _Checker:
 
         self.loads(label, dispatch, vehicle)
         hours = self.timeline(label, dispatch, vehicle)
-        return fixed + per_km * length + per_hour * hours
+        carried = sum(
+            float(per_unit[column]) * quantity
+            for item in dispatch.loads
+            for column, quantity in enumerate(item.quantity)
+        )
+        return fixed + per_km * length + per_hour * hours + carried
 
     def timeline(self, label: str, dispatch: Dispatch, vehicle: int) -> float:
         """Walk the dispatch through time: handling, lateness and readiness. Returns its hours."""

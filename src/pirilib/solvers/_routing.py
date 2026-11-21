@@ -91,6 +91,8 @@ def route_value(
     cost = float(problem.fixed[option] + problem.per_km[option] * km)
     if hours:
         cost += float(problem.per_hour[option]) * hours
+    if problem.unit_priced:
+        cost += float(problem.per_unit[option] @ load)
     capacity = float(problem.capacity[option, shared.primary])
     carried = float(load[shared.primary])
     shortfall = route_gap(shared, int(problem.kind[option]), problem.capacity[option], load)[0]
