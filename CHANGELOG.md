@@ -11,6 +11,13 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- With `decimal: ","`, a `.` in a number of a CSV table or a plan file is
+  accepted only where it groups thousands, as in `1.234,5`. A value such as
+  `12.5` was read as 125 and is now reported as a problem. Plan files also
+  refuse quantities that are not finite.
+
 ## [0.2.0] - 2026-11-21
 
 ### Added

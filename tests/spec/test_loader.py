@@ -536,3 +536,79 @@ def test_unquoted_due_time_with_a_utc_offset_is_reported(
         f"{path}: invalid problem specification",
         "- demand[0].due: must not have a UTC offset; times are local times of the centers",
     ]
+
+
+@pytest.mark.parametrize(
+    ("text", "number"),
+    [
+        ("0,5", 0.5),
+        ("900", 900.0),
+        ("1.234", 1234.0),
+        ("1.234,5", 1234.5),
+        ("12.500,", 12500.0),
+        ("1.234.567,25", 1234567.25),
+        ("1 234,5", 1234.5),
+    ],
+    ids=[
+        "no-group",
+        "integer",
+        "one-group",
+        "group-and-decimals",
+        "bare-comma",
+        "two-groups",
+        "space",
+    ],
+)
+def test_decimal_comma_reads_a_point_that_groups_thousands(
+    tmp_path: Path, document: dict[str, Any], text: str, number: float
+) -> None:
+    """One to three digits, then groups of exactly three; every value is exact in binary."""
+    table = f"origin;destination;date;desi\nA;B;2026-01-05;{text}\n"
+    path = with_demand_file(tmp_path, document, table, delimiter=";", decimal=",")
+
+    spec = load_spec(path)
+
+    assert spec.demand[0].quantity == {"desi": number}
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["12.5", "1.25", "1.2345", "1234.567", "1.234.5", "12.50,5", "1,234.5", ".5"],
+    ids=[
+        "one-decimal",
+        "two-decimals",
+        "four-digits-after",
+        "four-digits-before",
+        "short-last-group",
+        "short-group-and-decimals",
+        "english-format",
+        "leading-point",
+    ],
+)
+def test_decimal_comma_refuses_a_point_that_does_not_group_thousands(
+    tmp_path: Path, document: dict[str, Any], text: str
+) -> None:
+    """``12.5`` used to be read as 125: ten times the demand, without a word."""
+    table = f"origin;destination;date;desi\nA;B;2026-01-05;{text}\n"
+    path = with_demand_file(tmp_path, document, table, delimiter=";", decimal=",")
+
+    with pytest.raises(SpecError) as info:
+        load_spec(path)
+
+    assert str(info.value).splitlines() == [
+        f"{path}: invalid problem specification",
+        f"- demand.csv:2: 'desi': '{text}' has a '.' that does not group thousands; "
+        "the decimal mark is ',' (write 12,5 or 1.234,5)",
+    ]
+
+
+def test_decimal_point_reads_a_point_as_the_decimal_mark(
+    tmp_path: Path, document: dict[str, Any]
+) -> None:
+    """Without ``decimal: ","`` nothing changes: ``12.5`` is twelve and a half."""
+    table = "origin,destination,date,desi\nA,B,2026-01-05,12.5\n"
+    path = with_demand_file(tmp_path, document, table)
+
+    spec = load_spec(path)
+
+    assert spec.demand[0].quantity == {"desi": 12.5}

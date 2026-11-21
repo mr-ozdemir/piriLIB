@@ -221,3 +221,54 @@ def test_start_column_is_optional(tmp_path: Path, instance: LineHaulInstance) ->
         encoding="utf-8",
     )
     assert np.isnan(read_plan(instance, path).start_minutes).all()
+
+
+PLAN_HEADER = "dispatch;date;kind;vehicle_type;source;origin;stops;demand;destination;desi\n"
+"""Columns of a plan file with one load per line, separated by ``;``."""
+
+
+@pytest.mark.parametrize(
+    ("text", "quantity"),
+    [("12,5", 12.5), ("1.234,5", 1234.5)],
+    ids=["decimals", "grouped"],
+)
+def test_plan_with_decimal_comma_reads_grouped_thousands(
+    tmp_path: Path, instance: LineHaulInstance, text: str, quantity: float
+) -> None:
+    """The load of the one dispatch is the number as a Turkish spreadsheet writes it."""
+    path = tmp_path / "plan.csv"
+    row = f"1;2026-01-05;spot;big;fleet.spot[0];A;B;D000001;B;{text}\n"
+    path.write_text(PLAN_HEADER + row, encoding="utf-8")
+
+    plan = read_plan(instance, path, delimiter=";", decimal=",")
+
+    assert plan.load_quantity.tolist() == [[quantity]]
+
+
+@pytest.mark.parametrize(
+    ("text", "reason"),
+    [
+        (
+            "12.5",
+            "'12.5' has a '.' that does not group thousands; the decimal mark is ',' "
+            "(write 12,5 or 1.234,5)",
+        ),
+        ("inf", "'inf' is not a finite number"),
+    ],
+    ids=["point", "infinite"],
+)
+def test_plan_with_decimal_comma_refuses_other_numbers(
+    tmp_path: Path, instance: LineHaulInstance, text: str, reason: str
+) -> None:
+    """``12.5`` used to be read as a load of 125, and ``inf`` as an infinite load."""
+    path = tmp_path / "plan.csv"
+    row = f"1;2026-01-05;spot;big;fleet.spot[0];A;B;D000001;B;{text}\n"
+    path.write_text(PLAN_HEADER + row, encoding="utf-8")
+
+    with pytest.raises(PlanError) as info:
+        read_plan(instance, path, delimiter=";", decimal=",")
+
+    assert str(info.value).splitlines() == [
+        "plan.csv: invalid plan",
+        f"- plan.csv:2: 'desi': {reason}",
+    ]

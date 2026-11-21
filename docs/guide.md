@@ -180,7 +180,8 @@ demand:
 
 - `file` is relative to the YAML file.
 - `encoding` defaults to `utf-8-sig`.
-- With `decimal: ","`, a `.` is read as a thousands separator.
+- With `decimal: ","`, a `.` may only group thousands, as in `1.234,5`. A
+  `.` anywhere else is reported as a problem: `12.5` is not read as 125.
 - `date_format` defaults to ISO dates.
 - `columns` maps fields to column names. `quantity`, for demand only, maps
   each dimension to its column.
