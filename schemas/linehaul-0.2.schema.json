@@ -750,7 +750,7 @@
         },
         "decimal": {
           "default": ".",
-          "description": "Decimal separator. With ',' a '.' is read as a thousands separator.",
+          "description": "Decimal separator. With ',' a '.' may only group thousands, as in 1.234,5; 12.5 is an error.",
           "enum": [
             ".",
             ","
