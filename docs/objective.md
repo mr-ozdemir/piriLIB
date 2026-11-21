@@ -57,7 +57,7 @@ objective:
 | `distance_km` | no, default 0 | per km | Extra weight per km of route, on top of the `per_km` costs, for example a price on emissions. |
 | `dispatches` | no, default 0 | per dispatch | Extra weight per dispatch, owned or spot, for example the effort of arranging one. |
 | `unused_capacity` | no, default 0 | per primary unit | Weight per unit of primary capacity left empty when a vehicle departs. |
-| `penalties` | yes | per unit of the rule's amount | A weight per built-in rule, by name. `other` applies to every rule that is not named. Weights are 0 or more. |
+| `penalties` | yes | per unit of the rule's amount | A weight per built-in rule, by name, or `hard` for a rule that must hold. `other` applies to every rule that is not named. Weights are 0 or more. |
 
 Every rule must get a weight: either name all of them under `penalties`, or
 add `other`. A rule without a weight is an error, and so is a name that is not
@@ -247,7 +247,8 @@ assert result.evaluation.feasible
 **Compare with your costs.** A penalty is money per unit of violation. Look at
 what a single dispatch costs in your document, and at the unit of the rule.
 
-- For a rule that must hold, make one unit of violation more expensive than
+- For a rule that must hold, write `hard` (see below). To choose the number
+  yourself, make one unit of violation more expensive than
   anything breaking it could save: 10 to 1000 times the most expensive
   dispatch for count rules. For quantity rules, a weight per unit above the
   most expensive dispatch makes even one desi count. The generated documents
@@ -261,6 +262,35 @@ what a single dispatch costs in your document, and at the unit of the rule.
   per desi"; above that, the solver leaves it behind. A `min_fill` penalty of
   1000 per missing desi says an under-filled truck is acceptable when the
   alternative is worse.
+
+**Hard rules.** Write `hard` instead of a weight for a rule that must hold:
+
+```yaml
+objective:
+  cost: 1
+  penalties:
+    coverage: 1000
+    min_fill: 50
+    other: hard
+```
+
+- The solvers treat a hard rule as a limit. It gets a weight of 1e9 per unit of
+  violation, or 100 times the largest weight of the section when that is more,
+  so no saving is worth breaking it. You do not have to find a large enough
+  number yourself.
+- `evaluation.feasible` then means that no hard rule is broken. The rules with a
+  weight are trade-offs you priced: a plan that leaves 40 desi behind for 1000
+  each is feasible, and `evaluation.violated()` still lists what it broke.
+  `evaluation.broken()` lists the broken hard rules.
+- When the hard rules cannot all hold, the solver does not stop. It returns the
+  plan that breaks them least; the plan is not feasible, and `pirilib solve`
+  writes it, names the broken rules and exits with status 3.
+- When no rule is hard, every rule counts for `feasible`, as before.
+- A hard rule is as hard as the solver can make it. The ant colony and the exact
+  solver keep most rules by construction (see
+  [the table in the guide](guide.md#which-solver-keeps-which-rule)); `handling`
+  and `vehicle_limit` are shared by all dispatches at a center, and a plan can
+  still exceed them. It is then reported as not feasible.
 
 **`other`.** `other` gives one weight to every built-in rule you did not name.
 It is the usual way to treat the rules that should never break alike, while

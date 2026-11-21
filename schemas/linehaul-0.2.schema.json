@@ -427,7 +427,7 @@
     },
     "ObjectiveSpec": {
       "additionalProperties": false,
-      "description": "The objective to minimize, built from the costs and rules of the document.\n\nThe objective is ``cost`` times the total cost (dispatch costs, the fixed\ncost of mandatory owned vehicles and lateness), plus the optional extra\nterms, plus a weight per unit of violation of every built-in rule. Every\nrule a plan can break needs a weight: name it under ``penalties`` (the names\nare those of :data:`pirilib.constraints.CATALOG`), or give ``other`` for\nevery rule that is not named. A weight of 0 lets a plan break the rule for\nfree, so it has to be written down.",
+      "description": "The objective to minimize, built from the costs and rules of the document.\n\nThe objective is ``cost`` times the total cost (dispatch costs, the fixed\ncost of mandatory owned vehicles and lateness), plus the optional extra\nterms, plus a weight per unit of violation of every built-in rule. Every\nrule a plan can break needs a weight: name it under ``penalties`` (the names\nare those of :data:`pirilib.constraints.CATALOG`), or give ``other`` for\nevery rule that is not named. A weight of 0 lets a plan break the rule for\nfree, so it has to be written down.\n\nA rule written as ``hard`` instead of a weight must hold. The solvers treat it\nas a limit: it gets :attr:`hard_weight`, far above the costs, so no saving is\nworth breaking it. A plan that breaks a hard rule is not feasible. When the\nhard rules cannot all hold, the solvers still return the plan that breaks\nthem least, and the evaluation says which ones are broken.",
       "properties": {
         "cost": {
           "description": "Weight of the total cost: dispatches (fixed, per km and per hour), the fixed cost of mandatory owned vehicles and lateness.",
@@ -458,10 +458,18 @@
         },
         "penalties": {
           "additionalProperties": {
-            "minimum": 0,
-            "type": "number"
+            "oneOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "const": "hard",
+                "type": "string"
+              }
+            ]
           },
-          "description": "Weight per unit of violation, by rule name; 'other' applies to every rule not named. Without 'other', every rule must be named.",
+          "description": "Weight per unit of violation, by rule name, or 'hard' for a rule that must hold; 'other' applies to every rule not named. Without 'other', every rule must be named.",
           "title": "Penalties",
           "type": "object",
           "propertyNames": {

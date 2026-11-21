@@ -295,7 +295,9 @@ goal.breakdown(evaluation)
 ```
 
 `cost` weighs the total cost, `penalties` give a weight per unit of violation
-of each rule of section 2 (`other` for the rules not named), and the optional
+of each rule of section 2 (`other` for the rules not named), or `hard` for a
+rule that must hold: a plan is feasible when no hard rule is broken, and the
+optional
 weights `distance_km`, `dispatches` and `unused_capacity` add terms.
 `build_objective()` returns a `Sum` from `pirilib.objective`, and
 `breakdown` gives the value of every term. A document without the section
@@ -564,7 +566,11 @@ pirilib solve problem.yaml -o plan.csv
 
 - `generate` writes a synthetic problem.
 - `--delimiter ";" --decimal ","` writes the plan for Turkish Excel.
-- `check` reads .csv and .xlsx plans and exits with status 1 if a rule is broken.
+- `check` reads .csv and .xlsx plans and exits with status 1 if the plan is
+  not feasible: a hard rule of the problem's objective is broken, or any rule
+  when it has no hard rule.
+- `solve` exits with status 3 when its plan breaks a rule the objective calls
+  `hard`. The plan is still written, and the message names the rules.
 - The last `solve` plans the week that `forecast --problem` wrote.
 - `forecast --network` without `--quantile` warns: the problem then plans the
   expected forecast, and about half of the days get more than that.

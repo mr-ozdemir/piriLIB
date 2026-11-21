@@ -45,7 +45,7 @@ from numpy.typing import NDArray
 
 from pirilib.constraints import Constraint
 from pirilib.evaluation import evaluate
-from pirilib.objective import Objective, linear_form
+from pirilib.objective import Objective, hard_rules, linear_form
 from pirilib.plan import SPOT, Plan
 from pirilib.solvers._colony import Batch, Build, Colony, Pheromone, Shared, scores
 from pirilib.solvers._timing import timeline
@@ -144,7 +144,7 @@ class ACOSolver:
         else:
             builder = search.general(goal, constraints)
         plan = builder.build()
-        evaluation = evaluate(instance, plan, constraints)
+        evaluation = evaluate(instance, plan, constraints, hard=hard_rules(goal))
         if search.limited:
             search.stats["spot_limits_reached"] = _limits_reached(instance, plan)
         return SolveResult(

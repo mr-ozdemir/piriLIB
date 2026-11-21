@@ -383,6 +383,17 @@ class Rules(_Model):
     handling: Handling = Handling()
 
 
+def _penalty_form(value: object) -> str:
+    return "hard" if isinstance(value, str) else "weight"
+
+
+Penalty = Annotated[
+    Annotated[NonNegativeFloat, Tag("weight")] | Annotated[Literal["hard"], Tag("hard")],
+    Discriminator(_penalty_form),
+]
+"""A weight per unit of violation, or ``hard`` for a rule that must hold."""
+
+
 class ObjectiveSpec(_Model):
     """The objective to minimize, built from the costs and rules of the document.
 
@@ -393,10 +404,25 @@ class ObjectiveSpec(_Model):
     are those of :data:`pirilib.constraints.CATALOG`), or give ``other`` for
     every rule that is not named. A weight of 0 lets a plan break the rule for
     free, so it has to be written down.
+
+    A rule written as ``hard`` instead of a weight must hold. The solvers treat it
+    as a limit: it gets :attr:`hard_weight`, far above the costs, so no saving is
+    worth breaking it. A plan that breaks a hard rule is not feasible. When the
+    hard rules cannot all hold, the solvers still return the plan that breaks
+    them least, and the evaluation says which ones are broken.
     """
 
     OTHER: ClassVar[str] = "other"
     """The ``penalties`` key that applies to every built-in rule not named."""
+
+    HARD: ClassVar[str] = "hard"
+    """What to write instead of a weight for a rule that must hold."""
+
+    HARD_WEIGHT: ClassVar[float] = 1e9
+    """The least weight of a hard rule, per unit of violation."""
+
+    HARD_FACTOR: ClassVar[float] = 100.0
+    """A hard rule weighs at least this many times the largest weight of the section."""
 
     cost: PositiveFloat = Field(
         description=(
@@ -410,16 +436,17 @@ class ObjectiveSpec(_Model):
         default=0.0,
         description="Weight per primary unit of capacity left empty on departure.",
     )
-    penalties: dict[str, NonNegativeFloat] = Field(
+    penalties: dict[str, Penalty] = Field(
         description=(
-            "Weight per unit of violation, by rule name; 'other' applies to every rule "
-            "not named. Without 'other', every rule must be named."
+            "Weight per unit of violation, by rule name, or 'hard' for a rule that must "
+            "hold; 'other' applies to every rule not named. Without 'other', every "
+            "rule must be named."
         )
     )
 
     @field_validator("penalties")
     @classmethod
-    def _check_penalties(cls, penalties: dict[str, float]) -> dict[str, float]:
+    def _check_penalties(cls, penalties: dict[str, float | str]) -> dict[str, float | str]:
         from pirilib.constraints import CATALOG
 
         known = [*CATALOG, cls.OTHER]
@@ -441,8 +468,7 @@ class ObjectiveSpec(_Model):
             raise SpecIssues(issues)
         return penalties
 
-    def penalty(self, name: str) -> float:
-        """The weight per unit of violation of the built-in rule ``name``, named or ``other``."""
+    def _given(self, name: str) -> float | str:
         from pirilib.constraints import CATALOG
 
         if name not in CATALOG:
@@ -451,11 +477,37 @@ class ObjectiveSpec(_Model):
             return self.penalties[name]
         return self.penalties[self.OTHER]
 
+    @property
+    def hard_weight(self) -> float:
+        """The weight of a hard rule per unit of violation.
+
+        :attr:`HARD_WEIGHT`, or :attr:`HARD_FACTOR` times the largest weight of the
+        section when that is more, so that a hard rule outweighs every other term.
+        """
+        weights = [self.cost, self.distance_km, self.dispatches, self.unused_capacity]
+        weights += [value for value in self.penalties.values() if not isinstance(value, str)]
+        return max(self.HARD_WEIGHT, self.HARD_FACTOR * max(weights))
+
+    def hard_rules(self) -> frozenset[str]:
+        """The built-in rules written as ``hard``, by name or through ``other``."""
+        from pirilib.constraints import CATALOG
+
+        return frozenset(name for name in CATALOG if self._given(name) == self.HARD)
+
+    def penalty(self, name: str) -> float:
+        """The weight per unit of violation of the built-in rule ``name``, named or ``other``.
+
+        A hard rule has :attr:`hard_weight`.
+        """
+        given = self._given(name)
+        return self.hard_weight if isinstance(given, str) else given
+
     def build(self) -> "Sum":
         """The objective as a :class:`~pirilib.objective.Sum`, with a linear form.
 
         Extra terms with weight 0 are left out; every built-in rule gets its
-        penalty term, also when the weight is 0.
+        penalty term, also when the weight is 0. The objective knows its hard
+        rules (:attr:`~pirilib.objective.Sum.hard`).
         """
         from pirilib import objective as obj
         from pirilib.constraints import CATALOG
@@ -470,7 +522,7 @@ class ObjectiveSpec(_Model):
             *(make() * weight for weight, make in extras if weight),
             *(obj.violation(name) * self.penalty(name) for name in CATALOG),
         ]
-        return obj.Sum(tuple(terms))
+        return obj.Sum(tuple(terms), self.hard_rules())
 
 
 _NO_OBJECTIVE: Final = (

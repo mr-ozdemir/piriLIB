@@ -8,7 +8,8 @@ from any source; the test suite uses it to cross-check the evaluator.
 import itertools
 import math
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, replace
 
 from pirilib.constraints import CATALOG
 from pirilib.evaluation import TOLERANCE
@@ -33,15 +34,30 @@ class Violation:
 
 @dataclass(frozen=True, slots=True)
 class PlanReport:
-    """The result of :func:`check_plan`."""
+    """The result of :func:`check_plan`.
+
+    Attributes:
+        hard: Names of the rules that must hold; empty when none is declared
+    """
 
     violations: tuple[Violation, ...]
     total_cost: float
+    hard: frozenset[str] = frozenset()
 
     @property
     def feasible(self) -> bool:
-        """True when there are no violations."""
-        return not self.violations
+        """True when no hard rule is broken; see :meth:`broken`."""
+        return not self.broken()
+
+    def broken(self) -> tuple[Violation, ...]:
+        """The violations that make the plan infeasible.
+
+        These are the violations of the rules in :attr:`hard`. When no rule is
+        declared hard, every violation counts.
+        """
+        if not self.hard:
+            return self.violations
+        return tuple(item for item in self.violations if item.constraint in self.hard)
 
     def totals(self) -> dict[str, float]:
         """The violation amount of every built-in constraint, in catalog order."""
@@ -51,16 +67,22 @@ class PlanReport:
         return totals
 
     def __str__(self) -> str:
-        state = "feasible" if self.feasible else f"{len(self.violations)} violation(s)"
+        state = f"{len(self.violations)} violation(s)" if self.violations else "feasible"
+        if self.violations and self.feasible:
+            state = f"feasible, {state}"
         lines = [f"total cost {self.total_cost:.2f}, {state}"]
         lines += [f"- {item.constraint}: {item.message}" for item in self.violations]
         return "\n".join(lines)
 
 
-def check_plan(instance: LineHaulInstance, plan: Plan) -> PlanReport:
-    """Check ``plan`` against every rule of ``instance`` and compute its cost."""
+def check_plan(instance: LineHaulInstance, plan: Plan, hard: Iterable[str] = ()) -> PlanReport:
+    """Check ``plan`` against every rule of ``instance`` and compute its cost.
+
+    ``hard`` names the rules that must hold; they decide :attr:`PlanReport.feasible`.
+    Without it, every rule counts.
+    """
     plan.check(instance)
-    return _Checker(instance).run(plan)
+    return replace(_Checker(instance).run(plan), hard=frozenset(hard))
 
 
 def _whole_minutes(value: float) -> float:

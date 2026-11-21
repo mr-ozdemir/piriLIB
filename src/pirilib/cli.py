@@ -17,9 +17,10 @@ Commands::
 ``solve``, ``tune`` and ``bench`` minimize the objective that the problem
 documents define in their ``objective:`` section; there is no default one.
 
-Exit status: 0 on success, 1 when an input is invalid or a plan breaks a rule
+Exit status: 0 on success, 1 when an input is invalid or a plan is not feasible
 (``check``), 2 for wrong usage, including solving or tuning a problem whose
-document has no ``objective:`` section.
+document has no ``objective:`` section, and 3 when ``solve`` wrote a plan that
+breaks a rule the objective declares hard.
 """
 
 import argparse
@@ -30,7 +31,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import asdict, fields
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import yaml
 
@@ -46,6 +47,10 @@ from pirilib.spec import LineHaulSpec, load_spec, parse_spec
 
 class _UsageError(Exception):
     """Wrong usage found after the arguments are read; the command line exits with 2."""
+
+
+HARD_RULE_BROKEN: Final[int] = 3
+"""Exit status of ``solve`` when its plan breaks a rule the objective declares hard."""
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -372,7 +377,9 @@ def _config(path: str | None, **overrides: Any) -> ACOConfig:
 
 
 def _print_summary(numbers: dict[str, Any]) -> None:
-    state = "feasible" if numbers["feasible"] else f"violations {numbers['violations']}"
+    state = f"violations {numbers['violations']}" if numbers["violations"] else "feasible"
+    if numbers["violations"] and numbers["feasible"]:
+        state = f"feasible  {state}"
     print(
         f"total cost {numbers['total_cost']:,.2f}  dispatches {numbers['dispatches']} "
         f"({numbers['spot_dispatches']} spot)  km {numbers['total_km']:,.1f}  {state}"
@@ -420,18 +427,25 @@ def _solve(arguments: argparse.Namespace) -> int:
         print(f"plan written to {arguments.output}")
     if arguments.summary:
         Path(arguments.summary).write_text(json.dumps(numbers, indent=2) + "\n", encoding="utf-8")
+    broken = numbers["hard_violations"]
+    if broken:
+        amounts = ", ".join(f"{name} ({amount:g})" for name, amount in broken.items())
+        print(f"error: the plan breaks hard rules: {amounts}", file=sys.stderr)
+        return HARD_RULE_BROKEN
     return 0
 
 
 def _check(arguments: argparse.Namespace) -> int:
     from pirilib.validate import check_plan
 
-    instance = load_spec(arguments.problem).compile()
+    spec = load_spec(arguments.problem)
+    instance = spec.compile()
+    hard = spec.objective.hard_rules() if spec.objective is not None else frozenset()
     plan = read_plan(
         instance, arguments.plan, delimiter=arguments.delimiter, decimal=arguments.decimal
     )
-    report = check_plan(instance, plan)
-    _print_summary(summary(evaluate(instance, plan)))
+    report = check_plan(instance, plan, hard)
+    _print_summary(summary(evaluate(instance, plan, hard=hard)))
     for item in report.violations[:50]:
         print(f"- {item.constraint}: {item.message}")
     if len(report.violations) > 50:

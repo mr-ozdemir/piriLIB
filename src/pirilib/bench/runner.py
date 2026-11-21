@@ -12,7 +12,7 @@ from pirilib.bench.report import Report
 from pirilib.bench.results import Record, ResultTable
 from pirilib.constraints import Constraint
 from pirilib.evaluation import evaluate
-from pirilib.objective import Objective
+from pirilib.objective import Objective, hard_rules
 from pirilib.solvers import ACOConfig, ACOSolver, Solver
 from pirilib.solvers.base import require_objective
 from pirilib.solvers.direct import DirectShipping
@@ -116,7 +116,9 @@ class Benchmark:
                 message=f"{type(error).__name__}: {error}",
             )
         seconds = time.perf_counter() - started
-        evaluation = evaluate(item.instance, result.plan, self.constraints)
+        evaluation = evaluate(
+            item.instance, result.plan, self.constraints, hard=hard_rules(self.objective)
+        )
         return Record(
             family=item.family,
             instance=item.name,

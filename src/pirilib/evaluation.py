@@ -55,6 +55,7 @@ class Evaluation:
         owned_fixed_cost: Fixed cost of mandatory owned vehicles over the calendar
         service_cost: Lateness penalty
         violations: Built-in constraints first, then your own
+        hard: Names of the rules that must hold; empty when none is declared
     """
 
     instance: LineHaulInstance
@@ -75,6 +76,7 @@ class Evaluation:
     owned_fixed_cost: float
     service_cost: float
     violations: Mapping[str, float]
+    hard: frozenset[str] = frozenset()
 
     @property
     def total_cost(self) -> float:
@@ -93,15 +95,29 @@ class Evaluation:
 
     @property
     def feasible(self) -> bool:
-        """True when no constraint is violated."""
-        return not any(self.violations.values())
+        """True when no hard rule is broken; see :meth:`broken`."""
+        return not self.broken()
 
     def violated(self) -> dict[str, float]:
         """The violated constraints and their amounts."""
         return {name: amount for name, amount in self.violations.items() if amount}
 
+    def broken(self) -> dict[str, float]:
+        """The violated constraints that make the plan infeasible, and their amounts.
+
+        These are the violated ones among :attr:`hard`. When no rule is declared
+        hard, every violated constraint counts.
+        """
+        violated = self.violated()
+        if not self.hard:
+            return violated
+        return {name: amount for name, amount in violated.items() if name in self.hard}
+
     def __repr__(self) -> str:
-        state = "feasible" if self.feasible else f"violated={self.violated()}"
+        violated = self.violated()
+        state = f"violated={violated}" if violated else "feasible"
+        if violated and self.feasible:
+            state = f"feasible, {state}"
         return (
             f"Evaluation(total_cost={self.total_cost:.2f}, dispatches={len(self.plan)}, "
             f"total_km={self.total_km:.1f}, {state})"
@@ -109,9 +125,17 @@ class Evaluation:
 
 
 def evaluate(
-    instance: LineHaulInstance, plan: Plan, constraints: Iterable[Constraint] = ()
+    instance: LineHaulInstance,
+    plan: Plan,
+    constraints: Iterable[Constraint] = (),
+    *,
+    hard: Iterable[str] = (),
 ) -> Evaluation:
     """Evaluate ``plan`` for ``instance``, with optional constraints of your own.
+
+    ``hard`` names the rules that must hold, built-in or your own; they decide
+    :attr:`Evaluation.feasible`. Without it, every rule counts. A name that is
+    not a rule of the evaluation is a :class:`ValueError`.
 
     Raises :class:`~pirilib.PlanError` if the plan refers to days, centers,
     vehicles or demands that the instance does not have.
@@ -145,7 +169,8 @@ def evaluate(
         violations=MappingProxyType(context.violations()),
     )
     own = list(constraints)
-    if not own:
+    declared = frozenset(hard)
+    if not own and not declared:
         return evaluation
     violations = dict(evaluation.violations)
     for item in own:
@@ -155,7 +180,10 @@ def evaluate(
         if not (math.isfinite(amount) and amount >= 0):
             raise ValueError(f"constraint '{item.name}' returned {amount}, expected a number >= 0")
         violations[item.name] = amount
-    return dataclasses.replace(evaluation, violations=MappingProxyType(violations))
+    unknown = sorted(declared - set(violations))
+    if unknown:
+        raise ValueError(f"hard rules {unknown} are not rules of this evaluation")
+    return dataclasses.replace(evaluation, violations=MappingProxyType(violations), hard=declared)
 
 
 class _Context:

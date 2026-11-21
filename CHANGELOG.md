@@ -30,6 +30,16 @@ uses [Semantic Versioning](https://semver.org/).
   exact solver and direct shipping count it when they pick a vehicle. The
   PyVRP and OR-Tools adapters refuse problems that use it.
 
+- `hard` instead of a weight under `objective.penalties`, by rule name or as
+  `other`: the rule must hold. The solvers give it a weight far above the
+  costs, `Evaluation.feasible` and `PlanReport.feasible` are true when no hard
+  rule is broken, and `Evaluation.broken()` lists the broken ones. A plan that
+  breaks a hard rule is still returned; `pirilib solve` writes it and exits
+  with status 3. When no rule is hard, every rule counts, as before.
+- `evaluate(..., hard=...)` and `check_plan(..., hard=...)` take the hard rules
+  directly, `objective.Sum` carries them in `hard`, and the plan summary has
+  `hard_violations`.
+
 ### Changed
 
 - `stopovers` of an owned group now defaults to `true`: owned vehicles may
