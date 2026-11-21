@@ -68,6 +68,8 @@ in their docstrings.
   function signatures are kept.
 - `pirilib.bench`, `pirilib bench`, `pirilib.solvers.direct.DirectShipping` and the
   adapters in `pirilib.solvers.adapters`.
+- `pirilib.solvers.support`: the record changes when a solver learns to keep
+  a rule.
 - `objective.linear_form`, `objective.FEATURES`: the contract between objectives
   and the fast solver path.
 

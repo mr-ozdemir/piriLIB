@@ -12,6 +12,7 @@ Commands::
     pirilib forecast history.csv --waves waves.csv --network network.yaml
     pirilib schema linehaul.schema.json
     pirilib bench small --solvers direct,aco,exact -o results.csv --summary summary.csv
+    pirilib bench small --solvers direct,aco --seeds 5 --report report.json
 
 ``solve``, ``tune`` and ``bench`` minimize the objective that the problem
 documents define in their ``objective:`` section; there is no default one.
@@ -168,6 +169,7 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--seeds", type=int, default=1, help="runs per instance and solver")
     command.add_argument("-o", "--output", help="write one row per run as CSV")
     command.add_argument("--summary", help="write the summary per solver as CSV")
+    command.add_argument("--report", help="write the run conditions, spread and records as JSON")
     command.set_defaults(run=_bench)
     return parser
 
@@ -497,7 +499,7 @@ def _bench(arguments: argparse.Namespace) -> int:
     goal = _objective([(item.name, parse_spec(item.document)) for item in instances])
     benchmark = Benchmark(SOLVERS.make(names), objective=goal, seeds=tuple(range(arguments.seeds)))
 
-    def report(record: Record) -> None:
+    def show(record: Record) -> None:
         head = f"{record.instance}  {record.solver:<10} seed {record.seed}"
         if not record.solved:
             print(f"{head}  skipped: {record.message}")
@@ -508,7 +510,8 @@ def _bench(arguments: argparse.Namespace) -> int:
             flush=True,
         )
 
-    table = benchmark.run(instances, report)
+    report = benchmark.report(instances, show)
+    table = report.table
     summary = table.summary()
     print()
     print(summary)
@@ -516,6 +519,8 @@ def _bench(arguments: argparse.Namespace) -> int:
         print(f"results written to {table.to_csv(arguments.output)}")
     if arguments.summary:
         print(f"summary written to {summary.to_csv(arguments.summary)}")
+    if arguments.report:
+        print(f"report written to {report.to_json(arguments.report)}")
     return 0
 
 

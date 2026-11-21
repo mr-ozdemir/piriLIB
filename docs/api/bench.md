@@ -13,3 +13,7 @@
 ::: pirilib.bench.results
     options:
       heading_level: 2
+
+::: pirilib.bench.report
+    options:
+      heading_level: 2

@@ -4,11 +4,27 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses [Semantic Versioning](https://semver.org/).
 
-[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mr-ozdemir/piriLIB/releases/tag/v0.1.0
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-11-21
+
+### Added
+
+- `Benchmark.report` and `pirilib bench --report`: a benchmark report that
+  keeps, next to the records, the conditions of the run (instances and their
+  generator settings, solvers and their settings, objective, seeds, machine
+  and package versions) and is written to and read from one JSON file.
+- `ResultTable.spread`: per instance and solver, the best, quartiles, median
+  and worst objective over the seeds and the gap of the median to the best
+  known objective.
+- `pirilib.solvers.support`: a record of how every built-in solver deals with
+  every rule (kept, penalized or refused), with `rule_support(solver)` to
+  look it up. The guide shows it as a table.
 
 ## [0.1.1] - 2026-11-19
 

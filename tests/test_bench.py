@@ -1,25 +1,34 @@
+import datetime as dt
+import json
 import math
 from collections.abc import Callable, Sequence
+from fractions import Fraction
 from operator import attrgetter
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from pirilib import ACOConfig, ACOSolver, SolveResult
+import pirilib
+from pirilib import ACOConfig, ACOSolver, Evaluation, SolveResult
 from pirilib import objective as obj
 from pirilib.bench import (
     COLUMNS,
     FAMILIES,
     SOLVERS,
     Benchmark,
+    Environment,
     Family,
     FamilyCatalog,
+    InstanceInfo,
     Record,
+    Report,
     ResultTable,
+    SolverInfo,
+    Spread,
 )
 from pirilib.cli import main
-from pirilib.constraints import Constraint
+from pirilib.constraints import Constraint, MaxRouteKm
 from pirilib.objective import Objective
 from pirilib.solvers.direct import DirectShipping
 from pirilib.spec import LineHaulInstance, parse_spec
@@ -354,3 +363,361 @@ def test_the_command_line_rejects_an_unknown_family(capsys: pytest.CaptureFixtur
 
     assert code == 1
     assert "unknown family" in capsys.readouterr().err
+
+
+SPREAD_TABLE = ResultTable.of(
+    [
+        record("a", "one", 50.0, seed=0, seconds=5.0),
+        record("a", "one", 10.0, seed=1, seconds=1.0),
+        record("a", "one", 40.0, seed=2, seconds=4.0),
+        record("a", "one", 20.0, seed=3, seconds=2.0),
+        record("a", "one", 30.0, seed=4, seconds=3.0),
+        record("a", "two", 8.0),
+        record("a", "three", math.nan, status="skipped"),
+        record("b", "three", math.nan, status="skipped"),
+    ]
+)
+"""On instance a, "one" has five runs from 10 to 50 and "two" one run of 8; "three" is skipped."""
+
+
+def test_the_spread_gives_the_quartiles_of_the_runs() -> None:
+    """Five runs 10..50: quartiles 20, 30, 40; the median is (30 - 8) / 8 = 2.75 above the best."""
+    spread = SPREAD_TABLE.spread()
+
+    assert spread[0] == Spread(
+        instance="a",
+        solver="one",
+        runs=5,
+        solved=5,
+        best=10.0,
+        lower_quartile=20.0,
+        median=30.0,
+        upper_quartile=40.0,
+        worst=50.0,
+        gap=2.75,
+        median_seconds=3.0,
+    )
+
+
+def test_one_run_is_its_own_spread() -> None:
+    """With a single solved run, the best, the quartiles and the worst are that run."""
+    spread = SPREAD_TABLE.spread()
+
+    assert spread[1] == Spread(
+        instance="a",
+        solver="two",
+        runs=1,
+        solved=1,
+        best=8.0,
+        lower_quartile=8.0,
+        median=8.0,
+        upper_quartile=8.0,
+        worst=8.0,
+        gap=0.0,
+        median_seconds=1.0,
+    )
+
+
+def test_quartiles_are_interpolated_between_runs() -> None:
+    """Two runs 10 and 20: the quartiles lie a quarter, a half and three quarters of the way."""
+    table = ResultTable.of([record("a", "one", 10.0), record("a", "one", 20.0, seed=1)])
+
+    row = table.spread()[0]
+
+    assert (row.lower_quartile, row.median, row.upper_quartile) == (12.5, 15.0, 17.5)
+
+
+def test_a_solver_without_a_solved_run_has_no_spread() -> None:
+    """The run is counted, and every number of the spread is NaN."""
+    row = SPREAD_TABLE.spread()[2]
+
+    assert (row.runs, row.solved) == (1, 0)
+    assert np.isnan(
+        [
+            row.best,
+            row.lower_quartile,
+            row.median,
+            row.upper_quartile,
+            row.worst,
+            row.gap,
+            row.median_seconds,
+        ]
+    ).all()
+
+
+def test_the_spread_has_one_row_per_instance_and_solver() -> None:
+    """Rows follow the order in which the pairs first appear in the table."""
+    spread = SPREAD_TABLE.spread()
+
+    assert list(map(attrgetter("instance", "solver"), spread)) == [
+        ("a", "one"),
+        ("a", "two"),
+        ("a", "three"),
+        ("b", "three"),
+    ]
+
+
+def test_a_given_best_known_is_the_reference_of_the_spread_gap() -> None:
+    """Against a best known objective of 5, the median 30 is (30 - 5) / 5 = 5 above it."""
+    spread = SPREAD_TABLE.spread(best_known={"a": 5.0})
+
+    assert spread[0].gap == 5.0
+
+
+class Odd:
+    """A solver whose settings are not all plain values, and one that is private."""
+
+    def __init__(self) -> None:
+        self.limit = math.inf
+        self.steps = (1, 2)
+        self.names = {"a": 0.5}
+        self.share = Fraction(1, 3)
+        self._cache = 7
+
+    def solve(
+        self,
+        instance: LineHaulInstance,
+        objective: Objective,
+        constraints: Sequence[Constraint] = (),
+        *,
+        seed: int = 0,
+    ) -> SolveResult:
+        raise ValueError("not supported")
+
+
+class Bare:
+    """A solver without attributes."""
+
+    __slots__ = ()
+
+    def solve(
+        self,
+        instance: LineHaulInstance,
+        objective: Objective,
+        constraints: Sequence[Constraint] = (),
+        *,
+        seed: int = 0,
+    ) -> SolveResult:
+        raise ValueError("not supported")
+
+
+def unbounded(evaluation: Evaluation) -> float:
+    """An objective that is a plain function, and infinite for every plan."""
+    return math.inf
+
+
+@pytest.fixture(scope="module")
+def report() -> Report:
+    """The tiny family's first two instances under a direct, a colony and a refusing solver."""
+    benchmark = Benchmark(
+        {"direct": DirectShipping(), "aco": ACOSolver(SMALL), "refusing": Refusing()},
+        objective=GOAL,
+        constraints=[MaxRouteKm(5000.0)],
+        seeds=SEEDS,
+    )
+    return benchmark.report(FAMILIES.get("tiny").instances(2))
+
+
+def test_a_report_holds_one_record_per_run(report: Report) -> None:
+    """2 instances x 3 solvers x 2 seeds."""
+    assert len(report.table) == 12
+
+
+def test_a_report_summarizes_its_records(report: Report) -> None:
+    """The direct solver ran on 2 instances with 2 seeds and solved all four."""
+    row = report.summary().row("direct")
+
+    assert (row.runs, row.solved) == (4, 4)
+
+
+def test_a_report_passes_every_record_to_progress() -> None:
+    """One instance, one solver, one seed: progress sees the one record of the table."""
+    seen: list[Record] = []
+    benchmark = Benchmark({"direct": DirectShipping()}, objective=GOAL)
+
+    made = benchmark.report(FAMILIES.get("tiny").instances(1), progress=seen.append)
+
+    assert seen == list(made.table)
+
+
+def test_a_report_lists_the_solvers_in_running_order(report: Report) -> None:
+    assert list(report.solvers) == ["direct", "aco", "refusing"]
+
+
+def test_a_report_keeps_the_settings_of_a_solver(report: Report) -> None:
+    """The colony's configuration is written field by field."""
+    assert report.solvers["aco"] == SolverInfo(
+        type="pirilib.solvers.aco.ACOSolver",
+        settings={
+            "config": {
+                "ants": 4,
+                "iterations": 5,
+                "patience": 3,
+                "alpha": 1.0,
+                "beta": 2.0,
+                "evaporation": 0.1,
+                "exploitation": 0.0,
+                "tau_min": 0.01,
+                "update": "iteration_best",
+                "local_search": True,
+                "exact_nodes": 0,
+            }
+        },
+    )
+
+
+def test_solver_settings_that_are_not_plain_values_are_written_as_text() -> None:
+    """Infinity and a fraction become their ``repr``; a private attribute is left out."""
+    made = Benchmark({"odd": Odd()}, objective=GOAL).report([])
+
+    assert made.solvers["odd"].settings == {
+        "limit": "inf",
+        "steps": [1, 2],
+        "names": {"a": 0.5},
+        "share": "Fraction(1, 3)",
+    }
+
+
+def test_a_solver_without_attributes_has_no_settings() -> None:
+    made = Benchmark({"bare": Bare()}, objective=GOAL).report([])
+
+    assert made.solvers["bare"].settings == {}
+
+
+def test_a_report_names_the_terms_of_the_objective(report: Report) -> None:
+    assert report.objective == (("total_cost", 1.0), ("violations", 1e6))
+
+
+def test_an_objective_of_one_term_is_reported_as_that_term() -> None:
+    made = Benchmark({"direct": DirectShipping()}, objective=3.0 * obj.total_cost()).report([])
+
+    assert made.objective == (("total_cost", 3.0),)
+
+
+def test_an_objective_function_is_reported_by_its_name() -> None:
+    made = Benchmark({"direct": DirectShipping()}, objective=unbounded).report([])
+
+    assert made.objective == (("unbounded", 1.0),)
+
+
+def test_a_report_names_the_constraints_and_seeds(report: Report) -> None:
+    assert (report.constraints, report.seeds) == (("max_route_km",), SEEDS)
+
+
+def test_a_report_says_where_an_instance_comes_from(report: Report) -> None:
+    """The first tiny instance: its generator seed and settings, 5 centers, 1 day, 5 demand rows."""
+    assert report.instances[0] == InstanceInfo(
+        name="tiny/000",
+        family="tiny",
+        index=0,
+        seed=461967004,
+        settings={
+            "centers": 5,
+            "days": 1,
+            "demand_per_day": 5,
+            "owned_lines": 1,
+            "min_fill": 0.0,
+            "max_stretch": 1.3,
+            "split": True,
+            "spot_limit": None,
+            "seed": 461967004,
+        },
+        centers=5,
+        days=1,
+        demands=5,
+    )
+
+
+def test_a_report_lists_the_instances_in_running_order(report: Report) -> None:
+    assert list(map(attrgetter("name"), report.instances)) == ["tiny/000", "tiny/001"]
+
+
+def test_a_report_records_the_library_and_package_versions(report: Report) -> None:
+    environment = report.environment
+
+    assert environment.pirilib == pirilib.__version__
+    assert environment.packages["numpy"] == np.__version__
+
+
+def test_packages_that_are_not_installed_are_left_out() -> None:
+    environment = Environment.current(packages=("numpy", "no-such-package"))
+
+    assert environment.packages == {"numpy": np.__version__}
+
+
+def test_a_report_is_dated_in_utc(report: Report) -> None:
+    assert report.created.utcoffset() == dt.timedelta(0)
+
+
+def test_a_report_round_trips_through_json(report: Report, tmp_path: Path) -> None:
+    """The conditions come back equal; records are compared as rows, since NaN is not equal."""
+    path = report.to_json(tmp_path / "report.json")
+
+    again = Report.from_json(path)
+
+    conditions = attrgetter(
+        "created", "environment", "solvers", "objective", "constraints", "seeds", "instances"
+    )
+    assert conditions(again) == conditions(report)
+    assert list(map(Record.row, again.table)) == list(map(Record.row, report.table))
+
+
+def test_a_report_file_names_its_format(report: Report, tmp_path: Path) -> None:
+    path = report.to_json(tmp_path / "report.json")
+
+    document = json.loads(path.read_text(encoding="utf-8"))
+
+    assert document["format"] == "pirilib/bench-report@1"
+
+
+def test_a_report_file_holds_the_spread(report: Report, tmp_path: Path) -> None:
+    """2 instances x 3 solvers; the refusing solver has no median, written as null."""
+    path = report.to_json(tmp_path / "report.json")
+
+    document = json.loads(path.read_text(encoding="utf-8"))
+
+    assert len(document["spread"]) == 6
+    assert document["spread"][2]["solver"] == "refusing"
+    assert document["spread"][2]["median"] is None
+
+
+def test_a_skipped_run_has_no_objective_in_the_report_file(report: Report, tmp_path: Path) -> None:
+    """Records run instance by instance, solver by solver: the fifth is the refusing solver's."""
+    path = report.to_json(tmp_path / "report.json")
+
+    document = json.loads(path.read_text(encoding="utf-8"))
+
+    assert document["records"][4]["status"] == "skipped"
+    assert document["records"][4]["objective"] is None
+
+
+def test_an_infinite_objective_survives_the_report_file(tmp_path: Path) -> None:
+    """JSON has no infinity; it is written as text and read back as the number."""
+    benchmark = Benchmark({"direct": DirectShipping()}, objective=unbounded)
+    path = benchmark.report(FAMILIES.get("tiny").instances(1)).to_json(tmp_path / "report.json")
+
+    again = Report.from_json(path)
+
+    assert again.table.records[0].objective == math.inf
+
+
+@pytest.mark.parametrize("text", ['{"format": "pirilib/bench-report@2"}', "[]"], ids=["v2", "list"])
+def test_a_file_of_another_format_is_not_read_as_a_report(tmp_path: Path, text: str) -> None:
+    path = tmp_path / "other.json"
+    path.write_text(text, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not a benchmark report of format pirilib/bench-report@1"):
+        Report.from_json(path)
+
+
+def test_the_command_line_writes_a_report(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    path = tmp_path / "report.json"
+
+    code = main(["bench", "tiny", "--solvers", "direct", "--count", "1", "--report", str(path)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert f"report written to {path}" in out
+    assert len(Report.from_json(path).table) == 1
