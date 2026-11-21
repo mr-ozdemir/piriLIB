@@ -343,8 +343,9 @@ The default solver is the ant colony (`pirilib.ACOSolver`):
 - **Construction.** Each ant picks a vehicle and a first stop, then either
   extends the route or ends it. Pheromone is MAX-MIN in the hypercube
   framework.
-- **Guarantees.** Every rule except minimum fill and coverage holds by
-  construction.
+- **Guarantees.** Every rule except minimum fill, coverage, handling capacity
+  and vehicle limits holds by construction; see the table at the end of this
+  section.
 - **Local search.** It then changes vehicles, merges, relocates and rebalances
   routes, serves leftover demand and drops routes that cost more than they
   carry.
@@ -379,6 +380,51 @@ mixed-integer programming. It is meant for small problems and for measuring
 the colony. With times, deferral or center limits it plans the subproblems in
 the colony's order, against the room the earlier ones left, as long as loading
 and unloading take no time (`rules.handling.minutes_per_unit: 0`).
+
+### Which solver keeps which rule
+
+A solver deals with a rule in one of three ways:
+
+- **kept**: no plan of the solver breaks the rule, whatever the objective;
+- **penalized**: a plan may break the rule, and the objective charges the
+  rule's penalty for the amount;
+- **refused**: the solver raises `ValueError` for a problem that uses the
+  setting behind the rule, such as a minimum fill above 0.
+
+| Rule | Ant colony | Exact | Direct shipping | PyVRP, OR-Tools |
+|---|---|---|---|---|
+| `route` | kept | kept | kept | kept |
+| `load_route` | kept | kept | kept | kept |
+| `ready` | kept | kept | kept | kept |
+| `deferral` | kept | kept | kept | refused |
+| `ban` | kept | kept | kept | kept |
+| `owned_line` | kept | kept | kept | kept |
+| `owned_availability` | kept | kept | kept | kept |
+| `spot_availability` | kept | kept | kept | kept |
+| `handling` | penalized | penalized | penalized | refused |
+| `vehicle_limit` | penalized | penalized | penalized | refused |
+| `capacity` | kept | kept | kept | kept |
+| `min_fill` | penalized | penalized | penalized | refused |
+| `stopover` | kept | kept | kept | kept |
+| `max_stops` | kept | kept | kept | kept |
+| `stretch` | kept | kept | kept | kept |
+| `forward_only` | kept | kept | kept | kept |
+| `split` | kept | refused | kept | refused |
+| `coverage` | penalized | penalized | penalized | penalized |
+| `overdelivery` | kept | kept | kept | kept |
+
+The ant colony and the exact solver weigh `min_fill` and `coverage` against
+the costs. `handling` and `vehicle_limit` are shared by all dispatches at a
+center on a day; both solvers give each subproblem the room that is left,
+which keeps the limits in most plans but not in all. Direct shipping does not
+look at penalties or center limits. The same record is available in code:
+
+```python
+from pirilib.solvers.support import Support, rule_support
+
+support = rule_support(pirilib.ACOSolver())
+open_rules = [rule for rule, way in support.items() if way is Support.PENALIZED]
+```
 
 ## 5. Tune
 

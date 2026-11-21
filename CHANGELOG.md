@@ -19,6 +19,9 @@ uses [Semantic Versioning](https://semver.org/).
 - `ResultTable.spread`: per instance and solver, the best, quartiles, median
   and worst objective over the seeds and the gap of the median to the best
   known objective.
+- `pirilib.solvers.support`: a record of how every built-in solver deals with
+  every rule (kept, penalized or refused), with `rule_support(solver)` to
+  look it up. The guide shows it as a table.
 
 ## [0.1.1] - 2026-11-19
 
