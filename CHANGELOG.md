@@ -10,6 +10,16 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `Benchmark.report` and `pirilib bench --report`: a benchmark report that
+  keeps, next to the records, the conditions of the run (instances and their
+  generator settings, solvers and their settings, objective, seeds, machine
+  and package versions) and is written to and read from one JSON file.
+- `ResultTable.spread`: per instance and solver, the best, quartiles, median
+  and worst objective over the seeds and the gap of the median to the best
+  known objective.
+
 ## [0.1.1] - 2026-11-19
 
 ### Fixed
