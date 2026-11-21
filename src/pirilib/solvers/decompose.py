@@ -54,6 +54,8 @@ class Subproblem:
         stopovers: (n,) may serve several nodes on one route
         allowed: (n, k) the vehicle type may stop at the node
         per_hour: (n,) charged per hour of use
+        per_unit: (n, D) charged per unit carried
+        unit_priced: an option has a cost per unit carried
         speed: (n,) km per hour, NaN where travel takes no time
         item_ready: (k, I) minutes, -inf where there is no item
         item_due: (k, I) minutes, inf where there is no due time
@@ -84,6 +86,8 @@ class Subproblem:
     stopovers: NDArray[np.bool_]
     allowed: NDArray[np.bool_]
     per_hour: NDArray[np.float64]
+    per_unit: NDArray[np.float64]
+    unit_priced: bool
     speed: NDArray[np.float64]
     item_ready: NDArray[np.float64]
     item_due: NDArray[np.float64]
@@ -278,6 +282,7 @@ def _subproblem(
             allowed[groups.size :][:, node_of_item],
             spot,
         )
+    per_unit = np.concatenate([instance.owned_per_unit[groups], instance.spot_per_unit[spot]])
     return Subproblem(
         day=day,
         origin=origin,
@@ -306,6 +311,8 @@ def _subproblem(
         & rules.stopover.enabled,
         allowed=allowed,
         per_hour=np.concatenate([instance.owned_per_hour[groups], instance.spot_per_hour[spot]]),
+        per_unit=per_unit,
+        unit_priced=bool(per_unit.any()),
         speed=instance.speed_kmh[vehicle_type],
         item_ready=item_ready,
         item_due=item_due,

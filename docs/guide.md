@@ -87,13 +87,18 @@ What the fields mean:
 - **Owned vehicles** are bound to a line.
   - `count` vehicles run on one line every day.
   - With `mandatory: true`, the default, their fixed cost is paid every day,
-    used or not; a dispatch then only costs `per_km`. With `mandatory: false`
+    used or not; a dispatch then only costs `per_km` (and `per_hour` and
+    `per_unit`, where given). With `mandatory: false`
     a dispatch pays `fixed` too, and idle vehicles cost nothing.
   - With `stopovers: true`, the default, they may drop loads at centers on the
     way, but they always end at the line's destination. With
     `stopovers: false` they carry loads for that destination only.
 - **Spot offers** are vehicles hired per dispatch.
   - Each dispatch costs `fixed + per_km x route km`.
+  - `per_unit` prices what a dispatch carries, per quantity dimension and
+    whatever the distance: `cost: {fixed: 0, per_unit: {desi: 0.8}}` is a
+    carrier paid by the desi. Owned groups take it too. The solvers count it
+    when they pick a vehicle.
   - `available` limits vehicles per day; leave it out for unlimited.
   - There is one offer per vehicle type.
   - With `stopovers: true`, the default, a vehicle may serve several
@@ -647,7 +652,8 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
 ## Known limits
 
 - One-way line haul only: no return trips, working hours or driver rules.
-- Costs are fixed, per km and per hour; there are no costs per unit carried.
+- A cost per unit carried does not depend on the distance; there is no cost
+  per unit and km.
 - With times, deferral or center limits the ant colony plans greedily, day by
   day and subproblem by subproblem: an earlier subproblem never gives up room
   for a later one, and deferral does not look at the next day's capacity.

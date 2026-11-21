@@ -1,14 +1,14 @@
 """Read-only array form of a line-haul specification, used by the engines."""
 
 import datetime as dt
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
 
 from pirilib.geo import haversine_matrix
-from pirilib.spec.models import Demand, ExplicitMatrix, LineHaulSpec, Rules, needs_time
+from pirilib.spec.models import Cost, Demand, ExplicitMatrix, LineHaulSpec, Rules, needs_time
 
 UNLIMITED = -1
 """Value of :attr:`LineHaulInstance.spot_available` for offers without a daily limit."""
@@ -37,6 +37,8 @@ class LineHaulInstance:
         min_fill_spot: (dimensions,) the same for spot vehicles
         demand_quantity: (demands, dimensions)
         speed_kmh: (vehicle types,), NaN where not given
+        spot_per_unit: (spot offers, dimensions) cost per unit carried
+        owned_per_unit: (owned groups, dimensions) cost per unit carried
         handling_capacity: (centers,) primary quantity per day, inf: no limit
         vehicle_limit: (centers, vehicle types) per day, or UNLIMITED
         demand_ready: Minutes
@@ -76,6 +78,8 @@ class LineHaulInstance:
     speed_kmh: NDArray[np.float64]
     spot_per_hour: NDArray[np.float64]
     owned_per_hour: NDArray[np.float64]
+    spot_per_unit: NDArray[np.float64]
+    owned_per_unit: NDArray[np.float64]
     handling_capacity: NDArray[np.float64]
     vehicle_limit: NDArray[np.int64]
     demand_ready: NDArray[np.float64]
@@ -100,6 +104,15 @@ class LineHaulInstance:
             f"owned_groups={self.owned_type.size}, demands={len(self.demand_ids)}, "
             f"dimensions={self.dimensions})"
         )
+
+
+def _per_unit(costs: Sequence[Cost], dimensions: Sequence[str]) -> NDArray[np.float64]:
+    """(costs, dimensions): the cost per unit carried, 0 where none is given."""
+    values = np.array(
+        [[cost.per_unit.get(name, 0.0) for name in dimensions] for cost in costs],
+        dtype=np.float64,
+    ).reshape(len(costs), len(dimensions))
+    return _read_only(values)
 
 
 def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
@@ -171,6 +184,8 @@ def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
         ),
         spot_per_hour=_floats(offer.cost.per_hour for offer in spot),
         owned_per_hour=_floats(group.cost.per_hour for group in owned),
+        spot_per_unit=_per_unit([offer.cost for offer in spot], dimensions),
+        owned_per_unit=_per_unit([group.cost for group in owned], dimensions),
         handling_capacity=_floats(
             np.inf if center.handling_capacity is None else center.handling_capacity
             for center in spec.centers
