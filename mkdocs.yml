@@ -39,6 +39,7 @@ nav:
           - pirilib.solvers.exact: api/solvers/exact.md
           - pirilib.solvers.ledger: api/solvers/ledger.md
           - pirilib.solvers.local_search: api/solvers/local_search.md
+          - pirilib.solvers.support: api/solvers/support.md
       - pirilib.tuning: api/tuning.md
       - pirilib.forecast: api/forecast.md
       - pirilib.planio: api/planio.md
