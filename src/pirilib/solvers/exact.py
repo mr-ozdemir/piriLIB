@@ -38,7 +38,7 @@ from numpy.typing import NDArray
 
 from pirilib.constraints import Constraint
 from pirilib.evaluation import evaluate
-from pirilib.objective import Objective, linear_form
+from pirilib.objective import Objective, hard_rules, linear_form
 from pirilib.plan import OWNED, SPOT
 from pirilib.solvers._colony import Batch, Colony, Shared, scores
 from pirilib.solvers._routing import route_gap, route_km, route_ok, route_value
@@ -177,7 +177,7 @@ class ExactSolver:
             else:
                 score += result.value
         plan = builder.build()
-        evaluation = evaluate(instance, plan)
+        evaluation = evaluate(instance, plan, hard=hard_rules(goal))
         return SolveResult(
             plan=plan,
             evaluation=evaluation,

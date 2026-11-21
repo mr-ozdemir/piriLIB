@@ -362,4 +362,5 @@ def summary(evaluation: Evaluation) -> dict[str, Any]:
         "unserved": float(evaluation.unserved.sum()),
         "feasible": evaluation.feasible,
         "violations": evaluation.violated(),
+        "hard_violations": evaluation.broken() if evaluation.hard else {},
     }

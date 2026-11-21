@@ -39,6 +39,7 @@ __all__ = [
     "dispatch_cost",
     "dispatches",
     "distance_km",
+    "hard_rules",
     "linear_form",
     "owned_fixed_cost",
     "service_cost",
@@ -117,22 +118,29 @@ class Term:
 
 @dataclass(frozen=True, slots=True)
 class Sum:
-    """The sum of several terms."""
+    """The sum of several terms.
+
+    Attributes:
+        hard: Names of the rules that must hold. They decide whether a plan is
+            feasible (:attr:`pirilib.Evaluation.feasible`); the weights of their
+            terms decide how the solvers treat them
+    """
 
     terms: tuple[Term, ...]
+    hard: frozenset[str] = frozenset()
 
     def __call__(self, evaluation: "Evaluation") -> float:
         return sum(term(evaluation) for term in self.terms)
 
     def __add__(self, other: Union[Term, "Sum"]) -> "Sum":
         if isinstance(other, Term):
-            return Sum((*self.terms, other))
+            return Sum((*self.terms, other), self.hard)
         if isinstance(other, Sum):
-            return Sum((*self.terms, *other.terms))
+            return Sum((*self.terms, *other.terms), self.hard | other.hard)
         return NotImplemented
 
     def __mul__(self, factor: float) -> "Sum":
-        return Sum(tuple(term * factor for term in self.terms))
+        return Sum(tuple(term * factor for term in self.terms), self.hard)
 
     __rmul__ = __mul__
 
@@ -153,6 +161,11 @@ class Sum:
             for feature, value in form.items():
                 total[feature] = total.get(feature, 0.0) + value
         return total
+
+
+def hard_rules(objective: Objective) -> frozenset[str]:
+    """The rules ``objective`` declares hard; none for a term or a function of your own."""
+    return frozenset(getattr(objective, "hard", ()))
 
 
 def linear_form(objective: Objective) -> dict[str, float] | None:

@@ -27,7 +27,8 @@ class Record:
         status: ``ok``, or ``skipped`` when the solver refused the instance
         objective: Objective of the plan, recomputed from its evaluation; NaN when skipped
         total_cost: NaN when skipped
-        feasible: No constraint is violated
+        feasible: No hard rule of the objective is violated; no rule at all when it
+            declares none
         violated: Names of the violated constraints
         seconds: Wall-clock time of the solver call
         dispatches: Vehicles in the plan
