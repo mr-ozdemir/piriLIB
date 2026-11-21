@@ -96,7 +96,7 @@ penalty prices a desi and a kg alike. 1300 desi and 600 kg left behind are a
 | `handling` | quantity | Primary quantity loaded and unloaded at a center beyond its daily handling capacity. |
 | `vehicle_limit` | count | Vehicles of a type at a center beyond its daily limit. |
 | `capacity` | quantity | Load above vehicle capacity, summed over dimensions. |
-| `min_fill` | quantity | Load missing to reach the minimum fill of the primary dimension. |
+| `min_fill` | quantity | Load missing to reach the minimum fill. With a minimum in several dimensions, a vehicle that reaches one of them misses nothing, and one that reaches none misses the smallest of its gaps. |
 | `stopover` | count | Dispatches with more than one stop although stopovers are disabled, or not allowed for the owned group or the spot offer. |
 | `max_stops` | count | Stops beyond `rules.stopover.max_stops`. |
 | `stretch` | km | Route length above `max_stretch` times the direct distance to the last stop. |

@@ -34,7 +34,14 @@ from numpy.typing import NDArray
 from pirilib.evaluation import TOLERANCE
 from pirilib.plan import OWNED
 from pirilib.solvers._colony import Shared
-from pirilib.solvers._routing import fits, route_km, route_ok, route_value, unserved_value
+from pirilib.solvers._routing import (
+    fits,
+    route_gap,
+    route_km,
+    route_ok,
+    route_value,
+    unserved_value,
+)
 from pirilib.solvers._timing import route_lateness, route_timing
 from pirilib.solvers.decompose import Routes, Subproblem
 from pirilib.solvers.ledger import MIN_ROOM, Room
@@ -212,12 +219,10 @@ class _Search:
             self.p, route.option, route.load
         )
 
-    def shortfall(self, route: _Route) -> float:
-        """Primary quantity missing to the minimum fill (0 when reached)."""
-        primary = self.shared.primary
-        capacity = float(self.p.capacity[route.option, primary])
-        share = float(self.shared.min_fill[self.p.kind[route.option]])
-        return max(share * capacity - float(route.load[primary]), 0.0)
+    def shortfall(self, route: _Route) -> tuple[float, int]:
+        """Quantity missing to the minimum fill (0 when reached) and its dimension."""
+        kind = int(self.p.kind[route.option])
+        return route_gap(self.shared, kind, self.p.capacity[route.option], route.load)
 
     def arranged(self, option: int, stops: list[_Stop]) -> list[list[_Stop]]:
         """Ways to visit ``stops`` with ``option``: empty stops dropped, owned line end last."""
@@ -415,9 +420,8 @@ class _Search:
         """
         if not self.split:
             return False
-        primary = self.shared.primary
         for taker_index, taker in enumerate(routes):
-            need = self.shortfall(taker)
+            need, primary = self.shortfall(taker)
             if need <= 0:
                 continue
             capacity = self.p.capacity[taker.option]
@@ -430,7 +434,7 @@ class _Search:
                     if given is None or given.amount[primary] <= 0:
                         continue
                     giver_capacity = float(self.p.capacity[giver.option, primary])
-                    giver_share = float(self.shared.min_fill[self.p.kind[giver.option]])
+                    giver_share = float(self.shared.min_fill[self.p.kind[giver.option], primary])
                     spare = float(giver.load[primary]) - giver_share * giver_capacity
                     moved = min(need, spare, float(given.amount[primary]))
                     if moved <= TOLERANCE * float(capacity[primary]):

@@ -37,11 +37,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from pirilib.constraints import Constraint
-from pirilib.evaluation import TOLERANCE, evaluate
+from pirilib.evaluation import evaluate
 from pirilib.objective import Objective, linear_form
 from pirilib.plan import OWNED, SPOT
 from pirilib.solvers._colony import Batch, Colony, Shared, scores
-from pirilib.solvers._routing import route_km, route_ok, route_value
+from pirilib.solvers._routing import route_gap, route_km, route_ok, route_value
 from pirilib.solvers._timing import late_hours, route_timing, timeline
 from pirilib.solvers.base import SolveResult, linear_coefficients, require_objective
 from pirilib.solvers.decompose import (
@@ -368,11 +368,22 @@ def solve_subproblem(
 
     On scheduled instances routes are timed (handling must take no time), and
     handling and vehicles beyond ``room`` cost their violation weights.
+
+    With a minimum fill in several dimensions, every candidate route is a column
+    once per dimension: the vehicles of a column are judged by that dimension
+    alone, and the optimum puts each vehicle in the column where it misses least.
     """
     from scipy.optimize import Bounds, LinearConstraint, linprog, milp
     from scipy.sparse import coo_array
 
-    routes = candidate_routes(problem, shared, max_nodes)
+    fill_weight = coefficients.get("violation[min_fill]", 0.0)
+    routes: list[tuple[int, tuple[int, ...]]] = []
+    judged: list[tuple[int, float] | None] = []
+    for option, stops in candidate_routes(problem, shared, max_nodes):
+        minimums = shared.thresholds[int(problem.kind[option])] if fill_weight else ()
+        for minimum in minimums or (None,):
+            routes.append((option, stops))
+            judged.append(minimum)
     demand = problem.demand
     loaded = [node for node in range(problem.size) if demand[node].max() > 0]
     dimensions = demand.shape[1]
@@ -438,7 +449,7 @@ def solve_subproblem(
             + service * deferred
         )
         upper[u_base + position] = 1.0
-    cost[s_base:h_base] = coefficients.get("violation[min_fill]", 0.0)
+    cost[s_base:h_base] = fill_weight
     cost[h_base:v_base] = coefficients.get("violation[handling]", 0.0)
     cost[v_base:] = coefficients.get("violation[vehicle_limit]", 0.0)
 
@@ -455,10 +466,11 @@ def solve_subproblem(
         for column in range(dimensions):
             entries = [(f_base + index, demand[shares[index][1], column]) for index in indices]
             add_row([*entries, (r, -float(problem.capacity[option, column]))], -np.inf, 0.0)
-        share = float(shared.min_fill[problem.kind[option]])
-        if share > 0 and coefficients.get("violation[min_fill]", 0.0):
-            capacity = float(problem.capacity[option, primary])
-            entries = [(f_base + index, -demand[shares[index][1], primary]) for index in indices]
+        minimum = judged[r]
+        if minimum is not None:
+            column, share = minimum
+            capacity = float(problem.capacity[option, column])
+            entries = [(f_base + index, -demand[shares[index][1], column]) for index in indices]
             add_row([*entries, (r, share * capacity), (s_base + r, -1.0)], -np.inf, 0.0)
         else:
             upper[s_base + r] = 0.0
@@ -542,10 +554,5 @@ def _shortfall_part(
     load: NDArray[np.float64],
 ) -> float:
     """The minimum-fill part of :func:`route_value` (handled by a variable instead)."""
-    capacity = float(problem.capacity[option, shared.primary])
-    shortfall = float(shared.min_fill[problem.kind[option]]) * capacity - float(
-        load[shared.primary]
-    )
-    if shortfall > TOLERANCE * capacity:
-        return coefficients.get("violation[min_fill]", 0.0) * shortfall
-    return 0.0
+    shortfall = route_gap(shared, int(problem.kind[option]), problem.capacity[option], load)[0]
+    return coefficients.get("violation[min_fill]", 0.0) * shortfall

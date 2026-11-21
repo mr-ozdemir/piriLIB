@@ -20,7 +20,7 @@ from typing import Any, Final
 import numpy as np
 from numpy.typing import NDArray
 
-from pirilib.evaluation import TOLERANCE
+from pirilib.evaluation import TOLERANCE, fill_shortfall
 from pirilib.plan import OWNED, SPOT
 from pirilib.solvers._timing import timeline
 from pirilib.solvers.decompose import UNBOUNDED, Routes, Subproblem
@@ -38,7 +38,9 @@ class Shared:
     """Instance-wide values the colonies need.
 
     Attributes:
-        min_fill: Indexed by kind code
+        min_fill: (kinds, dimensions) minimum share of capacity, by kind code;
+            0 where a dimension has none
+        thresholds: By kind code, the (dimension, share) pairs with a minimum
         scheduled: Times, deferral or center limits matter (see LineHaulInstance)
         minutes_per_unit: Handling time per primary unit
         penalty: Lateness penalty per primary unit and started hour
@@ -51,12 +53,17 @@ class Shared:
     scheduled: bool = False
     minutes_per_unit: float = 0.0
     penalty: float = 0.0
+    thresholds: tuple[tuple[tuple[int, float], ...], ...] = ((), ())
 
     @classmethod
     def of(cls, instance: LineHaulInstance) -> "Shared":
-        min_fill = np.zeros(2)
-        min_fill[OWNED] = instance.rules.min_fill.owned
-        min_fill[SPOT] = instance.rules.min_fill.spot
+        min_fill = np.zeros((2, len(instance.dimensions)))
+        min_fill[OWNED] = instance.min_fill_owned
+        min_fill[SPOT] = instance.min_fill_spot
+        thresholds = tuple(
+            tuple((int(column), float(row[column])) for column in np.flatnonzero(row > 0))
+            for row in min_fill
+        )
         return cls(
             instance.rules,
             instance.primary_dimension,
@@ -65,6 +72,7 @@ class Shared:
             instance.scheduled,
             instance.rules.handling.minutes_per_unit,
             instance.rules.service.penalty,
+            thresholds,
         )
 
 
@@ -401,8 +409,9 @@ class Build:
         option_slack: (subproblems * options, dimensions) free capacity at or
             below which a dimension counts as full
         option_primary: (subproblems * options,) primary capacity
-        option_min_load: (subproblems * options,) primary load below which the
-            route is underfilled
+        option_min_load: (subproblems * options, dimensions) load from which a
+            dimension reaches its minimum fill; inf where it has none
+        option_has_min: (subproblems * options,) the option has a minimum fill
         option_owned: (subproblems * options,) the option is an owned line
         any_owned: the batch has an owned option
         option_line_end: (subproblems * options,) line end of an owned line, -1
@@ -522,8 +531,11 @@ class Build:
         self.option_capacity = batch.capacity.reshape(count * n, self.dimensions)
         self.option_slack = TOLERANCE * self.option_capacity
         self.option_primary = batch.capacity_primary.reshape(count * n)
-        min_load = batch.min_share * batch.capacity_primary * (1 - TOLERANCE)
-        self.option_min_load = min_load.reshape(count * n)
+        min_load = np.where(
+            batch.min_share > 0, batch.min_share * batch.capacity * (1 - TOLERANCE), np.inf
+        )
+        self.option_min_load = min_load.reshape(count * n, self.dimensions)
+        self.option_has_min = (batch.min_share > 0).any(axis=2).reshape(count * n)
         self.option_owned = batch.owned.reshape(count * n)
         self.any_owned = bool(self.option_owned.any())
         self.option_line_end = batch.line_end.reshape(count * n)
@@ -749,7 +761,8 @@ class Build:
         step_weight = self.step_weight.take(option_id * k + here, axis=0)
         weights = np.empty((rows.size, k + 1))
         weights[:, :k] = np.where(candidate, step_weight * fill**beta, 0.0)
-        underfilled = self.load.take(rows, axis=0)[:, primary] < self.option_min_load[option_id]
+        reached = self.load.take(rows, axis=0) >= self.option_min_load[option_id]
+        underfilled = self.option_has_min[option_id] & ~reached.any(axis=1)
         weights[:, k] = self.tau_end[at] * self.end_factor[underfilled.view(np.int8)]
         choice = sample(weights, self.rng, self.exploitation)
 
@@ -986,10 +999,8 @@ def scores(
     features["unserved"] = remaining.sum(axis=(1, 2))
     for column, name in enumerate(shared.dimensions):
         features[f"unserved[{name}]"] = remaining[:, :, column].sum(axis=1)
-    shortfall = shared.min_fill[kind] * capacity - load
-    features["violation[min_fill]"] = per_row(
-        np.where(shortfall > TOLERANCE * capacity, shortfall, 0.0), every
-    )
+    shortfall = fill_shortfall(shared.min_fill[kind], batch.capacity[of, option], colony.route_load)
+    features["violation[min_fill]"] = per_row(shortfall, every)
     demand = batch.demand[np.arange(rows) // colony.ants]
     features["violation[coverage]"] = np.where(
         remaining > TOLERANCE * np.maximum(demand, 1.0), remaining, 0.0

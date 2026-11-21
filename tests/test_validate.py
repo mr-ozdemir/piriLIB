@@ -67,12 +67,13 @@ _RULES: list[dict[str, Any]] = [
         "split_demand": False,
     },
     {"stopover": {"enabled": False, "forward_only": False}},
+    {"min_fill": {"spot": {"desi": 0.3, "kg": 0.25}, "owned": {"kg": 0.4}}},
     {
         "service": {"due_hours": 6, "penalty": 0.5, "max_deferral_days": 1},
         "handling": {"minutes_per_unit": 0.05},
     },
 ]
-_TIMED = [False, False, False, True]
+_TIMED = [False, False, False, False, True]
 
 
 def _document(rules: dict[str, Any], timed: bool = False) -> dict[str, Any]:

@@ -23,6 +23,7 @@ __all__ = [
     "TOLERANCE",
     "Evaluation",
     "evaluate",
+    "fill_shortfall",
 ]
 
 TOLERANCE: Final = 1e-9
@@ -393,11 +394,10 @@ class _Context:
         return float(excess[excess > TOLERANCE * self.capacity].sum())
 
     def _min_fill(self) -> float:
-        min_fill = self.instance.rules.min_fill
-        share = np.where(self.is_spot, min_fill.spot, min_fill.owned)
-        primary = self.load[:, self.instance.primary_dimension]
-        shortfall = share * self.capacity_primary - primary
-        return float(shortfall[shortfall > TOLERANCE * self.capacity_primary].sum())
+        instance = self.instance
+        share = np.where(self.is_spot[:, None], instance.min_fill_spot, instance.min_fill_owned)
+        shortfall = fill_shortfall(share, self.capacity, self.load)
+        return float(shortfall[shortfall > 0].sum())
 
     def _stopover(self) -> int:
         allowed = np.full(len(self.plan), self.instance.rules.stopover.enabled)
@@ -441,6 +441,22 @@ class _Context:
             "coverage": float(missing[missing > threshold].sum()),
             "overdelivery": float(-missing[-missing > threshold].sum()),
         }
+
+
+def fill_shortfall(
+    share: NDArray[np.float64], capacity: NDArray[np.float64], load: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """The load each vehicle misses to its minimum fill.
+
+    The arguments are (vehicles, dimensions); a share of 0 means the dimension
+    has no minimum. A vehicle that reaches the minimum of any dimension misses
+    nothing. Otherwise it misses the smallest of the gaps to its minimums: the
+    least it would have to load more, in one dimension, to count as filled.
+    """
+    gap = share * capacity - load
+    counted = np.where(gap > TOLERANCE * capacity, gap, 0.0)
+    least = np.where(share > 0, counted, np.inf).min(axis=-1)
+    return np.where(np.isfinite(least), least, 0.0)
 
 
 def _sum_rows(

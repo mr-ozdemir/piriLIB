@@ -325,15 +325,21 @@ class _Checker:
                     excess,
                     f"{label} carries {load[column]:g} {name}, capacity is {capacity[column]:g}",
                 )
-        rules, primary = instance.rules, instance.primary_dimension
-        share = rules.min_fill.owned if dispatch.kind == "owned" else rules.min_fill.spot
-        shortfall = share * capacity[primary] - load[primary]
-        if shortfall > TOLERANCE * capacity[primary]:
+        owned = dispatch.kind == "owned"
+        shares = instance.min_fill_owned if owned else instance.min_fill_spot
+        gaps = [
+            (float(shares[column] * capacity[column] - load[column]), column)
+            for column in range(len(dimensions))
+            if shares[column] > 0
+        ]
+        if gaps and all(gap > TOLERANCE * capacity[column] for gap, column in gaps):
+            shortfall, nearest = min(gaps)
+            others = "" if len(gaps) == 1 else "; no other minimum fill is reached either"
             self.add(
                 "min_fill",
                 shortfall,
-                f"{label} carries {load[primary]:g} {dimensions[primary]}, the minimum fill is "
-                f"{share:g} x {capacity[primary]:g}",
+                f"{label} carries {load[nearest]:g} {dimensions[nearest]}, the minimum fill is "
+                f"{shares[nearest]:g} x {capacity[nearest]:g}{others}",
             )
 
     def availability(self, used: Counter[tuple[str, int, int]]) -> None:

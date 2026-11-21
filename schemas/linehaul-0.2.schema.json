@@ -361,21 +361,53 @@
     },
     "MinFill": {
       "additionalProperties": false,
-      "description": "Minimum share of capacity (primary dimension) a vehicle must carry when it departs.",
+      "description": "Minimum share of capacity a vehicle must carry when it departs.\n\nA number is the share of the primary dimension. A mapping gives a share per\ndimension, for example ``{desi: 0.4, kg: 0.5}``; a vehicle then counts as\nfilled when it reaches the share of any one of them, so a vehicle that is\nheavy but not bulky is not called empty. Dimensions that are left out, or\ngiven as 0, are not looked at.",
       "properties": {
         "spot": {
           "default": 0.0,
-          "exclusiveMaximum": 1.0,
-          "minimum": 0.0,
-          "title": "Spot",
-          "type": "number"
+          "description": "Share for spot vehicles: a number, or one per dimension.",
+          "oneOf": [
+            {
+              "exclusiveMaximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "additionalProperties": {
+                "exclusiveMaximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              "propertyNames": {
+                "minLength": 1
+              },
+              "type": "object"
+            }
+          ],
+          "title": "Spot"
         },
         "owned": {
           "default": 0.0,
-          "exclusiveMaximum": 1.0,
-          "minimum": 0.0,
-          "title": "Owned",
-          "type": "number"
+          "description": "Share for owned vehicles: a number, or one per dimension.",
+          "oneOf": [
+            {
+              "exclusiveMaximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "additionalProperties": {
+                "exclusiveMaximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              "propertyNames": {
+                "minLength": 1
+              },
+              "type": "object"
+            }
+          ],
+          "title": "Owned"
         }
       },
       "title": "MinFill",

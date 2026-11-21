@@ -56,6 +56,25 @@ def fits(problem: Subproblem, option: int, load: NDArray[np.float64]) -> bool:
     return bool(np.all(load <= capacity + TOLERANCE * capacity))
 
 
+def route_gap(
+    shared: Shared, kind: int, capacity: NDArray[np.float64], load: NDArray[np.float64]
+) -> tuple[float, int]:
+    """The load one vehicle misses to its minimum fill, and the dimension it is measured in.
+
+    ``(0.0, -1)`` when the vehicle reaches the minimum of any dimension or has none;
+    otherwise the smallest of its gaps, as :func:`pirilib.evaluation.fill_shortfall`.
+    """
+    least, nearest = 0.0, -1
+    for column, share in shared.thresholds[kind]:
+        room = float(capacity[column])
+        gap = share * room - float(load[column])
+        if gap <= TOLERANCE * room:
+            return 0.0, -1
+        if nearest < 0 or gap < least:
+            least, nearest = gap, column
+    return least, nearest
+
+
 def route_value(
     problem: Subproblem,
     coefficients: Mapping[str, float],
@@ -74,14 +93,14 @@ def route_value(
         cost += float(problem.per_hour[option]) * hours
     capacity = float(problem.capacity[option, shared.primary])
     carried = float(load[shared.primary])
-    shortfall = float(shared.min_fill[problem.kind[option]]) * capacity - carried
+    shortfall = route_gap(shared, int(problem.kind[option]), problem.capacity[option], load)[0]
     value = (
         coefficients.get(f"cost[{kind}]", 0.0) * cost
         + coefficients.get(f"km[{kind}]", 0.0) * km
         + coefficients.get(f"dispatches[{kind}]", 0.0)
         + coefficients.get(f"unused[{kind}]", 0.0) * max(capacity - carried, 0.0)
     )
-    if shortfall > TOLERANCE * capacity:
+    if shortfall:
         value += coefficients.get("violation[min_fill]", 0.0) * shortfall
     if service:
         value += coefficients.get("service", 0.0) * service

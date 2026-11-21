@@ -21,12 +21,14 @@ from pydantic import (
     BaseModel,
     BeforeValidator,
     ConfigDict,
+    Discriminator,
     Field,
     NonNegativeFloat,
     NonNegativeInt,
     PositiveFloat,
     PositiveInt,
     StringConstraints,
+    Tag,
     field_validator,
     model_validator,
 )
@@ -271,11 +273,45 @@ class ExplicitMatrix(_Model):
 DistanceMatrix = Annotated[HaversineMatrix | ExplicitMatrix, Field(discriminator="source")]
 
 
-class MinFill(_Model):
-    """Minimum share of capacity (primary dimension) a vehicle must carry when it departs."""
+Share = Annotated[float, Field(ge=0.0, lt=1.0)]
+"""A share of capacity, from 0 up to but not including 1."""
 
-    spot: float = Field(default=0.0, ge=0.0, lt=1.0)
-    owned: float = Field(default=0.0, ge=0.0, lt=1.0)
+
+def _share_form(value: object) -> str:
+    return "mapping" if isinstance(value, Mapping) else "number"
+
+
+Shares = Annotated[
+    Annotated[Share, Tag("number")] | Annotated[dict[Name, Share], Tag("mapping")],
+    Discriminator(_share_form),
+]
+"""One share, or a share per dimension."""
+
+
+class MinFill(_Model):
+    """Minimum share of capacity a vehicle must carry when it departs.
+
+    A number is the share of the primary dimension. A mapping gives a share per
+    dimension, for example ``{desi: 0.4, kg: 0.5}``; a vehicle then counts as
+    filled when it reaches the share of any one of them, so a vehicle that is
+    heavy but not bulky is not called empty. Dimensions that are left out, or
+    given as 0, are not looked at.
+    """
+
+    spot: Shares = Field(
+        default=0.0, description="Share for spot vehicles: a number, or one per dimension."
+    )
+    owned: Shares = Field(
+        default=0.0, description="Share for owned vehicles: a number, or one per dimension."
+    )
+
+    def shares(
+        self, kind: Literal["owned", "spot"], dimensions: Sequence[str], primary: str
+    ) -> tuple[float, ...]:
+        """The share per dimension, in the order of ``dimensions``; 0 where there is none."""
+        given = self.owned if kind == "owned" else self.spot
+        by_name = given if isinstance(given, dict) else {primary: given}
+        return tuple(by_name.get(name, 0.0) for name in dimensions)
 
 
 class Stopover(_Model):
@@ -603,6 +639,18 @@ def _dimension_issues(spec: LineHaulSpec) -> list[Issue]:
         issues.append(
             (("rules", "primary_dimension"), f"'{primary}' is not one of {list(dimensions)}")
         )
+    for kind in ("spot", "owned"):
+        given = getattr(spec.rules.min_fill, kind)
+        unknown = (
+            [name for name in given if name not in dimensions] if isinstance(given, dict) else []
+        )
+        if unknown:
+            issues.append(
+                (
+                    ("rules", "min_fill", kind),
+                    f"unknown dimension(s) {unknown}; the dimensions are {list(dimensions)}",
+                )
+            )
     return issues
 
 

@@ -102,6 +102,23 @@ def two_dimensions(document: dict[str, Any]) -> None:
         row["quantity"]["kg"] = row["quantity"]["desi"] / 3
 
 
+def min_fill_in_both_dimensions(document: dict[str, Any]) -> None:
+    """A vehicle is filled at 40 % of its desi or half of its kg; missing it costs 50 a unit."""
+    two_dimensions(document)
+    document["rules"]["min_fill"] = {
+        "spot": {"desi": 0.4, "kg": 0.5},
+        "owned": {"desi": 0.3, "kg": 0.3},
+    }
+    document["objective"]["penalties"]["min_fill"] = 50.0
+
+
+def min_fill_in_the_second_dimension(document: dict[str, Any]) -> None:
+    """Only the weight of a spot vehicle counts; the primary dimension has no minimum."""
+    two_dimensions(document)
+    document["rules"]["min_fill"] = {"spot": {"kg": 0.4}}
+    document["objective"]["penalties"]["min_fill"] = 50.0
+
+
 def ready_times(document: dict[str, Any]) -> None:
     for position, row in enumerate(document["demand"]):
         row["ready"] = f"{8 + position % 12:02d}:00"
@@ -152,6 +169,8 @@ SCENARIOS: dict[str, tuple[Change, ...]] = {
     "no-split": (no_min_fill, no_split),
     "spot-limits": (no_min_fill, spot_limits),
     "two-dimensions": (no_min_fill, two_dimensions),
+    "min-fill-both-dimensions": (min_fill_in_both_dimensions,),
+    "min-fill-second-dimension": (min_fill_in_the_second_dimension,),
     "ready-times": (no_min_fill, ready_times),
     "deferral": (no_min_fill, spot_limits, deferral),
     "handling-capacity": (no_min_fill, handling_capacity),
@@ -394,6 +413,22 @@ def test_the_score_of_a_solver_is_the_objective_of_its_plan(name: str, scenario:
 
     assert isinstance(result, SolveResult)
     assert result.stats["score"] == pytest.approx(result.objective, rel=SCORE_TOLERANCE)
+
+
+@pytest.mark.parametrize(
+    "scenario", ["high-min-fill", "min-fill-both-dimensions", "min-fill-second-dimension"]
+)
+def test_the_colony_does_not_beat_the_exact_solver_under_a_minimum_fill(scenario: str) -> None:
+    """Without shared limits the subproblems are independent and the exact plan is optimal.
+
+    A colony below it would mean that the exact model charges a minimum fill the
+    evaluator does not, in one dimension or in several.
+    """
+    exact, colony = outcome(SOLVERS["exact"], scenario), outcome(SOLVERS["aco"], scenario)
+
+    assert isinstance(exact, SolveResult)
+    assert isinstance(colony, SolveResult)
+    assert exact.objective <= colony.objective * (1 + SCORE_TOLERANCE)
 
 
 def test_the_guide_shows_the_record() -> None:
