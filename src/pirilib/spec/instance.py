@@ -32,6 +32,9 @@ class LineHaulInstance:
         spot_available: Vehicles per day, or UNLIMITED
         spot_stopovers: A vehicle of the offer may serve several destinations
         owned_stopovers: A vehicle of the group may stop on the way of its line
+        min_fill_owned: (dimensions,) minimum share of capacity of owned vehicles,
+            0 where the dimension has none; reaching any one of them is enough
+        min_fill_spot: (dimensions,) the same for spot vehicles
         demand_quantity: (demands, dimensions)
         speed_kmh: (vehicle types,), NaN where not given
         handling_capacity: (centers,) primary quantity per day, inf: no limit
@@ -62,6 +65,8 @@ class LineHaulInstance:
     owned_per_km: NDArray[np.float64]
     owned_mandatory: NDArray[np.bool_]
     owned_stopovers: NDArray[np.bool_]
+    min_fill_owned: NDArray[np.float64]
+    min_fill_spot: NDArray[np.float64]
     demand_ids: tuple[str, ...]
     demand_origin: NDArray[np.int64]
     demand_destination: NDArray[np.int64]
@@ -148,6 +153,12 @@ def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
         owned_per_km=_floats(group.cost.per_km for group in owned),
         owned_mandatory=_bools(group.mandatory for group in owned),
         owned_stopovers=_bools(group.stopovers for group in owned),
+        min_fill_owned=_floats(
+            spec.rules.min_fill.shares("owned", dimensions, spec.primary_dimension)
+        ),
+        min_fill_spot=_floats(
+            spec.rules.min_fill.shares("spot", dimensions, spec.primary_dimension)
+        ),
         demand_ids=spec.demand_ids,
         demand_origin=_ints(center_index[row.origin] for row in demand),
         demand_destination=_ints(center_index[row.destination] for row in demand),

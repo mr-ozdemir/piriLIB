@@ -404,7 +404,7 @@ class RoutingAdapter(SequentialSolver):
             problems.append("times, deferral, handling capacity or vehicle limits")
         if not instance.rules.split_demand:
             problems.append("rules.split_demand = false")
-        if instance.rules.min_fill.spot > 0 or instance.rules.min_fill.owned > 0:
+        if instance.min_fill_spot.any() or instance.min_fill_owned.any():
             problems.append("minimum fill (rules.min_fill)")
         coefficients = linear_coefficients(instance, form) if form is not None else {}
         used = [feature for feature in _UNSUPPORTED_FEATURES if coefficients.get(feature)]

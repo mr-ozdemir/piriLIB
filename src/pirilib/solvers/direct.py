@@ -29,6 +29,7 @@ from numpy.typing import NDArray
 from pirilib.evaluation import TOLERANCE
 from pirilib.plan import SPOT
 from pirilib.solvers._colony import Shared
+from pirilib.solvers._routing import route_gap
 from pirilib.solvers._sequential import RouteList, SequentialSolver
 from pirilib.solvers.decompose import Routes, Subproblem
 
@@ -72,10 +73,9 @@ class DirectPlanner:
         return float(min(1.0, float(np.min(capacity[positive] / total[positive]))))
 
     def reaches_fill(self, option: int, load: NDArray[np.float64]) -> bool:
-        problem, shared = self.problem, self.shared
-        capacity = float(problem.capacity[option, shared.primary])
-        needed = float(shared.min_fill[problem.kind[option]]) * capacity
-        return float(load[shared.primary]) >= needed - TOLERANCE * capacity
+        problem = self.problem
+        kind = int(problem.kind[option])
+        return route_gap(self.shared, kind, problem.capacity[option], load)[0] == 0.0
 
     def cheapest_fitting(self, options: Sequence[int], node: int, load: NDArray[np.float64]) -> int:
         """The cheapest option that fits ``load``, preferring one that reaches its minimum fill.

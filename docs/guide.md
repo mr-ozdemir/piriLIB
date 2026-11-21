@@ -103,8 +103,15 @@ What the fields mean:
 - **Demand** is shipped on its date. Ids are generated (`D000001`, ...) when left out.
 - **Routes** are one-way: from the origin through the stops in order. There is no return trip.
 - **Minimum fill.** `min_fill` is the share of capacity a vehicle must carry,
-  for spot and owned vehicles separately, in the `primary_dimension`. The
-  primary dimension defaults to the first capacity dimension.
+  for spot and owned vehicles separately.
+  - A number, as in `spot: 0.10`, is the share of the `primary_dimension`,
+    which defaults to the first capacity dimension.
+  - A mapping gives a share per dimension, as in
+    `spot: {desi: 0.4, kg: 0.5}`. A vehicle is filled when it reaches the
+    share of any one of them, so a load that is heavy but not bulky does not
+    count as empty. A dimension that is left out is not looked at.
+  - A vehicle that reaches no minimum misses the smallest of its gaps: the
+    least it would have to load more, in one dimension, to count as filled.
 - **Split demand.** With `split_demand: true` a demand may travel in several
   vehicles.
 - **Stopover rules.**
@@ -240,7 +247,7 @@ Every rule has a violation amount that is zero when the rule holds:
 | `owned_line` | owned dispatches off their line |
 | `owned_availability`, `spot_availability` | vehicles used beyond the daily count |
 | `capacity` | load above capacity (quantity) |
-| `min_fill` | load missing to the minimum fill (quantity) |
+| `min_fill` | load missing to the minimum fill: the smallest gap when no dimension reaches its minimum (quantity) |
 | `stopover`, `max_stops` | stopovers where not allowed, stops beyond the limit |
 | `stretch` | route km above `max_stretch` x the direct km |
 | `forward_only` | stops not farther than the one before |

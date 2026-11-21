@@ -59,7 +59,11 @@ CATALOG: Final[Mapping[str, str]] = MappingProxyType(
             "day it starts loading there or arrives there (count)."
         ),
         "capacity": "Load above vehicle capacity, summed over dimensions (quantity).",
-        "min_fill": "Load missing to reach the minimum fill of the primary dimension (quantity).",
+        "min_fill": (
+            "Load missing to reach the minimum fill. With a minimum in several dimensions, "
+            "a vehicle that reaches one of them misses nothing, and one that reaches none "
+            "misses the smallest of its gaps (quantity)."
+        ),
         "stopover": (
             "Dispatches with more than one stop although stopovers are disabled, or not "
             "allowed for the owned group or the spot offer (count)."

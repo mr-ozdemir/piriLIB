@@ -17,6 +17,13 @@ uses [Semantic Versioning](https://semver.org/).
   the offer goes to one destination. The `stopover` rule counts routes that
   break it, and every solver keeps it.
 
+- `rules.min_fill` takes a share per dimension, as in
+  `spot: {desi: 0.4, kg: 0.5}`, besides the single number for the primary
+  dimension. A vehicle that reaches the share of any one dimension is filled;
+  one that reaches none misses the smallest of its gaps, which is the amount
+  of the `min_fill` rule. The evaluator, the checker and every solver use the
+  same definition.
+
 ### Changed
 
 - `stopovers` of an owned group now defaults to `true`: owned vehicles may

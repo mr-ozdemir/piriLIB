@@ -16,6 +16,8 @@ type Origins = Mapping[Loc, Sequence[str]]
 
 _UNION_TAGS: Final[Mapping[Loc, frozenset[str]]] = {
     ("matrix",): frozenset({"haversine", "explicit"}),
+    ("rules", "min_fill", "spot"): frozenset({"number", "mapping"}),
+    ("rules", "min_fill", "owned"): frozenset({"number", "mapping"}),
 }
 
 
