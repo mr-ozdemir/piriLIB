@@ -89,6 +89,13 @@ uses [Semantic Versioning](https://semver.org/).
   `12.5` was read as 125 and is now reported as a problem. Plan files also
   refuse quantities that are not finite.
 
+### Fixed
+
+- With `max_deferral_days`, demand left for the next day is valued by the
+  cheaper of carrying it then and leaving it uncarried. The solvers assumed
+  it would be carried, and could unload a load late today although leaving it
+  scored better, which showed with a high or `hard` penalty on `lateness`.
+
 ## [0.2.0] - 2026-11-21
 
 ### Added

@@ -117,6 +117,37 @@ def route_value(
     return value
 
 
+def leave_weights(coefficients: Mapping[str, float], shared: Shared) -> NDArray[np.float64]:
+    """(D,) what the objective charges per unit of demand that stays uncarried."""
+    both = coefficients.get("unserved", 0.0) + coefficients.get("violation[coverage]", 0.0)
+    return np.array(
+        [both + coefficients.get(f"unserved[{name}]", 0.0) for name in shared.dimensions]
+    )
+
+
+def defer_excess(
+    problem: Subproblem, coefficients: Mapping[str, float], shared: Shared
+) -> NDArray[np.float64] | None:
+    """(k, I): by how much carrying an item tomorrow is estimated to cost more than leaving it.
+
+    Demand that may wait is valued by the estimate of carrying it the next day
+    (:attr:`~pirilib.solvers.decompose.Subproblem.defer_cost` and
+    ``defer_late``). When leaving the item uncarried scores better than that,
+    the next day will leave it, so waiting is worth no more than leaving: the
+    excess is taken off the estimate. 0 for final items; None when no item has an
+    excess.
+    """
+    if not problem.deferrable:
+        return None
+    estimate = problem.item_quantity[:, :, shared.primary] * (
+        coefficients.get("service", 0.0) * problem.defer_cost
+        + coefficients.get("violation[lateness]", 0.0) * problem.defer_late
+    )
+    leave = problem.item_quantity @ leave_weights(coefficients, shared)
+    excess = np.where(problem.item_final, 0.0, np.clip(estimate - leave, 0.0, None))
+    return np.asarray(excess, dtype=np.float64) if excess.any() else None
+
+
 def unserved_value(
     problem: Subproblem,
     coefficients: Mapping[str, float],
@@ -129,7 +160,8 @@ def unserved_value(
     Items that may wait for the next day (whole items: those in ``item_left``)
     cost their :attr:`~pirilib.solvers.decompose.Subproblem.defer_cost` under
     ``service``, and their estimated lateness under the ``lateness`` rule, instead
-    of counting as unserved.
+    of counting as unserved, but never more than leaving them uncarried would
+    (see :func:`defer_excess`).
     """
     value = 0.0
     if problem.deferrable:
@@ -148,6 +180,10 @@ def unserved_value(
         weight = coefficients.get("violation[lateness]", 0.0)
         if weight:
             value += weight * float(np.sum(waiting[:, :, primary] * problem.defer_late))
+        excess = defer_excess(problem, coefficients, shared)
+        if excess is not None:
+            whole = np.where(quantity[:, :, primary] > 0, quantity[:, :, primary], 1.0)
+            value -= float(np.sum(excess * waiting[:, :, primary] / whole))
         remaining = np.clip(remaining - waiting.sum(axis=1), 0.0, None)
     value += coefficients.get("unserved", 0.0) * float(remaining.sum())
     for column, name in enumerate(shared.dimensions):
