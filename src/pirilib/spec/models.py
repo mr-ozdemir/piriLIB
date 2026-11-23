@@ -40,9 +40,11 @@ if TYPE_CHECKING:
     from pirilib.objective import Sum
     from pirilib.spec.instance import LineHaulInstance
 
-SCHEMA_ID: Final = "pirilib/linehaul@0.2"
-SchemaId = Literal["pirilib/linehaul@0.1", "pirilib/linehaul@0.2"]
-"""Accepted schema ids; 0.1 documents are 0.2 documents without the time fields."""
+SCHEMA_ID: Final = "pirilib/linehaul@0.3"
+"""The schema id of the documents this version writes."""
+
+SchemaId = Literal["pirilib/linehaul@0.1", "pirilib/linehaul@0.2", "pirilib/linehaul@0.3"]
+"""Accepted schema ids; an older document is a 0.3 document without the newer fields."""
 
 type Issue = tuple[Loc, str]
 

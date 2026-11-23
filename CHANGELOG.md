@@ -59,6 +59,10 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The schema id of problem documents is `pirilib/linehaul@0.3`; 0.1 and 0.2
+  documents still load. The new fields of this release belong to 0.3, and the
+  JSON Schema file is now `schemas/linehaul-0.3.schema.json`. Generated
+  problems (`pirilib generate`, `pirilib.synthetic`) carry the new id.
 - `stopovers` of an owned group now defaults to `true`: owned vehicles may
   drop loads at centers on the way of their line unless the group says
   `stopovers: false`. A problem file that leaves the field out can get a

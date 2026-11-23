@@ -28,11 +28,12 @@ Python 3.12 or newer.
 
 ## 1. Describe the problem
 
-A problem is a YAML file (schema `pirilib/linehaul@0.2`; 0.1 files still load). Large tables can be
-CSV files next to it. A complete example is in `examples/linehaul_mini`.
+A problem is a YAML file (schema `pirilib/linehaul@0.3`; 0.1 and 0.2 files still
+load, see [Schema versions](#schema-versions)). Large tables can be CSV files
+next to it. A complete example is in `examples/linehaul_mini`.
 
 ```yaml
-schema: pirilib/linehaul@0.2
+schema: pirilib/linehaul@0.3
 name: My network
 calendar: {start: 2026-05-11, end: 2026-05-12}
 
@@ -232,6 +233,21 @@ demand:
   each dimension to its column.
 
 Lists inside a cell, such as banned vehicle types, are separated by `|`.
+
+### Schema versions
+
+The first line of a document names its schema. A document of an older schema
+is read as a 0.3 document that does not use the newer fields, so it keeps
+working.
+
+| Schema | What it added |
+|---|---|
+| `pirilib/linehaul@0.1` | centers, distances, vehicle types, the fleet, demand and the rules |
+| `pirilib/linehaul@0.2` | times and service: speeds, hourly costs, ready and due times, deferral, handling time, handling capacity and vehicle limits |
+| `pirilib/linehaul@0.3` | `stopovers` on spot offers, `min_fill` per dimension, `cost.per_unit`, `hard` under `objective.penalties`, `matrix.durations` |
+
+The JSON Schema of the current version is in
+`schemas/linehaul-0.3.schema.json`; `pirilib schema` prints it.
 
 ### Validation
 

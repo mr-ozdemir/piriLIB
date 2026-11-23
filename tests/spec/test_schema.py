@@ -21,10 +21,10 @@ from jsonschema.validators import validator_for
 
 from pirilib.spec.schema import document_json_schema, render
 
-SCHEMA_FILE = Path(__file__).parents[2] / "schemas" / "linehaul-0.2.schema.json"
+SCHEMA_FILE = Path(__file__).parents[2] / "schemas" / "linehaul-0.3.schema.json"
 """The committed schema file."""
 
-REGENERATE = "regenerate it: python -m pirilib.spec.schema schemas/linehaul-0.2.schema.json"
+REGENERATE = "regenerate it: python -m pirilib.spec.schema schemas/linehaul-0.3.schema.json"
 """What to do when the committed schema file is out of date."""
 
 BUILT_IN_RULES = (

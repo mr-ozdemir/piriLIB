@@ -933,7 +933,8 @@
     "schema": {
       "enum": [
         "pirilib/linehaul@0.1",
-        "pirilib/linehaul@0.2"
+        "pirilib/linehaul@0.2",
+        "pirilib/linehaul@0.3"
       ],
       "title": "Schema",
       "type": "string"
@@ -1059,6 +1060,6 @@
     "fleet",
     "demand"
   ],
-  "title": "pirilib/linehaul@0.2 problem document",
+  "title": "pirilib/linehaul@0.3 problem document",
   "type": "object"
 }
