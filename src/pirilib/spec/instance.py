@@ -29,6 +29,7 @@ class LineHaulInstance:
         distance_km: (centers, centers)
         capacity: (vehicle types, dimensions)
         banned: (centers, vehicle types): True if the type may not use the center
+        spot_names: The name of each spot offer, empty text where it has none
         spot_available: Vehicles per day, or UNLIMITED
         spot_stopovers: A vehicle of the offer may serve several destinations
         owned_stopovers: A vehicle of the group may stop on the way of its line
@@ -88,6 +89,7 @@ class LineHaulInstance:
     demand_due: NDArray[np.float64]
     timed: bool
     duration_minutes: NDArray[np.float64] | None = None
+    spot_names: tuple[str, ...] = ()
 
     def travel_minutes(
         self,
@@ -219,6 +221,7 @@ def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
         demand_due=_floats(_due(spec, row) for row in demand),
         timed=needs_time(spec),
         duration_minutes=_durations(spec, center_index, type_index),
+        spot_names=tuple(offer.name or "" for offer in spot),
     )
 
 

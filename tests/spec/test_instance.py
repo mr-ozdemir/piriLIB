@@ -136,6 +136,7 @@ OTHER_FIELDS = (
     "rules",
     "timed",
     "duration_minutes",
+    "spot_names",
 )
 """Every field of :class:`LineHaulInstance` that is not an array."""
 

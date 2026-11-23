@@ -103,7 +103,12 @@ What the fields mean:
     carrier paid by the desi. Owned groups take it too. The solvers count it
     when they pick a vehicle.
   - `available` limits vehicles per day; leave it out for unlimited.
-  - There is one offer per vehicle type.
+  - Several offers may have the same vehicle type: price tiers, such as two
+    vehicles a day at the contract price and further ones at the market
+    price, or the offers of different carriers. Each offer has its own cost
+    and its own `available`, and the solvers take the cheaper one first. A
+    `name` tells them apart in reports; a plan refers to an offer by its
+    position, as in `fleet.spot[1]`.
   - With `stopovers: true`, the default, a vehicle may serve several
     destinations on one route. With `stopovers: false` every vehicle of the
     offer goes to one destination, as a vehicle hired for a single delivery
@@ -247,7 +252,7 @@ working.
 |---|---|
 | `pirilib/linehaul@0.1` | centers, distances, vehicle types, the fleet, demand and the rules |
 | `pirilib/linehaul@0.2` | times and service: speeds, hourly costs, ready and due times, deferral, handling time, handling capacity and vehicle limits |
-| `pirilib/linehaul@0.3` | `stopovers` on spot offers, `min_fill` per dimension, `cost.per_unit`, `hard` under `objective.penalties`, `matrix.durations`, the `lateness` rule |
+| `pirilib/linehaul@0.3` | `stopovers` on spot offers, `min_fill` per dimension, `cost.per_unit`, `hard` under `objective.penalties`, `matrix.durations`, the `lateness` rule, several spot offers per vehicle type and their `name` |
 
 Lateness was a cost and not a rule before 0.3. A 0.1 or 0.2 document
 therefore gives `lateness` the weight 0 unless it names it, whatever its

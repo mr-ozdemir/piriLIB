@@ -728,12 +728,26 @@
     },
     "SpotOffer": {
       "additionalProperties": false,
-      "description": "On-demand vehicles of one type, hired per dispatch.",
+      "description": "On-demand vehicles of one type, hired per dispatch.\n\nSeveral offers may have the same vehicle type: price tiers, such as two\nvehicles a day at the contract price and further ones at the market price,\nor the offers of different carriers. Each offer has its own cost and its\nown daily limit.",
       "properties": {
         "type": {
           "minLength": 1,
           "title": "Type",
           "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A label for reports, for example the carrier or the price tier; no two offers may have the same name.",
+          "title": "Name"
         },
         "cost": {
           "$ref": "#/$defs/Cost"
