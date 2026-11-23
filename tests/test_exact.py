@@ -193,6 +193,23 @@ def test_subproblems_of_one_day_share_a_limited_spot_offer(
     assert result.evaluation.violations["coverage"] == pytest.approx(100.0)
 
 
+def test_the_stats_count_the_spot_limits_that_were_used_up(
+    document: dict[str, Any], compile_document: CompileDocument
+) -> None:
+    """Two origins on one day and one ``small`` vehicle a day: the limit is used up once."""
+    document = small_spot_problem(document)
+    document["fleet"]["spot"][0]["available"] = 1
+    document["demand"] = [
+        {"origin": "A", "destination": "B", "date": "2026-01-05", "quantity": {"desi": 100.0}},
+        {"origin": "B", "destination": "A", "date": "2026-01-05", "quantity": {"desi": 100.0}},
+    ]
+    instance = compile_document(document)
+
+    result = ExactSolver().solve(instance, GOAL)
+
+    assert result.stats["spot_limits_reached"] == 1
+
+
 @pytest.mark.parametrize("seed", range(RANDOM_PROBLEMS))
 def test_never_worse_than_the_colony(seed: int, random_document: RandomDocument) -> None:
     """No plan of the colony beats the optimum."""

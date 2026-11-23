@@ -43,7 +43,12 @@ from pirilib.plan import OWNED, SPOT
 from pirilib.solvers._colony import Batch, Colony, Shared, scores
 from pirilib.solvers._routing import route_gap, route_km, route_ok, route_value
 from pirilib.solvers._timing import late_hours, route_timing, timeline
-from pirilib.solvers.base import SolveResult, linear_coefficients, require_objective
+from pirilib.solvers.base import (
+    SolveResult,
+    limit_stats,
+    linear_coefficients,
+    require_objective,
+)
 from pirilib.solvers.decompose import (
     MINUTES_PER_DAY,
     UNBOUNDED,
@@ -178,17 +183,18 @@ class ExactSolver:
                 score += result.value
         plan = builder.build()
         evaluation = evaluate(instance, plan, hard=hard_rules(goal))
+        stats: dict[str, float | int | str] = {
+            "mode": "exact",
+            "optimal": str(optimal),
+            "columns": columns,
+            "score": score + coefficients.get("owned_fixed", 0.0) * evaluation.owned_fixed_cost,
+        }
         return SolveResult(
             plan=plan,
             evaluation=evaluation,
             objective=float(goal(evaluation)),
             seconds=time.perf_counter() - started,
-            stats={
-                "mode": "exact",
-                "optimal": str(optimal),
-                "columns": columns,
-                "score": score + coefficients.get("owned_fixed", 0.0) * evaluation.owned_fixed_cost,
-            },
+            stats=stats | limit_stats(instance, plan),
         )
 
 

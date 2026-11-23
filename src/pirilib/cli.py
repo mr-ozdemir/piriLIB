@@ -418,6 +418,7 @@ def _solve(arguments: argparse.Namespace) -> int:
     numbers = summary(result.evaluation) | {
         "objective": result.objective,
         "seconds": result.seconds,
+        "stats": dict(result.stats),
     }
     _print_summary(numbers)
     print(f"objective {result.objective:,.2f} in {result.seconds:.1f} s")
@@ -431,6 +432,14 @@ def _solve(arguments: argparse.Namespace) -> int:
         print(f"plan written to {arguments.output}")
     if arguments.summary:
         Path(arguments.summary).write_text(json.dumps(numbers, indent=2) + "\n", encoding="utf-8")
+    reached = result.stats.get("spot_limits_reached", 0)
+    if reached:
+        print(
+            f"warning: {reached} daily spot limit(s) were used up; the origins of a day "
+            "take the vehicles of a limited offer one after another, so another split "
+            "among them may be cheaper",
+            file=sys.stderr,
+        )
     broken = numbers["hard_violations"]
     if broken:
         amounts = ", ".join(f"{name} ({amount:g})" for name, amount in broken.items())

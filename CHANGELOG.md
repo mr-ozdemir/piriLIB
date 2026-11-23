@@ -45,6 +45,10 @@ uses [Semantic Versioning](https://semver.org/).
   still gets one iteration and its local search, so a plan always comes back.
   `stats["time_limit_stops"]` counts the colonies the limit stopped.
 
+- `stats["spot_limits_reached"]` from every solver, not only the ant colony:
+  the (day, spot offer) pairs whose daily limit was used up. `pirilib solve`
+  warns when it is above zero, and `--summary` now holds the solver's `stats`.
+
 ### Changed
 
 - `stopovers` of an owned group now defaults to `true`: owned vehicles may
