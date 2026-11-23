@@ -81,7 +81,9 @@ What the fields mean:
 - **Distances.** With `haversine` they are great-circle distances from the
   coordinates, times `factor`. With `explicit` you give arcs
   (`{origin, destination, km}`) for every ordered pair. `symmetric: true`
-  fills in each missing reverse direction.
+  fills in each missing reverse direction. Both kinds take `durations`:
+  travel times per line, see
+  [Times and service](#times-and-service-schema-02).
 - **Vehicle types.** Every type needs the same capacity dimensions (desi, kg,
   ...). Every demand must give every dimension.
 - **Owned vehicles** are bound to a line.
@@ -165,7 +167,8 @@ a time with a UTC offset such as `+03:00` or `Z`, is reported as a problem.
   - Loading starts at the dispatch's `start` (minutes after 00:00 of its day;
     by default as soon as every load is ready).
   - Loading takes `minutes_per_unit × load` minutes.
-  - Each leg takes `km / speed_kmh` hours, rounded up to whole minutes.
+  - Each leg takes `km / speed_kmh` hours, rounded up to whole minutes, or
+    the duration you give for it (see below).
   - Unloading at a stop takes `minutes_per_unit × what is unloaded there`.
 - **Hours** run from the start of loading to the end of the last unloading and
   are charged with `per_hour`.
@@ -180,9 +183,34 @@ a time with a UTC offset such as `+03:00` or `Z`, is reported as a problem.
 - **Vehicle limits.** At most this many vehicles of a type start loading at or
   arrive at the center per day.
 
+**Travel times per line.** A speed gives every leg the same pace. When you
+know how long a line takes, breaks and traffic included, give it under
+`matrix.durations`:
+
+```yaml
+matrix:
+  source: haversine
+  durations:
+    - {origin: Istanbul, destination: Ankara, hours: 6.5}
+    - {origin: Istanbul, destination: Ankara, hours: 7.5, vehicle_type: tir}
+```
+
+- A row is for one direction; give `Ankara` to `Istanbul` as well, or that
+  leg is timed from the speed.
+- A row with `vehicle_type` is for that type alone and wins over the row for
+  every type.
+- `hours` are rounded up to whole minutes, like every other time.
+- A leg without a duration takes `km / speed_kmh`. When every ordered pair of
+  centers has a duration for a type, that type needs no `speed_kmh`.
+- The evaluator, the checker and the solvers all time a leg this way; distances
+  and per-km costs do not change.
+- `durations` may come from a CSV file with the columns `origin`,
+  `destination`, `hours` and, if you use it, `vehicle_type`.
+
 ### Tables from CSV
 
-`centers`, `demand` and `matrix.arcs` accept a file reference:
+`centers`, `demand`, `matrix.arcs` and `matrix.durations` accept a file
+reference:
 
 ```yaml
 demand:

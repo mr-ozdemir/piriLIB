@@ -143,7 +143,10 @@ class VehicleType(_Model):
     )
     speed_kmh: PositiveFloat | None = Field(
         default=None,
-        description="Average speed; needed for travel times (hourly costs, due times).",
+        description=(
+            "Average speed; times the legs that matrix.durations does not, and is "
+            "needed for hourly costs and due times unless every leg has a duration."
+        ),
     )
 
 
@@ -249,6 +252,24 @@ class Calendar(_Model):
         return self
 
 
+class Duration(_Model):
+    """How long vehicles take from one center to another, breaks included."""
+
+    origin: Name
+    destination: Name
+    hours: NonNegativeFloat
+    vehicle_type: Name | None = Field(
+        default=None,
+        description="The type the time is for; null: every type without a time of its own.",
+    )
+
+
+_DURATIONS: Final = (
+    "Travel times that replace distance / speed_kmh, one direction each; a leg without "
+    "one is timed from the speed of the vehicle type."
+)
+
+
 class HaversineMatrix(_Model):
     """Distances along the great circle, computed from center coordinates."""
 
@@ -257,6 +278,7 @@ class HaversineMatrix(_Model):
         default=1.0,
         description="Multiplier applied to every distance (1.0 means as the crow flies).",
     )
+    durations: tuple[Duration, ...] = Field(default=(), description=_DURATIONS)
 
 
 class Arc(_Model):
@@ -276,6 +298,7 @@ class ExplicitMatrix(_Model):
         default=False, description="Use the distance of A->B for B->A when B->A is not given."
     )
     factor: PositiveFloat = 1.0
+    durations: tuple[Duration, ...] = Field(default=(), description=_DURATIONS)
 
 
 DistanceMatrix = Annotated[HaversineMatrix | ExplicitMatrix, Field(discriminator="source")]
@@ -627,6 +650,7 @@ def _consistency_issues(spec: LineHaulSpec) -> list[Issue]:
         *_fleet_issues(spec),
         *_demand_issues(spec),
         *_matrix_issues(spec),
+        *_duration_issues(spec),
         *_time_issues(spec),
     ]
 
@@ -650,19 +674,56 @@ def _time_issues(spec: "LineHaulSpec") -> list[Issue]:
         if name not in types
     ]
     if needs_time(spec):
+        pairs = len(spec.centers) * (len(spec.centers) - 1)
         issues += [
             (
                 ("vehicle_types", position, "speed_kmh"),
-                "is required, because hourly costs or due times are used",
+                "is required, because hourly costs or due times are used"
+                + (
+                    " and matrix.durations does not time every pair of centers"
+                    if spec.matrix.durations
+                    else ""
+                ),
             )
             for position, vehicle in enumerate(spec.vehicle_types)
-            if vehicle.speed_kmh is None
+            if vehicle.speed_kmh is None and len(_timed_pairs(spec, vehicle.name)) < pairs
         ]
     for position, row in enumerate(spec.demand):
         if row.due is not None:
             ready = dt.datetime.combine(row.date, row.ready or dt.time())
             if row.due < ready:
                 issues.append(((("demand", position, "due")), f"{row.due} is before it is ready"))
+    return issues
+
+
+def _timed_pairs(spec: "LineHaulSpec", vehicle_type: str) -> set[tuple[str, str]]:
+    """The (origin, destination) pairs ``matrix.durations`` times for ``vehicle_type``."""
+    return {
+        (row.origin, row.destination)
+        for row in spec.matrix.durations
+        if row.vehicle_type in (None, vehicle_type) and row.origin != row.destination
+    }
+
+
+def _duration_issues(spec: "LineHaulSpec") -> list[Issue]:
+    centers = {center.id for center in spec.centers}
+    types = {vehicle.name for vehicle in spec.vehicle_types}
+    given: set[tuple[str, str, str | None]] = set()
+    issues: list[Issue] = []
+    for position, row in enumerate(spec.matrix.durations):
+        loc: Loc = ("matrix", "durations", position)
+        for field, center in (("origin", row.origin), ("destination", row.destination)):
+            if center not in centers:
+                issues.append(((*loc, field), f"unknown center '{center}'"))
+        if row.vehicle_type is not None and row.vehicle_type not in types:
+            issues.append(((*loc, "vehicle_type"), f"unknown vehicle type '{row.vehicle_type}'"))
+        key = (row.origin, row.destination, row.vehicle_type)
+        if row.origin == row.destination:
+            issues.append((loc, f"origin and destination are both '{row.origin}'"))
+        elif key in given:
+            whom = "" if row.vehicle_type is None else f" for {row.vehicle_type}"
+            issues.append((loc, f"duplicate duration {row.origin} -> {row.destination}{whom}"))
+        given.add(key)
     return issues
 
 

@@ -115,6 +115,9 @@ class Batch:
         self.per_unit = np.zeros((count, n, dimensions))
         self.unit_priced = any(problem.unit_priced for problem in self.problems)
         self.speed = np.full((count, n), np.nan)
+        self.duration = self.problems[0].duration
+        self.origin = np.array([problem.origin for problem in self.problems], dtype=np.int64)
+        self.nodes = np.zeros((count, k), dtype=np.int64)
         self.item_ready = np.full((count, k, items), -np.inf)
         self.item_due = np.full((count, k, items), np.inf)
         self.item_final = np.ones((count, k, items), dtype=np.bool_)
@@ -129,6 +132,7 @@ class Batch:
             self.per_hour[index, :options] = problem.per_hour
             self.per_unit[index, :options] = problem.per_unit
             self.speed[index, :options] = problem.speed
+            self.nodes[index, :size] = problem.nodes
             self.item_ready[index, :size, :width] = problem.item_ready
             self.item_due[index, :size, :width] = problem.item_due
             self.item_final[index, :size, :width] = problem.item_final
@@ -205,9 +209,14 @@ def _first_choices(
     km = problem.origin_km[None, :] + detour
     cost = problem.fixed[:, None] + problem.per_km[:, None] * km
     if np.any(problem.per_hour > 0):
-        speed = problem.speed[:, None]
-        with np.errstate(invalid="ignore", divide="ignore"):
-            hours = np.where(np.isfinite(speed), km / speed, 0.0)
+        if problem.duration is None:
+            speed = problem.speed[:, None]
+            with np.errstate(invalid="ignore", divide="ignore"):
+                hours = np.where(np.isfinite(speed), km / speed, 0.0)
+        else:
+            hours = problem.hours_to()
+            for option in np.flatnonzero(problem.kind == OWNED):
+                hours[option] += problem.hours_to(int(problem.line_end[option]))[option]
         cost = cost + problem.per_hour[:, None] * hours
     if problem.unit_priced:
         carried = np.minimum(problem.demand[None, :, :], problem.capacity[:, None, :])

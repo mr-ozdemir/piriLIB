@@ -220,9 +220,9 @@ class _Context:
         self.capacity = instance.capacity[self.vehicle_type]
         self.capacity_primary = self.capacity[:, instance.primary_dimension]
         self.served = _sum_rows(plan.load_demand, plan.load_quantity, len(instance.demand_ids))
-        self._timeline(legs)
+        self._timeline(previous)
 
-    def _timeline(self, legs: NDArray[np.float64]) -> None:
+    def _timeline(self, previous: NDArray[np.int64]) -> None:
         """When every dispatch loads, travels and unloads; when every load arrives."""
         instance, plan = self.instance, self.plan
         size, primary = len(plan), instance.primary_dimension
@@ -245,9 +245,9 @@ class _Context:
 
         loading = _minutes(per_unit * self.load[:, primary])
         unloading = _minutes(per_unit * self.unload)
-        speed = instance.speed_kmh[self.vehicle_type[self.stop_dispatch]]
-        with np.errstate(invalid="ignore", divide="ignore"):
-            travel = np.where(np.isfinite(speed), _minutes(legs / speed * 60.0), 0.0)
+        travel = instance.travel_minutes(
+            self.vehicle_type[self.stop_dispatch], previous, plan.stop_center
+        )
         ready = np.full(size, -np.inf)
         np.maximum.at(ready, plan.load_dispatch, instance.demand_ready[plan.load_demand])
         day_start = plan.day * 1440.0
