@@ -1,14 +1,14 @@
 """Read-only array form of a line-haul specification, used by the engines."""
 
 import datetime as dt
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
 
 from pirilib.geo import haversine_matrix
-from pirilib.spec.models import Demand, ExplicitMatrix, LineHaulSpec, Rules, needs_time
+from pirilib.spec.models import Cost, Demand, ExplicitMatrix, LineHaulSpec, Rules, needs_time
 
 UNLIMITED = -1
 """Value of :attr:`LineHaulInstance.spot_available` for offers without a daily limit."""
@@ -29,9 +29,19 @@ class LineHaulInstance:
         distance_km: (centers, centers)
         capacity: (vehicle types, dimensions)
         banned: (centers, vehicle types): True if the type may not use the center
+        spot_names: The name of each spot offer, empty text where it has none
         spot_available: Vehicles per day, or UNLIMITED
+        spot_stopovers: A vehicle of the offer may serve several destinations
+        owned_stopovers: A vehicle of the group may stop on the way of its line
+        min_fill_owned: (dimensions,) minimum share of capacity of owned vehicles,
+            0 where the dimension has none; reaching any one of them is enough
+        min_fill_spot: (dimensions,) the same for spot vehicles
         demand_quantity: (demands, dimensions)
         speed_kmh: (vehicle types,), NaN where not given
+        duration_minutes: (vehicle types, centers, centers) whole minutes from
+            ``matrix.durations``, NaN where there is none; None without durations
+        spot_per_unit: (spot offers, dimensions) cost per unit carried
+        owned_per_unit: (owned groups, dimensions) cost per unit carried
         handling_capacity: (centers,) primary quantity per day, inf: no limit
         vehicle_limit: (centers, vehicle types) per day, or UNLIMITED
         demand_ready: Minutes
@@ -51,6 +61,7 @@ class LineHaulInstance:
     spot_fixed: NDArray[np.float64]
     spot_per_km: NDArray[np.float64]
     spot_available: NDArray[np.int64]
+    spot_stopovers: NDArray[np.bool_]
     owned_type: NDArray[np.int64]
     owned_origin: NDArray[np.int64]
     owned_destination: NDArray[np.int64]
@@ -59,6 +70,8 @@ class LineHaulInstance:
     owned_per_km: NDArray[np.float64]
     owned_mandatory: NDArray[np.bool_]
     owned_stopovers: NDArray[np.bool_]
+    min_fill_owned: NDArray[np.float64]
+    min_fill_spot: NDArray[np.float64]
     demand_ids: tuple[str, ...]
     demand_origin: NDArray[np.int64]
     demand_destination: NDArray[np.int64]
@@ -68,11 +81,36 @@ class LineHaulInstance:
     speed_kmh: NDArray[np.float64]
     spot_per_hour: NDArray[np.float64]
     owned_per_hour: NDArray[np.float64]
+    spot_per_unit: NDArray[np.float64]
+    owned_per_unit: NDArray[np.float64]
     handling_capacity: NDArray[np.float64]
     vehicle_limit: NDArray[np.int64]
     demand_ready: NDArray[np.float64]
     demand_due: NDArray[np.float64]
     timed: bool
+    duration_minutes: NDArray[np.float64] | None = None
+    spot_names: tuple[str, ...] = ()
+
+    def travel_minutes(
+        self,
+        vehicle_type: NDArray[np.int64] | int,
+        origin: NDArray[np.int64] | int,
+        destination: NDArray[np.int64] | int,
+    ) -> NDArray[np.float64]:
+        """Whole minutes a vehicle of ``vehicle_type`` takes from ``origin`` to ``destination``.
+
+        The duration of the leg when ``matrix.durations`` gives one, else the
+        distance over the speed of the type, rounded up; 0 when there is neither.
+        The arguments broadcast.
+        """
+        km = self.distance_km[origin, destination]
+        speed = self.speed_kmh[vehicle_type]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            driven = np.where(np.isfinite(speed), np.ceil(np.round(km / speed * 60.0, 9)), 0.0)
+        if self.duration_minutes is not None:
+            given = self.duration_minutes[vehicle_type, origin, destination]
+            driven = np.where(np.isnan(given), driven, given)
+        return np.asarray(driven, dtype=np.float64)
 
     @property
     def scheduled(self) -> bool:
@@ -92,6 +130,15 @@ class LineHaulInstance:
             f"owned_groups={self.owned_type.size}, demands={len(self.demand_ids)}, "
             f"dimensions={self.dimensions})"
         )
+
+
+def _per_unit(costs: Sequence[Cost], dimensions: Sequence[str]) -> NDArray[np.float64]:
+    """(costs, dimensions): the cost per unit carried, 0 where none is given."""
+    values = np.array(
+        [[cost.per_unit.get(name, 0.0) for name in dimensions] for cost in costs],
+        dtype=np.float64,
+    ).reshape(len(costs), len(dimensions))
+    return _read_only(values)
 
 
 def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
@@ -136,6 +183,7 @@ def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
         spot_available=_ints(
             UNLIMITED if offer.available is None else offer.available for offer in spot
         ),
+        spot_stopovers=_bools(offer.stopovers for offer in spot),
         owned_type=_ints(type_index[group.type] for group in owned),
         owned_origin=_ints(center_index[group.origin] for group in owned),
         owned_destination=_ints(center_index[group.destination] for group in owned),
@@ -144,6 +192,12 @@ def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
         owned_per_km=_floats(group.cost.per_km for group in owned),
         owned_mandatory=_bools(group.mandatory for group in owned),
         owned_stopovers=_bools(group.stopovers for group in owned),
+        min_fill_owned=_floats(
+            spec.rules.min_fill.shares("owned", dimensions, spec.primary_dimension)
+        ),
+        min_fill_spot=_floats(
+            spec.rules.min_fill.shares("spot", dimensions, spec.primary_dimension)
+        ),
         demand_ids=spec.demand_ids,
         demand_origin=_ints(center_index[row.origin] for row in demand),
         demand_destination=_ints(center_index[row.destination] for row in demand),
@@ -156,6 +210,8 @@ def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
         ),
         spot_per_hour=_floats(offer.cost.per_hour for offer in spot),
         owned_per_hour=_floats(group.cost.per_hour for group in owned),
+        spot_per_unit=_per_unit([offer.cost for offer in spot], dimensions),
+        owned_per_unit=_per_unit([group.cost for group in owned], dimensions),
         handling_capacity=_floats(
             np.inf if center.handling_capacity is None else center.handling_capacity
             for center in spec.centers
@@ -164,6 +220,8 @@ def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
         demand_ready=_floats(_minutes(start, row.date, row.ready) for row in demand),
         demand_due=_floats(_due(spec, row) for row in demand),
         timed=needs_time(spec),
+        duration_minutes=_durations(spec, center_index, type_index),
+        spot_names=tuple(offer.name or "" for offer in spot),
     )
 
 
@@ -180,6 +238,28 @@ def _due(spec: LineHaulSpec, row: Demand) -> float:
     if hours is None:
         return float("inf")
     return _minutes(start, row.date, row.ready) + 60.0 * hours
+
+
+def _durations(
+    spec: LineHaulSpec, center_index: Mapping[str, int], type_index: Mapping[str, int]
+) -> NDArray[np.float64] | None:
+    """(vehicle types, centers, centers) whole minutes, NaN where no duration is given.
+
+    A row for one vehicle type wins over a row for every type.
+    """
+    rows = spec.matrix.durations
+    if not rows:
+        return None
+    size = len(center_index)
+    minutes = np.full((len(type_index), size, size), np.nan, dtype=np.float64)
+    for row in sorted(rows, key=lambda row: row.vehicle_type is not None):
+        whole = float(np.ceil(np.round(row.hours * 60.0, 9)))
+        where = (center_index[row.origin], center_index[row.destination])
+        if row.vehicle_type is None:
+            minutes[:, where[0], where[1]] = whole
+        else:
+            minutes[type_index[row.vehicle_type], where[0], where[1]] = whole
+    return _read_only(minutes)
 
 
 def _distance_matrix(spec: LineHaulSpec, center_index: Mapping[str, int]) -> NDArray[np.float64]:

@@ -16,7 +16,12 @@ def solved(example_path: Path) -> pirilib.SolveResult:
     return pirilib.solve(spec.compile(), spec.build_objective(), seed=1)
 
 
-def same_plan(first: pirilib.Plan, second: pirilib.Plan) -> bool:
+EXCEL_DIGITS = 1e-14
+"""Relative error of a number kept by Excel, which stores 15 significant digits."""
+
+
+def same_plan(first: pirilib.Plan, second: pirilib.Plan, tolerance: float = 0.0) -> bool:
+    """Same dispatches, stops and loads; quantities may differ by ``tolerance``, relatively."""
     return all(
         np.array_equal(getattr(first, name), getattr(second, name))
         for name in (
@@ -27,9 +32,8 @@ def same_plan(first: pirilib.Plan, second: pirilib.Plan) -> bool:
             "stop_start",
             "stop_center",
             "load_demand",
-            "load_quantity",
         )
-    )
+    ) and np.allclose(first.load_quantity, second.load_quantity, rtol=tolerance, atol=0.0)
 
 
 @pytest.mark.parametrize(("delimiter", "decimal"), [(",", "."), (";", ",")])
@@ -96,7 +100,7 @@ def test_excel(tmp_path: Path, solved: pirilib.SolveResult) -> None:
     assert sheet.title == "plan"
     assert sheet.max_row == 1 + len(list(rows(solved.evaluation)))
     plan = read_plan(solved.evaluation.instance, path)
-    assert same_plan(plan, solved.plan)
+    assert same_plan(plan, solved.plan, tolerance=EXCEL_DIGITS)
 
 
 HAND_COLUMNS = [
@@ -221,3 +225,54 @@ def test_start_column_is_optional(tmp_path: Path, instance: LineHaulInstance) ->
         encoding="utf-8",
     )
     assert np.isnan(read_plan(instance, path).start_minutes).all()
+
+
+PLAN_HEADER = "dispatch;date;kind;vehicle_type;source;origin;stops;demand;destination;desi\n"
+"""Columns of a plan file with one load per line, separated by ``;``."""
+
+
+@pytest.mark.parametrize(
+    ("text", "quantity"),
+    [("12,5", 12.5), ("1.234,5", 1234.5)],
+    ids=["decimals", "grouped"],
+)
+def test_plan_with_decimal_comma_reads_grouped_thousands(
+    tmp_path: Path, instance: LineHaulInstance, text: str, quantity: float
+) -> None:
+    """The load of the one dispatch is the number as a Turkish spreadsheet writes it."""
+    path = tmp_path / "plan.csv"
+    row = f"1;2026-01-05;spot;big;fleet.spot[0];A;B;D000001;B;{text}\n"
+    path.write_text(PLAN_HEADER + row, encoding="utf-8")
+
+    plan = read_plan(instance, path, delimiter=";", decimal=",")
+
+    assert plan.load_quantity.tolist() == [[quantity]]
+
+
+@pytest.mark.parametrize(
+    ("text", "reason"),
+    [
+        (
+            "12.5",
+            "'12.5' has a '.' that does not group thousands; the decimal mark is ',' "
+            "(write 12,5 or 1.234,5)",
+        ),
+        ("inf", "'inf' is not a finite number"),
+    ],
+    ids=["point", "infinite"],
+)
+def test_plan_with_decimal_comma_refuses_other_numbers(
+    tmp_path: Path, instance: LineHaulInstance, text: str, reason: str
+) -> None:
+    """``12.5`` used to be read as a load of 125, and ``inf`` as an infinite load."""
+    path = tmp_path / "plan.csv"
+    row = f"1;2026-01-05;spot;big;fleet.spot[0];A;B;D000001;B;{text}\n"
+    path.write_text(PLAN_HEADER + row, encoding="utf-8")
+
+    with pytest.raises(PlanError) as info:
+        read_plan(instance, path, delimiter=";", decimal=",")
+
+    assert str(info.value).splitlines() == [
+        "plan.csv: invalid plan",
+        f"- plan.csv:2: 'desi': {reason}",
+    ]

@@ -20,8 +20,8 @@ def document_json_schema() -> dict[str, Any]:
     """Return the JSON Schema of problem documents as they are written.
 
     It is the schema of :class:`~pirilib.spec.LineHaulSpec`, except that
-    ``centers``, ``demand`` and ``matrix.arcs`` may also be a
-    :class:`~pirilib.spec.TableSource` file reference, and that the keys of
+    ``centers``, ``demand``, ``matrix.arcs`` and ``matrix.durations`` may also be
+    a :class:`~pirilib.spec.TableSource` file reference, and that the keys of
     ``objective.penalties`` are limited to the built-in rule names and ``other``.
     """
     schema = LineHaulSpec.model_json_schema(by_alias=True)
@@ -32,6 +32,9 @@ def document_json_schema() -> dict[str, Any]:
         properties[name] = {"anyOf": [properties[name], _TABLE_REFERENCE]}
     explicit = definitions["ExplicitMatrix"]["properties"]
     explicit["arcs"] = {"anyOf": [explicit["arcs"], _TABLE_REFERENCE]}
+    for matrix in ("ExplicitMatrix", "HaversineMatrix"):
+        fields = definitions[matrix]["properties"]
+        fields["durations"] = {"anyOf": [fields["durations"], _TABLE_REFERENCE]}
     penalties = definitions["ObjectiveSpec"]["properties"]["penalties"]
     penalties["propertyNames"] = {"enum": [*CATALOG, ObjectiveSpec.OTHER]}
     document = {"$schema": "https://json-schema.org/draft/2020-12/schema"}

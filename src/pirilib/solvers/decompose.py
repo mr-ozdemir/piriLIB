@@ -54,7 +54,11 @@ class Subproblem:
         stopovers: (n,) may serve several nodes on one route
         allowed: (n, k) the vehicle type may stop at the node
         per_hour: (n,) charged per hour of use
+        per_unit: (n, D) charged per unit carried
+        unit_priced: an option has a cost per unit carried
         speed: (n,) km per hour, NaN where travel takes no time
+        duration: (vehicle types, centers, centers) whole minutes that replace
+            distance over speed, NaN where there is none; None without durations
         item_ready: (k, I) minutes, -inf where there is no item
         item_due: (k, I) minutes, inf where there is no due time
         item_final: (k, I) may not be left for the next day (True where there is no item)
@@ -63,6 +67,8 @@ class Subproblem:
             the next day: the lateness if it leaves at 00:00 on a direct trip of its
             own, plus the cost of that trip, with the cheapest spot offer; 0 for
             final items
+        defer_late: (k, I) the started hours of lateness in that estimate, per
+            primary unit
     """
 
     day: int
@@ -84,12 +90,16 @@ class Subproblem:
     stopovers: NDArray[np.bool_]
     allowed: NDArray[np.bool_]
     per_hour: NDArray[np.float64]
+    per_unit: NDArray[np.float64]
+    unit_priced: bool
     speed: NDArray[np.float64]
+    duration: NDArray[np.float64] | None
     item_ready: NDArray[np.float64]
     item_due: NDArray[np.float64]
     item_final: NDArray[np.bool_]
     node_ready: NDArray[np.float64]
     defer_cost: NDArray[np.float64]
+    defer_late: NDArray[np.float64]
 
     @property
     def size(self) -> int:
@@ -98,6 +108,40 @@ class Subproblem:
     @property
     def options(self) -> int:
         return int(self.kind.size)
+
+    def leg_minutes(self, option: int, before: int, after: int) -> float:
+        """Whole minutes of ``option`` from node ``before`` (-1: the origin) to node ``after``."""
+        if self.duration is not None:
+            start = self.origin if before < 0 else int(self.nodes[before])
+            given = float(self.duration[self.vehicle_type[option], start, self.nodes[after]])
+            if given == given:
+                return given
+        speed = float(self.speed[option])
+        if not math.isfinite(speed):
+            return 0.0
+        km = float(self.origin_km[after] if before < 0 else self.node_km[before, after])
+        return float(math.ceil(round(km / speed * 60.0, 9)))
+
+    def hours_to(self, node: int | None = None) -> NDArray[np.float64]:
+        """(n, k) hours of every option to every node: from the origin, or from each node
+        to ``node`` (0 from ``node`` to itself).
+
+        Without durations the hours are distance over speed, not rounded: the
+        colony weighs its first choices with them.
+        """
+        km = self.origin_km if node is None else self.node_km[:, node]
+        speed = self.speed[:, None]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            hours = np.where(np.isfinite(speed), km[None, :] / speed, 0.0)
+        if self.duration is not None:
+            kind = self.vehicle_type[:, None]
+            if node is None:
+                given = self.duration[kind, self.origin, self.nodes[None, :]]
+            else:
+                given = self.duration[kind, self.nodes[None, :], self.nodes[node]]
+                given = np.where(np.arange(self.size)[None, :] == node, 0.0, given)
+            hours = np.where(np.isnan(given), hours, given / 60.0)
+        return np.asarray(hours, dtype=np.float64)
 
     @property
     def deferrable(self) -> bool:
@@ -265,10 +309,11 @@ def _subproblem(
     last = day >= len(instance.days) - 1
     item_final = ~present | last | (waited >= rules.service.max_deferral_days)
     defer_cost = np.zeros(item_row.shape)
+    defer_late = np.zeros(item_row.shape)
     deferrable = present & ~item_final
     if deferrable.any():
         node_of_item = np.nonzero(deferrable)[0]
-        defer_cost[deferrable] = _defer_costs(
+        defer_cost[deferrable], defer_late[deferrable] = _defer_costs(
             instance,
             day,
             item_quantity[deferrable, primary],
@@ -277,7 +322,10 @@ def _subproblem(
             origin_km[node_of_item],
             allowed[groups.size :][:, node_of_item],
             spot,
+            origin,
+            nodes[node_of_item],
         )
+    per_unit = np.concatenate([instance.owned_per_unit[groups], instance.spot_per_unit[spot]])
     return Subproblem(
         day=day,
         origin=origin,
@@ -302,18 +350,20 @@ def _subproblem(
         line_end=np.concatenate(
             [[index[int(c)] for c in instance.owned_destination[groups]], np.full(spot.size, -1)]
         ).astype(np.int64),
-        stopovers=np.concatenate(
-            [instance.owned_stopovers[groups], np.ones(spot.size, dtype=np.bool_)]
-        )
+        stopovers=np.concatenate([instance.owned_stopovers[groups], instance.spot_stopovers[spot]])
         & rules.stopover.enabled,
         allowed=allowed,
         per_hour=np.concatenate([instance.owned_per_hour[groups], instance.spot_per_hour[spot]]),
+        per_unit=per_unit,
+        unit_priced=bool(per_unit.any()),
         speed=instance.speed_kmh[vehicle_type],
+        duration=instance.duration_minutes,
         item_ready=item_ready,
         item_due=item_due,
         item_final=item_final,
         node_ready=np.max(item_ready, axis=1, initial=-np.inf),
         defer_cost=defer_cost,
+        defer_late=defer_late,
     )
 
 
@@ -326,20 +376,23 @@ def _defer_costs(
     km: NDArray[np.float64],
     allowed: NDArray[np.bool_],
     spot: NDArray[np.intp],
-) -> NDArray[np.float64]:
-    """Per item and primary unit, see :attr:`Subproblem.defer_cost`.
+    origin: int,
+    centers: NDArray[np.int64],
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Per item and primary unit, :attr:`Subproblem.defer_cost` and its hours of lateness.
 
-    ``allowed`` is (spot offers, items): the offer may stop at the item's node.
+    ``allowed`` is (spot offers, items): the offer may stop at the item's node;
+    ``centers`` are the centers of those nodes.
     """
     rules = instance.rules
     primary = instance.primary_dimension
     handling = np.ceil(np.round(rules.handling.minutes_per_unit * quantity, 9))
     start = np.maximum((day + 1) * MINUTES_PER_DAY, ready)
     best = np.full(quantity.size, np.inf)
+    overdue = np.zeros(quantity.size)
     for position, offer in enumerate(spot):
         kind = instance.spot_type[offer]
-        speed = float(instance.speed_kmh[kind])
-        travel = np.ceil(np.round(km / speed * 60.0, 9)) if math.isfinite(speed) else 0.0 * km
+        travel = instance.travel_minutes(int(kind), origin, centers)
         late = start + 2 * handling + travel - due
         hours = np.where(late > 1e-9, np.ceil(np.round(late / 60.0, 9)), 0.0)
         trip = (
@@ -349,8 +402,14 @@ def _defer_costs(
         )
         trips = np.ceil(np.round(quantity / float(instance.capacity[kind, primary]), 9))
         value = rules.service.penalty * hours + trip * trips / quantity
-        best = np.where(allowed[position], np.minimum(best, value), best)
-    return np.asarray(np.where(np.isfinite(best), best, 0.0), dtype=np.float64)
+        better = allowed[position] & (value < best)
+        best = np.where(better, value, best)
+        overdue = np.where(better, hours, overdue)
+    found = np.isfinite(best)
+    return (
+        np.asarray(np.where(found, best, 0.0), dtype=np.float64),
+        np.asarray(np.where(found, overdue, 0.0), dtype=np.float64),
+    )
 
 
 @dataclass(frozen=True, eq=False, slots=True)

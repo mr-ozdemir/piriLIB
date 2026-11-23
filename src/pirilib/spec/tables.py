@@ -1,9 +1,9 @@
-"""Read table-shaped fields (centers, demand, distance arcs) from CSV files.
+"""Read table-shaped fields (centers, demand, distance arcs, durations) from CSV files.
 
-In a problem document, ``centers``, ``demand`` and ``matrix.arcs`` may be a list
-of rows or a reference to a CSV file. File references are replaced by their rows
-before the document is validated, so the validated specification never depends
-on files.
+In a problem document, ``centers``, ``demand``, ``matrix.arcs`` and
+``matrix.durations`` may be a list of rows or a reference to a CSV file. File
+references are replaced by their rows before the document is validated, so the
+validated specification never depends on files.
 """
 
 import codecs
@@ -26,6 +26,7 @@ LIST_SEPARATOR: Final = "|"
 
 _TIME: Final = re.compile(r"(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?")
 _DIGIT_GROUP_SPACES: Final = str.maketrans("", "", " \N{NO-BREAK SPACE}\N{NARROW NO-BREAK SPACE}")
+_GROUPED: Final = re.compile(r"[+-]?\d{1,3}(?:\.\d{3})+(?:,\d*)?")
 
 
 class TableSource(BaseModel):
@@ -40,7 +41,10 @@ class TableSource(BaseModel):
     )
     decimal: Literal[".", ","] = Field(
         default=".",
-        description="Decimal separator. With ',' a '.' is read as a thousands separator.",
+        description=(
+            "Decimal separator. With ',' a '.' may only group thousands, as in 1.234,5; "
+            "12.5 is an error."
+        ),
     )
     date_format: str | None = Field(
         default=None,
@@ -106,6 +110,11 @@ _LAYOUTS: Final[Mapping[Loc, _Layout]] = {
         numbers=("km",),
         required=("origin", "destination", "km"),
     ),
+    ("matrix", "durations"): _Layout(
+        text=("origin", "destination", "vehicle_type"),
+        numbers=("hours",),
+        required=("origin", "destination", "hours"),
+    ),
 }
 
 
@@ -137,6 +146,7 @@ def materialize_tables(
         (("centers",), document, "centers"),
         (("demand",), document, "demand"),
         (("matrix", "arcs"), matrix, "arcs"),
+        (("matrix", "durations"), matrix, "durations"),
     ):
         if not isinstance(parent, dict) or not _is_reference(parent.get(key)):
             continue
@@ -269,9 +279,9 @@ def _convert(
             continue
         try:
             if is_quantity:
-                quantity[target.removeprefix("quantity.")] = _number(text, source.decimal)
+                quantity[target.removeprefix("quantity.")] = parse_number(text, source.decimal)
             elif target in layout.numbers:
-                row[target] = _number(text, source.decimal)
+                row[target] = parse_number(text, source.decimal)
             elif target in layout.dates:
                 row[target] = _date(text, source.date_format)
             elif target in layout.times:
@@ -287,9 +297,20 @@ def _convert(
     return row, problems
 
 
-def _number(text: str, decimal: str) -> float:
+def parse_number(text: str, decimal: str) -> float:
+    """Read ``text`` as a finite number; :class:`ValueError` says why it is not one.
+
+    Spaces between digits are ignored. With ``decimal`` ``","`` the comma is the
+    decimal mark and a ``.`` may only group thousands, as in ``1.234,5``. A ``.``
+    anywhere else is an error: ``12.5`` would otherwise be read as 125.
+    """
     cleaned = text.translate(_DIGIT_GROUP_SPACES)
     if decimal == ",":
+        if "." in cleaned and not _GROUPED.fullmatch(cleaned):
+            raise ValueError(
+                f"'{text}' has a '.' that does not group thousands; the decimal mark is ',' "
+                "(write 12,5 or 1.234,5)"
+            )
         cleaned = cleaned.replace(".", "").replace(",", ".")
     try:
         value = float(cleaned)

@@ -4,11 +4,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+import numpy as np
+
 from pirilib.constraints import Constraint
 from pirilib.evaluation import Evaluation
 from pirilib.objective import FEATURES, Objective
-from pirilib.plan import Plan
-from pirilib.spec.instance import LineHaulInstance
+from pirilib.plan import SPOT, Plan
+from pirilib.spec.instance import UNLIMITED, LineHaulInstance
 
 
 def require_objective(objective: Objective | None, user: str) -> Objective:
@@ -31,6 +33,27 @@ def linear_coefficients(instance: LineHaulInstance, form: Mapping[str, float]) -
     if unknown:
         raise ValueError(f"the objective uses unknown features {unknown}")
     return {feature: value for feature, value in form.items() if value}
+
+
+def spot_limits_reached(instance: LineHaulInstance, plan: Plan) -> int:
+    """How many (day, spot offer) pairs with a daily limit used every vehicle allowed.
+
+    The origins of a day take the vehicles of a limited offer one after another.
+    A count above zero means that this greedy sharing may have bound the plan:
+    another split of the vehicles among the origins could be better.
+    """
+    used = np.zeros((len(instance.days), instance.spot_available.size), dtype=np.int64)
+    spot = plan.kind == SPOT
+    np.add.at(used, (plan.day[spot], plan.source[spot]), 1)
+    limited = instance.spot_available != UNLIMITED
+    return int(np.count_nonzero(limited[None, :] & (used >= instance.spot_available[None, :])))
+
+
+def limit_stats(instance: LineHaulInstance, plan: Plan) -> dict[str, float | int | str]:
+    """``spot_limits_reached`` for the stats of a result; empty when no offer has a limit."""
+    if not np.any(instance.spot_available != UNLIMITED):
+        return {}
+    return {"spot_limits_reached": spot_limits_reached(instance, plan)}
 
 
 @dataclass(frozen=True, slots=True)

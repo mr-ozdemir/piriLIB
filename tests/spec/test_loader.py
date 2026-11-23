@@ -429,6 +429,43 @@ def test_symmetric_arcs_file_fills_both_directions_of_the_distance_matrix(
     )
 
 
+def test_durations_file_gives_the_travel_times(tmp_path: Path, document: dict[str, Any]) -> None:
+    """A line for every type (3 hours) and the same line for ``small`` alone (4,5 hours)."""
+    write_table(
+        tmp_path,
+        "durations.csv",
+        "Çıkış;Varış;Saat;Tip\nA;B;3;\nA;B;4,5;small\n",
+    )
+    document["matrix"]["durations"] = {
+        "file": "durations.csv",
+        "delimiter": ";",
+        "decimal": ",",
+        "columns": {
+            "origin": "Çıkış",
+            "destination": "Varış",
+            "hours": "Saat",
+            "vehicle_type": "Tip",
+        },
+    }
+    path = write_problem(tmp_path, document)
+
+    instance = load_spec(path).compile()
+
+    assert instance.duration_minutes is not None
+    assert instance.duration_minutes[:, 0, 1].tolist() == [180.0, 270.0]
+
+
+def test_duration_problems_name_file_and_line(tmp_path: Path, document: dict[str, Any]) -> None:
+    write_table(tmp_path, "durations.csv", "origin,destination,hours\nA,B,3\nA,Z,2\n")
+    document["matrix"]["durations"] = {"file": "durations.csv"}
+    path = write_problem(tmp_path, document)
+
+    with pytest.raises(SpecError) as info:
+        load_spec(path)
+
+    assert "- durations.csv:3: destination: unknown center 'Z'" in str(info.value)
+
+
 def test_arc_problems_name_file_and_line(tmp_path: Path, document: dict[str, Any]) -> None:
     """Line 4 names the unknown center ``D``, so no distance is left between ``B`` and ``C``."""
     write_table(tmp_path, "arcs.csv", "origin,destination,km\nA,B,10\nA,C,20\nB,D,15\n")
@@ -536,3 +573,79 @@ def test_unquoted_due_time_with_a_utc_offset_is_reported(
         f"{path}: invalid problem specification",
         "- demand[0].due: must not have a UTC offset; times are local times of the centers",
     ]
+
+
+@pytest.mark.parametrize(
+    ("text", "number"),
+    [
+        ("0,5", 0.5),
+        ("900", 900.0),
+        ("1.234", 1234.0),
+        ("1.234,5", 1234.5),
+        ("12.500,", 12500.0),
+        ("1.234.567,25", 1234567.25),
+        ("1 234,5", 1234.5),
+    ],
+    ids=[
+        "no-group",
+        "integer",
+        "one-group",
+        "group-and-decimals",
+        "bare-comma",
+        "two-groups",
+        "space",
+    ],
+)
+def test_decimal_comma_reads_a_point_that_groups_thousands(
+    tmp_path: Path, document: dict[str, Any], text: str, number: float
+) -> None:
+    """One to three digits, then groups of exactly three; every value is exact in binary."""
+    table = f"origin;destination;date;desi\nA;B;2026-01-05;{text}\n"
+    path = with_demand_file(tmp_path, document, table, delimiter=";", decimal=",")
+
+    spec = load_spec(path)
+
+    assert spec.demand[0].quantity == {"desi": number}
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["12.5", "1.25", "1.2345", "1234.567", "1.234.5", "12.50,5", "1,234.5", ".5"],
+    ids=[
+        "one-decimal",
+        "two-decimals",
+        "four-digits-after",
+        "four-digits-before",
+        "short-last-group",
+        "short-group-and-decimals",
+        "english-format",
+        "leading-point",
+    ],
+)
+def test_decimal_comma_refuses_a_point_that_does_not_group_thousands(
+    tmp_path: Path, document: dict[str, Any], text: str
+) -> None:
+    """``12.5`` used to be read as 125: ten times the demand, without a word."""
+    table = f"origin;destination;date;desi\nA;B;2026-01-05;{text}\n"
+    path = with_demand_file(tmp_path, document, table, delimiter=";", decimal=",")
+
+    with pytest.raises(SpecError) as info:
+        load_spec(path)
+
+    assert str(info.value).splitlines() == [
+        f"{path}: invalid problem specification",
+        f"- demand.csv:2: 'desi': '{text}' has a '.' that does not group thousands; "
+        "the decimal mark is ',' (write 12,5 or 1.234,5)",
+    ]
+
+
+def test_decimal_point_reads_a_point_as_the_decimal_mark(
+    tmp_path: Path, document: dict[str, Any]
+) -> None:
+    """Without ``decimal: ","`` nothing changes: ``12.5`` is twelve and a half."""
+    table = "origin,destination,date,desi\nA,B,2026-01-05,12.5\n"
+    path = with_demand_file(tmp_path, document, table)
+
+    spec = load_spec(path)
+
+    assert spec.demand[0].quantity == {"desi": 12.5}

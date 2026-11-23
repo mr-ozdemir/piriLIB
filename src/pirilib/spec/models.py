@@ -21,12 +21,14 @@ from pydantic import (
     BaseModel,
     BeforeValidator,
     ConfigDict,
+    Discriminator,
     Field,
     NonNegativeFloat,
     NonNegativeInt,
     PositiveFloat,
     PositiveInt,
     StringConstraints,
+    Tag,
     field_validator,
     model_validator,
 )
@@ -38,9 +40,14 @@ if TYPE_CHECKING:
     from pirilib.objective import Sum
     from pirilib.spec.instance import LineHaulInstance
 
-SCHEMA_ID: Final = "pirilib/linehaul@0.2"
-SchemaId = Literal["pirilib/linehaul@0.1", "pirilib/linehaul@0.2"]
-"""Accepted schema ids; 0.1 documents are 0.2 documents without the time fields."""
+SCHEMA_ID: Final = "pirilib/linehaul@0.3"
+"""The schema id of the documents this version writes."""
+
+SchemaId = Literal["pirilib/linehaul@0.1", "pirilib/linehaul@0.2", "pirilib/linehaul@0.3"]
+"""Accepted schema ids; an older document is a 0.3 document without the newer fields."""
+
+_BEFORE_LATENESS: Final = ("pirilib/linehaul@0.1", "pirilib/linehaul@0.2")
+"""Schema ids from before lateness was a rule; there it was a cost and had no penalty."""
 
 type Issue = tuple[Loc, str]
 
@@ -141,20 +148,31 @@ class VehicleType(_Model):
     )
     speed_kmh: PositiveFloat | None = Field(
         default=None,
-        description="Average speed; needed for travel times (hourly costs, due times).",
+        description=(
+            "Average speed; times the legs that matrix.durations does not, and is "
+            "needed for hourly costs and due times unless every leg has a duration."
+        ),
     )
 
 
 class Cost(_Model):
-    """Cost of one vehicle dispatch: a fixed part, a part per km and a part per hour.
+    """Cost of one vehicle dispatch: fixed, per km, per hour and per unit carried.
 
     Hours run from the start of loading at the origin to the end of unloading at
-    the last stop.
+    the last stop. Units are the quantities the dispatch carries, whatever the
+    distance.
     """
 
     fixed: NonNegativeFloat = 0.0
     per_km: NonNegativeFloat = 0.0
     per_hour: NonNegativeFloat = 0.0
+    per_unit: dict[Name, NonNegativeFloat] = Field(
+        default_factory=dict,
+        description=(
+            "Cost per unit carried, by quantity dimension, for example {desi: 0.8}; a "
+            "dimension that is left out costs nothing."
+        ),
+    )
 
 
 class OwnedVehicles(_Model):
@@ -169,17 +187,41 @@ class OwnedVehicles(_Model):
         default=True, description="The fixed cost is paid every day, even when the vehicle is idle."
     )
     stopovers: bool = Field(
-        default=False, description="The vehicles may also drop loads at centers on the way."
+        default=True,
+        description=(
+            "The vehicles may also drop loads at centers on the way; false: they only "
+            "serve the destination of their line."
+        ),
     )
 
 
 class SpotOffer(_Model):
-    """On-demand vehicles of one type, hired per dispatch."""
+    """On-demand vehicles of one type, hired per dispatch.
+
+    Several offers may have the same vehicle type: price tiers, such as two
+    vehicles a day at the contract price and further ones at the market price,
+    or the offers of different carriers. Each offer has its own cost and its
+    own daily limit.
+    """
 
     type: Name
+    name: Name | None = Field(
+        default=None,
+        description=(
+            "A label for reports, for example the carrier or the price tier; no two "
+            "offers may have the same name."
+        ),
+    )
     cost: Cost
     available: Vehicles | None = Field(
         default=None, description="Vehicles per day; null means unlimited."
+    )
+    stopovers: bool = Field(
+        default=True,
+        description=(
+            "A vehicle may serve several destinations on one route; false: every vehicle "
+            "of the offer goes to one destination."
+        ),
     )
 
 
@@ -228,6 +270,24 @@ class Calendar(_Model):
         return self
 
 
+class Duration(_Model):
+    """How long vehicles take from one center to another, breaks included."""
+
+    origin: Name
+    destination: Name
+    hours: NonNegativeFloat
+    vehicle_type: Name | None = Field(
+        default=None,
+        description="The type the time is for; null: every type without a time of its own.",
+    )
+
+
+_DURATIONS: Final = (
+    "Travel times that replace distance / speed_kmh, one direction each; a leg without "
+    "one is timed from the speed of the vehicle type."
+)
+
+
 class HaversineMatrix(_Model):
     """Distances along the great circle, computed from center coordinates."""
 
@@ -236,6 +296,7 @@ class HaversineMatrix(_Model):
         default=1.0,
         description="Multiplier applied to every distance (1.0 means as the crow flies).",
     )
+    durations: tuple[Duration, ...] = Field(default=(), description=_DURATIONS)
 
 
 class Arc(_Model):
@@ -255,16 +316,51 @@ class ExplicitMatrix(_Model):
         default=False, description="Use the distance of A->B for B->A when B->A is not given."
     )
     factor: PositiveFloat = 1.0
+    durations: tuple[Duration, ...] = Field(default=(), description=_DURATIONS)
 
 
 DistanceMatrix = Annotated[HaversineMatrix | ExplicitMatrix, Field(discriminator="source")]
 
 
-class MinFill(_Model):
-    """Minimum share of capacity (primary dimension) a vehicle must carry when it departs."""
+Share = Annotated[float, Field(ge=0.0, lt=1.0)]
+"""A share of capacity, from 0 up to but not including 1."""
 
-    spot: float = Field(default=0.0, ge=0.0, lt=1.0)
-    owned: float = Field(default=0.0, ge=0.0, lt=1.0)
+
+def _share_form(value: object) -> str:
+    return "mapping" if isinstance(value, Mapping) else "number"
+
+
+Shares = Annotated[
+    Annotated[Share, Tag("number")] | Annotated[dict[Name, Share], Tag("mapping")],
+    Discriminator(_share_form),
+]
+"""One share, or a share per dimension."""
+
+
+class MinFill(_Model):
+    """Minimum share of capacity a vehicle must carry when it departs.
+
+    A number is the share of the primary dimension. A mapping gives a share per
+    dimension, for example ``{desi: 0.4, kg: 0.5}``; a vehicle then counts as
+    filled when it reaches the share of any one of them, so a vehicle that is
+    heavy but not bulky is not called empty. Dimensions that are left out, or
+    given as 0, are not looked at.
+    """
+
+    spot: Shares = Field(
+        default=0.0, description="Share for spot vehicles: a number, or one per dimension."
+    )
+    owned: Shares = Field(
+        default=0.0, description="Share for owned vehicles: a number, or one per dimension."
+    )
+
+    def shares(
+        self, kind: Literal["owned", "spot"], dimensions: Sequence[str], primary: str
+    ) -> tuple[float, ...]:
+        """The share per dimension, in the order of ``dimensions``; 0 where there is none."""
+        given = self.owned if kind == "owned" else self.spot
+        by_name = given if isinstance(given, dict) else {primary: given}
+        return tuple(by_name.get(name, 0.0) for name in dimensions)
 
 
 class Stopover(_Model):
@@ -288,7 +384,12 @@ class Stopover(_Model):
 
 
 class Service(_Model):
-    """Due times, the cost of lateness and how long demand may wait."""
+    """Due times, the cost of lateness and how long demand may wait.
+
+    Unloading after the due time also breaks the ``lateness`` rule, which the
+    objective weighs like every other rule: 0 leaves lateness a cost only, and
+    ``hard`` makes the due times limits.
+    """
 
     due_hours: PositiveFloat | None = Field(
         default=None,
@@ -328,6 +429,17 @@ class Rules(_Model):
     handling: Handling = Handling()
 
 
+def _penalty_form(value: object) -> str:
+    return "hard" if isinstance(value, str) else "weight"
+
+
+Penalty = Annotated[
+    Annotated[NonNegativeFloat, Tag("weight")] | Annotated[Literal["hard"], Tag("hard")],
+    Discriminator(_penalty_form),
+]
+"""A weight per unit of violation, or ``hard`` for a rule that must hold."""
+
+
 class ObjectiveSpec(_Model):
     """The objective to minimize, built from the costs and rules of the document.
 
@@ -338,10 +450,25 @@ class ObjectiveSpec(_Model):
     are those of :data:`pirilib.constraints.CATALOG`), or give ``other`` for
     every rule that is not named. A weight of 0 lets a plan break the rule for
     free, so it has to be written down.
+
+    A rule written as ``hard`` instead of a weight must hold. The solvers treat it
+    as a limit: it gets :attr:`hard_weight`, far above the costs, so no saving is
+    worth breaking it. A plan that breaks a hard rule is not feasible. When the
+    hard rules cannot all hold, the solvers still return the plan that breaks
+    them least, and the evaluation says which ones are broken.
     """
 
     OTHER: ClassVar[str] = "other"
     """The ``penalties`` key that applies to every built-in rule not named."""
+
+    HARD: ClassVar[str] = "hard"
+    """What to write instead of a weight for a rule that must hold."""
+
+    HARD_WEIGHT: ClassVar[float] = 1e9
+    """The least weight of a hard rule, per unit of violation."""
+
+    HARD_FACTOR: ClassVar[float] = 100.0
+    """A hard rule weighs at least this many times the largest weight of the section."""
 
     cost: PositiveFloat = Field(
         description=(
@@ -355,16 +482,17 @@ class ObjectiveSpec(_Model):
         default=0.0,
         description="Weight per primary unit of capacity left empty on departure.",
     )
-    penalties: dict[str, NonNegativeFloat] = Field(
+    penalties: dict[str, Penalty] = Field(
         description=(
-            "Weight per unit of violation, by rule name; 'other' applies to every rule "
-            "not named. Without 'other', every rule must be named."
+            "Weight per unit of violation, by rule name, or 'hard' for a rule that must "
+            "hold; 'other' applies to every rule not named. Without 'other', every "
+            "rule must be named."
         )
     )
 
     @field_validator("penalties")
     @classmethod
-    def _check_penalties(cls, penalties: dict[str, float]) -> dict[str, float]:
+    def _check_penalties(cls, penalties: dict[str, float | str]) -> dict[str, float | str]:
         from pirilib.constraints import CATALOG
 
         known = [*CATALOG, cls.OTHER]
@@ -386,8 +514,7 @@ class ObjectiveSpec(_Model):
             raise SpecIssues(issues)
         return penalties
 
-    def penalty(self, name: str) -> float:
-        """The weight per unit of violation of the built-in rule ``name``, named or ``other``."""
+    def _given(self, name: str) -> float | str:
         from pirilib.constraints import CATALOG
 
         if name not in CATALOG:
@@ -396,11 +523,37 @@ class ObjectiveSpec(_Model):
             return self.penalties[name]
         return self.penalties[self.OTHER]
 
+    @property
+    def hard_weight(self) -> float:
+        """The weight of a hard rule per unit of violation.
+
+        :attr:`HARD_WEIGHT`, or :attr:`HARD_FACTOR` times the largest weight of the
+        section when that is more, so that a hard rule outweighs every other term.
+        """
+        weights = [self.cost, self.distance_km, self.dispatches, self.unused_capacity]
+        weights += [value for value in self.penalties.values() if not isinstance(value, str)]
+        return max(self.HARD_WEIGHT, self.HARD_FACTOR * max(weights))
+
+    def hard_rules(self) -> frozenset[str]:
+        """The built-in rules written as ``hard``, by name or through ``other``."""
+        from pirilib.constraints import CATALOG
+
+        return frozenset(name for name in CATALOG if self._given(name) == self.HARD)
+
+    def penalty(self, name: str) -> float:
+        """The weight per unit of violation of the built-in rule ``name``, named or ``other``.
+
+        A hard rule has :attr:`hard_weight`.
+        """
+        given = self._given(name)
+        return self.hard_weight if isinstance(given, str) else given
+
     def build(self) -> "Sum":
         """The objective as a :class:`~pirilib.objective.Sum`, with a linear form.
 
         Extra terms with weight 0 are left out; every built-in rule gets its
-        penalty term, also when the weight is 0.
+        penalty term, also when the weight is 0. The objective knows its hard
+        rules (:attr:`~pirilib.objective.Sum.hard`).
         """
         from pirilib import objective as obj
         from pirilib.constraints import CATALOG
@@ -415,7 +568,7 @@ class ObjectiveSpec(_Model):
             *(make() * weight for weight, make in extras if weight),
             *(obj.violation(name) * self.penalty(name) for name in CATALOG),
         ]
-        return obj.Sum(tuple(terms))
+        return obj.Sum(tuple(terms), self.hard_rules())
 
 
 _NO_OBJECTIVE: Final = (
@@ -466,6 +619,24 @@ class LineHaulSpec(_Model):
             numbered.append(row)
         return {**data, "demand": numbered}
 
+    @model_validator(mode="before")
+    @classmethod
+    def _read_older_schemas(cls, data: Any) -> Any:
+        """Keep the meaning of older documents: lateness, a rule since 0.3, gets weight 0.
+
+        A 0.1 or 0.2 document that names ``lateness`` under ``penalties`` keeps what
+        it wrote.
+        """
+        if not isinstance(data, Mapping) or data.get("schema") not in _BEFORE_LATENESS:
+            return data
+        objective = data.get("objective")
+        if not isinstance(objective, Mapping):
+            return data
+        penalties = objective.get("penalties")
+        if not isinstance(penalties, Mapping) or "lateness" in penalties:
+            return data
+        return {**data, "objective": {**objective, "penalties": {**penalties, "lateness": 0.0}}}
+
     @model_validator(mode="after")
     def _check_consistency(self) -> Self:
         issues = _consistency_issues(self)
@@ -513,13 +684,14 @@ def _consistency_issues(spec: LineHaulSpec) -> list[Issue]:
         *_duplicates(("centers",), "center id", [center.id for center in spec.centers]),
         *_duplicates(("vehicle_types",), "vehicle type", [v.name for v in spec.vehicle_types]),
         *_duplicates(
-            ("fleet", "spot"), "spot offer for", [offer.type for offer in spec.fleet.spot]
+            ("fleet", "spot"), "spot offer name", [offer.name for offer in spec.fleet.spot]
         ),
         *_duplicates(("demand",), "demand id", [row.id for row in spec.demand]),
         *_dimension_issues(spec),
         *_fleet_issues(spec),
         *_demand_issues(spec),
         *_matrix_issues(spec),
+        *_duration_issues(spec),
         *_time_issues(spec),
     ]
 
@@ -543,19 +715,56 @@ def _time_issues(spec: "LineHaulSpec") -> list[Issue]:
         if name not in types
     ]
     if needs_time(spec):
+        pairs = len(spec.centers) * (len(spec.centers) - 1)
         issues += [
             (
                 ("vehicle_types", position, "speed_kmh"),
-                "is required, because hourly costs or due times are used",
+                "is required, because hourly costs or due times are used"
+                + (
+                    " and matrix.durations does not time every pair of centers"
+                    if spec.matrix.durations
+                    else ""
+                ),
             )
             for position, vehicle in enumerate(spec.vehicle_types)
-            if vehicle.speed_kmh is None
+            if vehicle.speed_kmh is None and len(_timed_pairs(spec, vehicle.name)) < pairs
         ]
     for position, row in enumerate(spec.demand):
         if row.due is not None:
             ready = dt.datetime.combine(row.date, row.ready or dt.time())
             if row.due < ready:
                 issues.append(((("demand", position, "due")), f"{row.due} is before it is ready"))
+    return issues
+
+
+def _timed_pairs(spec: "LineHaulSpec", vehicle_type: str) -> set[tuple[str, str]]:
+    """The (origin, destination) pairs ``matrix.durations`` times for ``vehicle_type``."""
+    return {
+        (row.origin, row.destination)
+        for row in spec.matrix.durations
+        if row.vehicle_type in (None, vehicle_type) and row.origin != row.destination
+    }
+
+
+def _duration_issues(spec: "LineHaulSpec") -> list[Issue]:
+    centers = {center.id for center in spec.centers}
+    types = {vehicle.name for vehicle in spec.vehicle_types}
+    given: set[tuple[str, str, str | None]] = set()
+    issues: list[Issue] = []
+    for position, row in enumerate(spec.matrix.durations):
+        loc: Loc = ("matrix", "durations", position)
+        for field, center in (("origin", row.origin), ("destination", row.destination)):
+            if center not in centers:
+                issues.append(((*loc, field), f"unknown center '{center}'"))
+        if row.vehicle_type is not None and row.vehicle_type not in types:
+            issues.append(((*loc, "vehicle_type"), f"unknown vehicle type '{row.vehicle_type}'"))
+        key = (row.origin, row.destination, row.vehicle_type)
+        if row.origin == row.destination:
+            issues.append((loc, f"origin and destination are both '{row.origin}'"))
+        elif key in given:
+            whom = "" if row.vehicle_type is None else f" for {row.vehicle_type}"
+            issues.append((loc, f"duplicate duration {row.origin} -> {row.destination}{whom}"))
+        given.add(key)
     return issues
 
 
@@ -592,6 +801,18 @@ def _dimension_issues(spec: LineHaulSpec) -> list[Issue]:
         issues.append(
             (("rules", "primary_dimension"), f"'{primary}' is not one of {list(dimensions)}")
         )
+    for kind in ("spot", "owned"):
+        given = getattr(spec.rules.min_fill, kind)
+        unknown = (
+            [name for name in given if name not in dimensions] if isinstance(given, dict) else []
+        )
+        if unknown:
+            issues.append(
+                (
+                    ("rules", "min_fill", kind),
+                    f"unknown dimension(s) {unknown}; the dimensions are {list(dimensions)}",
+                )
+            )
     return issues
 
 
@@ -618,6 +839,21 @@ def _fleet_issues(spec: LineHaulSpec) -> list[Issue]:
                 )
         if group.origin == group.destination:
             issues.append((loc, f"origin and destination are both '{group.origin}'"))
+    dimensions = spec.dimensions
+    costs: tuple[tuple[str, Sequence[Cost]], ...] = (
+        ("owned", [group.cost for group in spec.fleet.owned]),
+        ("spot", [offer.cost for offer in spec.fleet.spot]),
+    )
+    for kind, entries in costs:
+        for position, cost in enumerate(entries):
+            unknown = [name for name in cost.per_unit if name not in dimensions]
+            if unknown:
+                issues.append(
+                    (
+                        ("fleet", kind, position, "cost", "per_unit"),
+                        f"unknown dimension(s) {unknown}; the dimensions are {list(dimensions)}",
+                    )
+                )
     issues += [
         (("fleet", "spot", position, "type"), f"unknown vehicle type '{offer.type}'")
         for position, offer in enumerate(spec.fleet.spot)

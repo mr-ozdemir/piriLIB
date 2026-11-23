@@ -60,7 +60,9 @@ ARRAY_VALUES = {
     "spot_fixed": [300.0, 150.0],
     "spot_per_km": [2.0, 1.5],
     "spot_available": [UNLIMITED, 3],
+    "spot_stopovers": [True, True],
     "spot_per_hour": [0.0, 0.0],
+    "spot_per_unit": [[0.0], [0.0]],
     "owned_type": [0],
     "owned_origin": [0],
     "owned_destination": [1],
@@ -68,8 +70,11 @@ ARRAY_VALUES = {
     "owned_fixed": [100.0],
     "owned_per_km": [1.0],
     "owned_per_hour": [0.0],
+    "owned_per_unit": [[0.0]],
     "owned_mandatory": [True],
-    "owned_stopovers": [False],
+    "owned_stopovers": [True],
+    "min_fill_owned": [0.0],
+    "min_fill_spot": [0.0],
     "demand_origin": [0, 0, 1],
     "demand_destination": [1, 2, 0],
     "demand_day": [0, 0, 1],
@@ -81,7 +86,7 @@ ARRAY_VALUES = {
     "demand_due": [math.inf, math.inf, math.inf],
 }
 """The fixture's arrays, by position. Only ``C`` bans ``big``; the unlimited spot ``big`` reads
-:data:`UNLIMITED`; ``owned_mandatory`` and ``owned_stopovers`` are the schema defaults. The
+:data:`UNLIMITED`; ``owned_mandatory`` and the stopover flags are the schema defaults. The
 time fields are not given: no speed (NaN), no per hour cost, no handling or vehicle limit
 (inf, :data:`UNLIMITED`), ready at 00:00 of the demand's day (1440 minutes is one day) and no
 due time (inf). ``distance_km`` has tests of its own below."""
@@ -94,6 +99,7 @@ ARRAY_DTYPES = {
     "spot_fixed": np.float64,
     "spot_per_km": np.float64,
     "spot_available": np.int64,
+    "spot_stopovers": np.bool_,
     "owned_type": np.int64,
     "owned_origin": np.int64,
     "owned_destination": np.int64,
@@ -102,12 +108,16 @@ ARRAY_DTYPES = {
     "owned_per_km": np.float64,
     "owned_mandatory": np.bool_,
     "owned_stopovers": np.bool_,
+    "min_fill_owned": np.float64,
+    "min_fill_spot": np.float64,
     "demand_origin": np.int64,
     "demand_destination": np.int64,
     "demand_day": np.int64,
     "demand_quantity": np.float64,
     "speed_kmh": np.float64,
     "spot_per_hour": np.float64,
+    "spot_per_unit": np.float64,
+    "owned_per_unit": np.float64,
     "owned_per_hour": np.float64,
     "handling_capacity": np.float64,
     "vehicle_limit": np.int64,
@@ -125,6 +135,8 @@ OTHER_FIELDS = (
     "demand_ids",
     "rules",
     "timed",
+    "duration_minutes",
+    "spot_names",
 )
 """Every field of :class:`LineHaulInstance` that is not an array."""
 

@@ -43,6 +43,10 @@ CATALOG: Final[Mapping[str, str]] = MappingProxyType(
             "Loads that leave before their demand's date, or more than "
             "rules.service.max_deferral_days after it (count)."
         ),
+        "lateness": (
+            "Primary quantity unloaded after the due time of its demand, times the started "
+            "hours it is late (quantity hours)."
+        ),
         "ban": "Origins and stops where the vehicle type is banned (count).",
         "owned_line": (
             "Owned dispatches that do not leave from their line's origin or do not end at "
@@ -59,10 +63,14 @@ CATALOG: Final[Mapping[str, str]] = MappingProxyType(
             "day it starts loading there or arrives there (count)."
         ),
         "capacity": "Load above vehicle capacity, summed over dimensions (quantity).",
-        "min_fill": "Load missing to reach the minimum fill of the primary dimension (quantity).",
+        "min_fill": (
+            "Load missing to reach the minimum fill. With a minimum in several dimensions, "
+            "a vehicle that reaches one of them misses nothing, and one that reaches none "
+            "misses the smallest of its gaps (quantity)."
+        ),
         "stopover": (
             "Dispatches with more than one stop although stopovers are disabled, or not "
-            "allowed for the owned group (count)."
+            "allowed for the owned group or the spot offer (count)."
         ),
         "max_stops": "Stops beyond rules.stopover.max_stops (count).",
         "stretch": (

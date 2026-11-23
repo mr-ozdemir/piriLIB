@@ -17,9 +17,10 @@ Commands::
 ``solve``, ``tune`` and ``bench`` minimize the objective that the problem
 documents define in their ``objective:`` section; there is no default one.
 
-Exit status: 0 on success, 1 when an input is invalid or a plan breaks a rule
+Exit status: 0 on success, 1 when an input is invalid or a plan is not feasible
 (``check``), 2 for wrong usage, including solving or tuning a problem whose
-document has no ``objective:`` section.
+document has no ``objective:`` section, and 3 when ``solve`` wrote a plan that
+breaks a rule the objective declares hard.
 """
 
 import argparse
@@ -30,7 +31,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import asdict, fields
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import yaml
 
@@ -46,6 +47,10 @@ from pirilib.spec import LineHaulSpec, load_spec, parse_spec
 
 class _UsageError(Exception):
     """Wrong usage found after the arguments are read; the command line exits with 2."""
+
+
+HARD_RULE_BROKEN: Final[int] = 3
+"""Exit status of ``solve`` when its plan breaks a rule the objective declares hard."""
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -88,6 +93,9 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--iterations", type=int)
     command.add_argument(
         "--exact-nodes", type=int, help="solve subproblems this small exactly (scipy)"
+    )
+    command.add_argument(
+        "--time-limit", type=float, help="seconds the colonies may search (default: no limit)"
     )
     command.add_argument("--no-local-search", action="store_true")
     _table_options(command)
@@ -372,7 +380,9 @@ def _config(path: str | None, **overrides: Any) -> ACOConfig:
 
 
 def _print_summary(numbers: dict[str, Any]) -> None:
-    state = "feasible" if numbers["feasible"] else f"violations {numbers['violations']}"
+    state = f"violations {numbers['violations']}" if numbers["violations"] else "feasible"
+    if numbers["violations"] and numbers["feasible"]:
+        state = f"feasible  {state}"
     print(
         f"total cost {numbers['total_cost']:,.2f}  dispatches {numbers['dispatches']} "
         f"({numbers['spot_dispatches']} spot)  km {numbers['total_km']:,.1f}  {state}"
@@ -401,12 +411,14 @@ def _solve(arguments: argparse.Namespace) -> int:
         ants=arguments.ants,
         iterations=arguments.iterations,
         exact_nodes=arguments.exact_nodes,
+        time_limit=arguments.time_limit,
         local_search=False if arguments.no_local_search else None,
     )
     result = ACOSolver(config).solve(instance, goal, seed=arguments.seed)
     numbers = summary(result.evaluation) | {
         "objective": result.objective,
         "seconds": result.seconds,
+        "stats": dict(result.stats),
     }
     _print_summary(numbers)
     print(f"objective {result.objective:,.2f} in {result.seconds:.1f} s")
@@ -420,18 +432,33 @@ def _solve(arguments: argparse.Namespace) -> int:
         print(f"plan written to {arguments.output}")
     if arguments.summary:
         Path(arguments.summary).write_text(json.dumps(numbers, indent=2) + "\n", encoding="utf-8")
+    reached = result.stats.get("spot_limits_reached", 0)
+    if reached:
+        print(
+            f"warning: {reached} daily spot limit(s) were used up; the origins of a day "
+            "take the vehicles of a limited offer one after another, so another split "
+            "among them may be cheaper",
+            file=sys.stderr,
+        )
+    broken = numbers["hard_violations"]
+    if broken:
+        amounts = ", ".join(f"{name} ({amount:g})" for name, amount in broken.items())
+        print(f"error: the plan breaks hard rules: {amounts}", file=sys.stderr)
+        return HARD_RULE_BROKEN
     return 0
 
 
 def _check(arguments: argparse.Namespace) -> int:
     from pirilib.validate import check_plan
 
-    instance = load_spec(arguments.problem).compile()
+    spec = load_spec(arguments.problem)
+    instance = spec.compile()
+    hard = spec.objective.hard_rules() if spec.objective is not None else frozenset()
     plan = read_plan(
         instance, arguments.plan, delimiter=arguments.delimiter, decimal=arguments.decimal
     )
-    report = check_plan(instance, plan)
-    _print_summary(summary(evaluate(instance, plan)))
+    report = check_plan(instance, plan, hard)
+    _print_summary(summary(evaluate(instance, plan, hard=hard)))
     for item in report.violations[:50]:
         print(f"- {item.constraint}: {item.message}")
     if len(report.violations) > 50:

@@ -146,7 +146,7 @@
     },
     "Cost": {
       "additionalProperties": false,
-      "description": "Cost of one vehicle dispatch: a fixed part, a part per km and a part per hour.\n\nHours run from the start of loading at the origin to the end of unloading at\nthe last stop.",
+      "description": "Cost of one vehicle dispatch: fixed, per km, per hour and per unit carried.\n\nHours run from the start of loading at the origin to the end of unloading at\nthe last stop. Units are the quantities the dispatch carries, whatever the\ndistance.",
       "properties": {
         "fixed": {
           "default": 0.0,
@@ -165,6 +165,18 @@
           "minimum": 0,
           "title": "Per Hour",
           "type": "number"
+        },
+        "per_unit": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "description": "Cost per unit carried, by quantity dimension, for example {desi: 0.8}; a dimension that is left out costs nothing.",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Per Unit",
+          "type": "object"
         }
       },
       "title": "Cost",
@@ -254,6 +266,48 @@
       "title": "Demand",
       "type": "object"
     },
+    "Duration": {
+      "additionalProperties": false,
+      "description": "How long vehicles take from one center to another, breaks included.",
+      "properties": {
+        "origin": {
+          "minLength": 1,
+          "title": "Origin",
+          "type": "string"
+        },
+        "destination": {
+          "minLength": 1,
+          "title": "Destination",
+          "type": "string"
+        },
+        "hours": {
+          "minimum": 0,
+          "title": "Hours",
+          "type": "number"
+        },
+        "vehicle_type": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The type the time is for; null: every type without a time of its own.",
+          "title": "Vehicle Type"
+        }
+      },
+      "required": [
+        "origin",
+        "destination",
+        "hours"
+      ],
+      "title": "Duration",
+      "type": "object"
+    },
     "ExplicitMatrix": {
       "additionalProperties": false,
       "description": "Distances given arc by arc.",
@@ -288,6 +342,22 @@
           "exclusiveMinimum": 0,
           "title": "Factor",
           "type": "number"
+        },
+        "durations": {
+          "anyOf": [
+            {
+              "default": [],
+              "description": "Travel times that replace distance / speed_kmh, one direction each; a leg without one is timed from the speed of the vehicle type.",
+              "items": {
+                "$ref": "#/$defs/Duration"
+              },
+              "title": "Durations",
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/TableSource"
+            }
+          ]
         }
       },
       "required": [
@@ -351,6 +421,22 @@
           "exclusiveMinimum": 0,
           "title": "Factor",
           "type": "number"
+        },
+        "durations": {
+          "anyOf": [
+            {
+              "default": [],
+              "description": "Travel times that replace distance / speed_kmh, one direction each; a leg without one is timed from the speed of the vehicle type.",
+              "items": {
+                "$ref": "#/$defs/Duration"
+              },
+              "title": "Durations",
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/TableSource"
+            }
+          ]
         }
       },
       "required": [
@@ -361,21 +447,53 @@
     },
     "MinFill": {
       "additionalProperties": false,
-      "description": "Minimum share of capacity (primary dimension) a vehicle must carry when it departs.",
+      "description": "Minimum share of capacity a vehicle must carry when it departs.\n\nA number is the share of the primary dimension. A mapping gives a share per\ndimension, for example ``{desi: 0.4, kg: 0.5}``; a vehicle then counts as\nfilled when it reaches the share of any one of them, so a vehicle that is\nheavy but not bulky is not called empty. Dimensions that are left out, or\ngiven as 0, are not looked at.",
       "properties": {
         "spot": {
           "default": 0.0,
-          "exclusiveMaximum": 1.0,
-          "minimum": 0.0,
-          "title": "Spot",
-          "type": "number"
+          "description": "Share for spot vehicles: a number, or one per dimension.",
+          "oneOf": [
+            {
+              "exclusiveMaximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "additionalProperties": {
+                "exclusiveMaximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              "propertyNames": {
+                "minLength": 1
+              },
+              "type": "object"
+            }
+          ],
+          "title": "Spot"
         },
         "owned": {
           "default": 0.0,
-          "exclusiveMaximum": 1.0,
-          "minimum": 0.0,
-          "title": "Owned",
-          "type": "number"
+          "description": "Share for owned vehicles: a number, or one per dimension.",
+          "oneOf": [
+            {
+              "exclusiveMaximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "additionalProperties": {
+                "exclusiveMaximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              "propertyNames": {
+                "minLength": 1
+              },
+              "type": "object"
+            }
+          ],
+          "title": "Owned"
         }
       },
       "title": "MinFill",
@@ -383,7 +501,7 @@
     },
     "ObjectiveSpec": {
       "additionalProperties": false,
-      "description": "The objective to minimize, built from the costs and rules of the document.\n\nThe objective is ``cost`` times the total cost (dispatch costs, the fixed\ncost of mandatory owned vehicles and lateness), plus the optional extra\nterms, plus a weight per unit of violation of every built-in rule. Every\nrule a plan can break needs a weight: name it under ``penalties`` (the names\nare those of :data:`pirilib.constraints.CATALOG`), or give ``other`` for\nevery rule that is not named. A weight of 0 lets a plan break the rule for\nfree, so it has to be written down.",
+      "description": "The objective to minimize, built from the costs and rules of the document.\n\nThe objective is ``cost`` times the total cost (dispatch costs, the fixed\ncost of mandatory owned vehicles and lateness), plus the optional extra\nterms, plus a weight per unit of violation of every built-in rule. Every\nrule a plan can break needs a weight: name it under ``penalties`` (the names\nare those of :data:`pirilib.constraints.CATALOG`), or give ``other`` for\nevery rule that is not named. A weight of 0 lets a plan break the rule for\nfree, so it has to be written down.\n\nA rule written as ``hard`` instead of a weight must hold. The solvers treat it\nas a limit: it gets :attr:`hard_weight`, far above the costs, so no saving is\nworth breaking it. A plan that breaks a hard rule is not feasible. When the\nhard rules cannot all hold, the solvers still return the plan that breaks\nthem least, and the evaluation says which ones are broken.",
       "properties": {
         "cost": {
           "description": "Weight of the total cost: dispatches (fixed, per km and per hour), the fixed cost of mandatory owned vehicles and lateness.",
@@ -414,10 +532,18 @@
         },
         "penalties": {
           "additionalProperties": {
-            "minimum": 0,
-            "type": "number"
+            "oneOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "const": "hard",
+                "type": "string"
+              }
+            ]
           },
-          "description": "Weight per unit of violation, by rule name; 'other' applies to every rule not named. Without 'other', every rule must be named.",
+          "description": "Weight per unit of violation, by rule name, or 'hard' for a rule that must hold; 'other' applies to every rule not named. Without 'other', every rule must be named.",
           "title": "Penalties",
           "type": "object",
           "propertyNames": {
@@ -426,6 +552,7 @@
               "load_route",
               "ready",
               "deferral",
+              "lateness",
               "ban",
               "owned_line",
               "owned_availability",
@@ -489,8 +616,8 @@
           "type": "boolean"
         },
         "stopovers": {
-          "default": false,
-          "description": "The vehicles may also drop loads at centers on the way.",
+          "default": true,
+          "description": "The vehicles may also drop loads at centers on the way; false: they only serve the destination of their line.",
           "title": "Stopovers",
           "type": "boolean"
         }
@@ -565,7 +692,7 @@
     },
     "Service": {
       "additionalProperties": false,
-      "description": "Due times, the cost of lateness and how long demand may wait.",
+      "description": "Due times, the cost of lateness and how long demand may wait.\n\nUnloading after the due time also breaks the ``lateness`` rule, which the\nobjective weighs like every other rule: 0 leaves lateness a cost only, and\n``hard`` makes the due times limits.",
       "properties": {
         "due_hours": {
           "anyOf": [
@@ -601,12 +728,26 @@
     },
     "SpotOffer": {
       "additionalProperties": false,
-      "description": "On-demand vehicles of one type, hired per dispatch.",
+      "description": "On-demand vehicles of one type, hired per dispatch.\n\nSeveral offers may have the same vehicle type: price tiers, such as two\nvehicles a day at the contract price and further ones at the market price,\nor the offers of different carriers. Each offer has its own cost and its\nown daily limit.",
       "properties": {
         "type": {
           "minLength": 1,
           "title": "Type",
           "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A label for reports, for example the carrier or the price tier; no two offers may have the same name.",
+          "title": "Name"
         },
         "cost": {
           "$ref": "#/$defs/Cost"
@@ -625,6 +766,12 @@
           "default": null,
           "description": "Vehicles per day; null means unlimited.",
           "title": "Available"
+        },
+        "stopovers": {
+          "default": true,
+          "description": "A vehicle may serve several destinations on one route; false: every vehicle of the offer goes to one destination.",
+          "title": "Stopovers",
+          "type": "boolean"
         }
       },
       "required": [
@@ -714,7 +861,7 @@
             }
           ],
           "default": null,
-          "description": "Average speed; needed for travel times (hourly costs, due times).",
+          "description": "Average speed; times the legs that matrix.durations does not, and is needed for hourly costs and due times unless every leg has a duration.",
           "title": "Speed Kmh"
         }
       },
@@ -750,7 +897,7 @@
         },
         "decimal": {
           "default": ".",
-          "description": "Decimal separator. With ',' a '.' is read as a thousands separator.",
+          "description": "Decimal separator. With ',' a '.' may only group thousands, as in 1.234,5; 12.5 is an error.",
           "enum": [
             ".",
             ","
@@ -801,7 +948,8 @@
     "schema": {
       "enum": [
         "pirilib/linehaul@0.1",
-        "pirilib/linehaul@0.2"
+        "pirilib/linehaul@0.2",
+        "pirilib/linehaul@0.3"
       ],
       "title": "Schema",
       "type": "string"
@@ -927,6 +1075,6 @@
     "fleet",
     "demand"
   ],
-  "title": "pirilib/linehaul@0.2 problem document",
+  "title": "pirilib/linehaul@0.3 problem document",
   "type": "object"
 }

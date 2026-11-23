@@ -8,7 +8,8 @@ from any source; the test suite uses it to cross-check the evaluator.
 import itertools
 import math
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, replace
 
 from pirilib.constraints import CATALOG
 from pirilib.evaluation import TOLERANCE
@@ -33,15 +34,30 @@ class Violation:
 
 @dataclass(frozen=True, slots=True)
 class PlanReport:
-    """The result of :func:`check_plan`."""
+    """The result of :func:`check_plan`.
+
+    Attributes:
+        hard: Names of the rules that must hold; empty when none is declared
+    """
 
     violations: tuple[Violation, ...]
     total_cost: float
+    hard: frozenset[str] = frozenset()
 
     @property
     def feasible(self) -> bool:
-        """True when there are no violations."""
-        return not self.violations
+        """True when no hard rule is broken; see :meth:`broken`."""
+        return not self.broken()
+
+    def broken(self) -> tuple[Violation, ...]:
+        """The violations that make the plan infeasible.
+
+        These are the violations of the rules in :attr:`hard`. When no rule is
+        declared hard, every violation counts.
+        """
+        if not self.hard:
+            return self.violations
+        return tuple(item for item in self.violations if item.constraint in self.hard)
 
     def totals(self) -> dict[str, float]:
         """The violation amount of every built-in constraint, in catalog order."""
@@ -51,16 +67,22 @@ class PlanReport:
         return totals
 
     def __str__(self) -> str:
-        state = "feasible" if self.feasible else f"{len(self.violations)} violation(s)"
+        state = f"{len(self.violations)} violation(s)" if self.violations else "feasible"
+        if self.violations and self.feasible:
+            state = f"feasible, {state}"
         lines = [f"total cost {self.total_cost:.2f}, {state}"]
         lines += [f"- {item.constraint}: {item.message}" for item in self.violations]
         return "\n".join(lines)
 
 
-def check_plan(instance: LineHaulInstance, plan: Plan) -> PlanReport:
-    """Check ``plan`` against every rule of ``instance`` and compute its cost."""
+def check_plan(instance: LineHaulInstance, plan: Plan, hard: Iterable[str] = ()) -> PlanReport:
+    """Check ``plan`` against every rule of ``instance`` and compute its cost.
+
+    ``hard`` names the rules that must hold; they decide :attr:`PlanReport.feasible`.
+    Without it, every rule counts.
+    """
     plan.check(instance)
-    return _Checker(instance).run(plan)
+    return replace(_Checker(instance).run(plan), hard=frozenset(hard))
 
 
 def _whole_minutes(value: float) -> float:
@@ -79,6 +101,9 @@ class _Checker:
         self.km: list[list[float]] = instance.distance_km.tolist()
         self.capacity: list[list[float]] = instance.capacity.tolist()
         self.banned: list[list[bool]] = instance.banned.tolist()
+        self.durations: list[list[list[float]]] | None = (
+            None if instance.duration_minutes is None else instance.duration_minutes.tolist()
+        )
         self.found: list[Violation] = []
         self.handled: defaultdict[tuple[int, int], float] = defaultdict(float)
         self.touches: Counter[tuple[int, int, int]] = Counter()
@@ -128,11 +153,13 @@ class _Checker:
             fixed = 0.0 if instance.owned_mandatory[source] else float(instance.owned_fixed[source])
             per_km = float(instance.owned_per_km[source])
             per_hour = float(instance.owned_per_hour[source])
+            per_unit = instance.owned_per_unit[source]
         else:
             vehicle = int(instance.spot_type[source])
             fixed = float(instance.spot_fixed[source])
             per_km = float(instance.spot_per_km[source])
             per_hour = float(instance.spot_per_hour[source])
+            per_unit = instance.spot_per_unit[source]
         type_name = instance.vehicle_types[vehicle]
         label = (
             f"dispatch {position} ({instance.days[dispatch.day]}, {dispatch.kind} {type_name} "
@@ -181,6 +208,12 @@ class _Checker:
                     1,
                     f"{label} has {len(stops)} stops; the group may not stop on the way",
                 )
+            elif not owned and not instance.spot_stopovers[source]:
+                self.add(
+                    "stopover",
+                    1,
+                    f"{label} has {len(stops)} stops; the offer serves one destination",
+                )
         limit = rules.stopover.max_stops
         if limit is not None and len(stops) > limit:
             self.add(
@@ -210,7 +243,12 @@ class _Checker:
 
         self.loads(label, dispatch, vehicle)
         hours = self.timeline(label, dispatch, vehicle)
-        return fixed + per_km * length + per_hour * hours
+        carried = sum(
+            float(per_unit[column]) * quantity
+            for item in dispatch.loads
+            for column, quantity in enumerate(item.quantity)
+        )
+        return fixed + per_km * length + per_hour * hours + carried
 
     def timeline(self, label: str, dispatch: Dispatch, vehicle: int) -> float:
         """Walk the dispatch through time: handling, lateness and readiness. Returns its hours."""
@@ -238,7 +276,7 @@ class _Checker:
         finish: dict[int, float] = {}
         here = dispatch.origin
         for stop in dispatch.stops:
-            travel = 0.0 if speed != speed else _whole_minutes(self.km[here][stop] / speed * 60.0)
+            travel = self.travel(vehicle, here, stop, speed)
             arrival = clock + travel
             amount = unload.get(stop, 0.0) if stop not in finish else 0.0
             self.handled[stop, _day(arrival)] += amount
@@ -260,7 +298,23 @@ class _Checker:
                 if late > 1e-9:
                     hours = math.ceil(round(late / 60.0, 9))
                     self.service += penalty * item.quantity[primary] * hours
+                    if item.quantity[primary] > 0:
+                        self.add(
+                            "lateness",
+                            item.quantity[primary] * hours,
+                            f"{label}: demand {demand} is unloaded {hours} hour(s) after it is due",
+                        )
         return (clock - start) / 60.0
+
+    def travel(self, vehicle: int, origin: int, destination: int, speed: float) -> float:
+        """Minutes of one leg: its duration if the problem gives one, else from the speed."""
+        if self.durations is not None:
+            given = self.durations[vehicle][origin][destination]
+            if given == given:
+                return given
+        if speed != speed:
+            return 0.0
+        return _whole_minutes(self.km[origin][destination] / speed * 60.0)
 
     def handling(self) -> None:
         instance = self.instance
@@ -319,15 +373,21 @@ class _Checker:
                     excess,
                     f"{label} carries {load[column]:g} {name}, capacity is {capacity[column]:g}",
                 )
-        rules, primary = instance.rules, instance.primary_dimension
-        share = rules.min_fill.owned if dispatch.kind == "owned" else rules.min_fill.spot
-        shortfall = share * capacity[primary] - load[primary]
-        if shortfall > TOLERANCE * capacity[primary]:
+        owned = dispatch.kind == "owned"
+        shares = instance.min_fill_owned if owned else instance.min_fill_spot
+        gaps = [
+            (float(shares[column] * capacity[column] - load[column]), column)
+            for column in range(len(dimensions))
+            if shares[column] > 0
+        ]
+        if gaps and all(gap > TOLERANCE * capacity[column] for gap, column in gaps):
+            shortfall, nearest = min(gaps)
+            others = "" if len(gaps) == 1 else "; no other minimum fill is reached either"
             self.add(
                 "min_fill",
                 shortfall,
-                f"{label} carries {load[primary]:g} {dimensions[primary]}, the minimum fill is "
-                f"{share:g} x {capacity[primary]:g}",
+                f"{label} carries {load[nearest]:g} {dimensions[nearest]}, the minimum fill is "
+                f"{shares[nearest]:g} x {capacity[nearest]:g}{others}",
             )
 
     def availability(self, used: Counter[tuple[str, int, int]]) -> None:
@@ -336,7 +396,9 @@ class _Checker:
             if kind == "owned":
                 limit, what = int(instance.owned_count[source]), f"owned group {source}"
             else:
-                limit, what = int(instance.spot_available[source]), f"spot offer {source}"
+                label = instance.spot_names[source] if instance.spot_names else ""
+                what = f"spot offer {source}" + (f" ({label})" if label else "")
+                limit = int(instance.spot_available[source])
             if limit != UNLIMITED and count > limit:
                 self.add(
                     f"{kind}_availability",

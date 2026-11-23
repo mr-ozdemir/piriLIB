@@ -1,4 +1,4 @@
-schema: pirilib/linehaul@0.2
+schema: pirilib/linehaul@0.3
 name: Worked cost example
 
 calendar: {start: 2026-06-01, end: 2026-06-01}
@@ -37,4 +37,5 @@ objective:
   cost: 1
   penalties:
     coverage: 1000
+    lateness: 0
     other: 100000

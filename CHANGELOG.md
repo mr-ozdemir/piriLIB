@@ -4,12 +4,100 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses [Semantic Versioning](https://semver.org/).
 
-[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mr-ozdemir/piriLIB/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mr-ozdemir/piriLIB/releases/tag/v0.1.0
 
 ## [Unreleased]
+
+## [0.3.0] - 2026-11-23
+
+### Added
+
+- `stopovers` on a spot offer (default `true`): with `false` every vehicle of
+  the offer goes to one destination. The `stopover` rule counts routes that
+  break it, and every solver keeps it.
+
+- `rules.min_fill` takes a share per dimension, as in
+  `spot: {desi: 0.4, kg: 0.5}`, besides the single number for the primary
+  dimension. A vehicle that reaches the share of any one dimension is filled;
+  one that reaches none misses the smallest of its gaps, which is the amount
+  of the `min_fill` rule. The evaluator, the checker and every solver use the
+  same definition.
+
+- `cost.per_unit` on spot offers and owned groups: a price per unit carried,
+  by quantity dimension, as in `per_unit: {desi: 0.8}`. It is part of the
+  dispatch cost in the evaluator and the checker, and the ant colony, the
+  exact solver and direct shipping count it when they pick a vehicle. The
+  PyVRP and OR-Tools adapters refuse problems that use it.
+
+- `hard` instead of a weight under `objective.penalties`, by rule name or as
+  `other`: the rule must hold. The solvers give it a weight far above the
+  costs, `Evaluation.feasible` and `PlanReport.feasible` are true when no hard
+  rule is broken, and `Evaluation.broken()` lists the broken ones. A plan that
+  breaks a hard rule is still returned; `pirilib solve` writes it and exits
+  with status 3. When no rule is hard, every rule counts, as before.
+- `evaluate(..., hard=...)` and `check_plan(..., hard=...)` take the hard rules
+  directly, `objective.Sum` carries them in `hard`, and the plan summary has
+  `hard_violations`.
+
+- `ACOConfig.time_limit` and `pirilib solve --time-limit`: seconds the colonies
+  may search. The time is shared out over the subproblems; every subproblem
+  still gets one iteration and its local search, so a plan always comes back.
+  `stats["time_limit_stops"]` counts the colonies the limit stopped.
+
+- `stats["spot_limits_reached"]` from every solver, not only the ant colony:
+  the (day, spot offer) pairs whose daily limit was used up. `pirilib solve`
+  warns when it is above zero, and `--summary` now holds the solver's `stats`.
+
+- `matrix.durations`: travel times per line, as rows of `origin`,
+  `destination`, `hours` and an optional `vehicle_type`, inline or from a CSV
+  file. A duration replaces distance over `speed_kmh` for that leg, in the
+  evaluator, the checker and every solver; a row for one vehicle type wins
+  over the row for every type, and a leg without a row is still timed from
+  the speed. A type whose every leg has a duration needs no `speed_kmh`.
+  `LineHaulInstance.travel_minutes` gives the time of any leg.
+
+- The `lateness` rule: the primary quantity unloaded after the due time of its
+  demand, times the started hours it is late. The evaluator and the checker
+  report it with the other violations, `objective.penalties` gives it a
+  weight or `hard`, and the ant colony and the exact solver weigh it while
+  they plan. `rules.service.penalty` still prices the same amount as a cost.
+
+- Several spot offers may have the same vehicle type, each with its own cost
+  and daily limit: price tiers or the offers of different carriers. An offer
+  takes an optional `name` for reports. Every solver plans with them.
+
+### Changed
+
+- A plan that unloads after a due time now breaks a rule. In a 0.3 document
+  `other` applies to `lateness` unless it is named, and a late plan is not
+  feasible unless the objective declares its hard rules without it; write
+  `lateness: 0` to keep lateness a cost only. A 0.1 or 0.2 document gives
+  `lateness` the weight 0 unless it names it, so its plans do not change, but
+  a late plan of it is also reported as not feasible when no rule is hard.
+  In Python, `obj.violations()` now includes the lateness amount.
+- The schema id of problem documents is `pirilib/linehaul@0.3`; 0.1 and 0.2
+  documents still load. The new fields of this release belong to 0.3, and the
+  JSON Schema file is now `schemas/linehaul-0.3.schema.json`. Generated
+  problems (`pirilib generate`, `pirilib.synthetic`) carry the new id.
+- `stopovers` of an owned group now defaults to `true`: owned vehicles may
+  drop loads at centers on the way of their line unless the group says
+  `stopovers: false`. A problem file that leaves the field out can get a
+  different, cheaper plan than before.
+- With `decimal: ","`, a `.` in a number of a CSV table or a plan file is
+  accepted only where it groups thousands, as in `1.234,5`. A value such as
+  `12.5` was read as 125 and is now reported as a problem. Plan files also
+  refuse quantities that are not finite.
+
+### Fixed
+
+- With `max_deferral_days`, demand left for the next day is valued by the
+  cheaper of carrying it then and leaving it uncarried. The solvers assumed
+  it would be carried, and could unload a load late today although leaving it
+  scored better, which showed with a high or `hard` penalty on `lateness`.
 
 ## [0.2.0] - 2026-11-21
 

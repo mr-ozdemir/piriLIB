@@ -16,6 +16,9 @@ type Origins = Mapping[Loc, Sequence[str]]
 
 _UNION_TAGS: Final[Mapping[Loc, frozenset[str]]] = {
     ("matrix",): frozenset({"haversine", "explicit"}),
+    ("rules", "min_fill", "spot"): frozenset({"number", "mapping"}),
+    ("rules", "min_fill", "owned"): frozenset({"number", "mapping"}),
+    ("objective", "penalties", "*"): frozenset({"weight", "hard"}),
 }
 
 
@@ -80,8 +83,12 @@ def render_loc(loc: Loc, origins: Origins | None = None) -> str:
 def _without_union_tag(loc: Loc) -> Loc:
     for union, tags in _UNION_TAGS.items():
         size = len(union)
-        if loc[:size] == union and len(loc) > size and loc[size] in tags:
-            return (*union, *loc[size + 1 :])
+        if (
+            len(loc) > size
+            and loc[size] in tags
+            and all(part in ("*", found) for part, found in zip(union, loc, strict=False))
+        ):
+            return (*loc[:size], *loc[size + 1 :])
     return loc
 
 

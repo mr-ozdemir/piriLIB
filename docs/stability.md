@@ -14,7 +14,7 @@ releases before it.
 
 The default domain of pirilib is fleet optimization in general, built on one
 core of solver, tuner, objective and adapters. Line-haul planning (schema
-`pirilib/linehaul@0.2`, example `examples/linehaul_mini`) is the first
+`pirilib/linehaul@0.3`, example `examples/linehaul_mini`) is the first
 supported problem type, not the permanent shape of the library: its models
 and arrays may be reorganized as other problem types are added, and the
 library stays open to problems outside fleet optimization.
@@ -26,7 +26,7 @@ library stays open to problems outside fleet optimization.
   no leading underscore. Modules whose names start with `_` are internal.
 - A deprecated name keeps working for at least one minor release and warns with
   `DeprecationWarning` before it is removed in the next major version.
-- Problem documents carry a schema id (`pirilib/linehaul@0.2`). Every 1.x
+- Problem documents carry a schema id (`pirilib/linehaul@0.3`). Every 1.x
   release reads every schema id that a 1.0 release read.
 - The plan file columns (`pirilib solve -o plan.csv`) and the command line
   options are part of the API.

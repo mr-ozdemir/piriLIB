@@ -101,6 +101,12 @@ tests are about how such a constraint is handled, not about a binding limit."""
 SPEED_KMH = 60.0
 """Speed of both vehicle types in the scheduled problem."""
 
+SPENT = 1e-9
+"""A time limit, in seconds, that is over before the first iteration ends."""
+
+AMPLE = 3600.0
+"""A time limit, in seconds, that no test solve comes near."""
+
 
 def solve(
     instance: LineHaulInstance,
@@ -485,6 +491,10 @@ def test_unknown_linear_features_are_rejected(instance: LineHaulInstance) -> Non
         pytest.param(
             {"exact_nodes": -1}, "exact_nodes must not be negative", id="exact_nodes-negative"
         ),
+        pytest.param({"time_limit": 0.0}, "time_limit must be above 0", id="time_limit-0"),
+        pytest.param(
+            {"time_limit": float("nan")}, "time_limit must be above 0", id="time_limit-nan"
+        ),
         pytest.param(
             {"update": "elitist"},
             "update must be 'iteration_best' or 'best_so_far'",
@@ -642,3 +652,69 @@ def test_kept_opening_weights_equal_fresh_ones(seed: int, random_document: Rando
 
     assert len(build.kept) > 1
     assert np.array_equal(np.concatenate(build.kept), np.concatenate(build.fresh))
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_a_spent_time_limit_leaves_every_colony_one_iteration(
+    seed: int, random_document: RandomDocument
+) -> None:
+    instance = parse_spec(random_document(seed)).compile()
+
+    result = solve(instance, GOAL, config=replace(SMALL, time_limit=SPENT), seed=seed)
+
+    assert result.stats["iterations"] == result.stats["batches"]
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_a_spent_time_limit_still_plans_every_subproblem(
+    seed: int, random_document: RandomDocument
+) -> None:
+    """One iteration and the local search: the rules that hold by construction still hold."""
+    instance = parse_spec(random_document(seed)).compile()
+
+    result = solve(instance, GOAL, config=replace(SMALL, time_limit=SPENT), seed=seed)
+
+    assert result.evaluation.violations.items() >= NO_CONSTRUCTION_VIOLATIONS.items()
+
+
+def test_the_stats_count_the_colonies_a_time_limit_stopped(instance: LineHaulInstance) -> None:
+    result = solve(instance, GOAL, config=replace(SMALL, time_limit=SPENT))
+
+    assert result.stats["time_limit_stops"] == result.stats["batches"]
+
+
+def test_an_ample_time_limit_stops_no_colony(instance: LineHaulInstance) -> None:
+    result = solve(instance, GOAL, config=replace(SMALL, time_limit=AMPLE))
+
+    assert result.stats["time_limit_stops"] == 0
+
+
+def test_an_ample_time_limit_does_not_change_the_plan(instance: LineHaulInstance) -> None:
+    unlimited = solve(instance, GOAL)
+
+    result = solve(instance, GOAL, config=replace(SMALL, time_limit=AMPLE))
+
+    np.testing.assert_equal(asdict(result.plan), asdict(unlimited.plan))
+
+
+def test_without_a_time_limit_the_stats_do_not_mention_it(instance: LineHaulInstance) -> None:
+    result = solve(instance, GOAL)
+
+    assert "time_limit_stops" not in result.stats
+
+
+def test_a_spent_time_limit_leaves_a_scheduled_colony_one_iteration(
+    document: dict[str, Any], compile_document: CompileDocument
+) -> None:
+    instance = compile_document(scheduled(document))
+
+    result = solve(instance, GOAL, config=replace(SMALL, time_limit=SPENT))
+
+    assert result.stats["iterations"] == result.stats["batches"]
+
+
+def test_a_spent_time_limit_leaves_whole_plans_one_iteration(instance: LineHaulInstance) -> None:
+    """A plain function is optimized over whole plans: one iteration builds one round of them."""
+    result = solve(instance, plain_goal, config=replace(SMALL, time_limit=SPENT))
+
+    assert result.stats["iterations"] == 1

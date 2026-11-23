@@ -57,7 +57,7 @@ objective:
 | `distance_km` | no, default 0 | per km | Extra weight per km of route, on top of the `per_km` costs, for example a price on emissions. |
 | `dispatches` | no, default 0 | per dispatch | Extra weight per dispatch, owned or spot, for example the effort of arranging one. |
 | `unused_capacity` | no, default 0 | per primary unit | Weight per unit of primary capacity left empty when a vehicle departs. |
-| `penalties` | yes | per unit of the rule's amount | A weight per built-in rule, by name. `other` applies to every rule that is not named. Weights are 0 or more. |
+| `penalties` | yes | per unit of the rule's amount | A weight per built-in rule, by name, or `hard` for a rule that must hold. `other` applies to every rule that is not named. Weights are 0 or more. |
 
 Every rule must get a weight: either name all of them under `penalties`, or
 add `other`. A rule without a weight is an error, and so is a name that is not
@@ -89,6 +89,7 @@ penalty prices a desi and a kg alike. 1300 desi and 600 kg left behind are a
 | `load_route` | count | Loads whose demand does not leave from the dispatch origin, or whose destination is not a stop of the dispatch. |
 | `ready` | count | Loads taken before their demand is ready. |
 | `deferral` | count | Loads that leave before their demand's date, or more than `rules.service.max_deferral_days` after it. |
+| `lateness` | quantity hours | Primary quantity unloaded after the due time of its demand, times the started hours it is late. |
 | `ban` | count | Origins and stops where the vehicle type is banned. |
 | `owned_line` | count | Owned dispatches that do not leave from their line's origin or do not end at its destination. |
 | `owned_availability` | count | Owned dispatches beyond the vehicle count of a group on a day. |
@@ -96,8 +97,8 @@ penalty prices a desi and a kg alike. 1300 desi and 600 kg left behind are a
 | `handling` | quantity | Primary quantity loaded and unloaded at a center beyond its daily handling capacity. |
 | `vehicle_limit` | count | Vehicles of a type at a center beyond its daily limit. |
 | `capacity` | quantity | Load above vehicle capacity, summed over dimensions. |
-| `min_fill` | quantity | Load missing to reach the minimum fill of the primary dimension. |
-| `stopover` | count | Dispatches with more than one stop although stopovers are disabled, or not allowed for the owned group. |
+| `min_fill` | quantity | Load missing to reach the minimum fill. With a minimum in several dimensions, a vehicle that reaches one of them misses nothing, and one that reaches none misses the smallest of its gaps. |
+| `stopover` | count | Dispatches with more than one stop although stopovers are disabled, or not allowed for the owned group or the spot offer. |
 | `max_stops` | count | Stops beyond `rules.stopover.max_stops`. |
 | `stretch` | km | Route length above `max_stretch` times the direct distance to the last stop. |
 | `forward_only` | count | Stops that are not farther from the origin than the stop before them. |
@@ -105,7 +106,7 @@ penalty prices a desi and a kg alike. 1300 desi and 600 kg left behind are a
 | `coverage` | quantity | Demand quantity not carried, summed over dimensions. |
 | `overdelivery` | quantity | Quantity carried beyond the demand, summed over dimensions. |
 
-The ant colony keeps every rule except `min_fill` and `coverage` by
+The ant colony keeps every rule except `min_fill`, `coverage` and `lateness` by
 construction (on problems with handling capacity, a limit is rarely exceeded,
 see the known limits in the [user guide](guide.md#known-limits)). The weights of
 those rules still matter: they enter the objective value of every plan,
@@ -121,8 +122,10 @@ groups are mandatory by default: a group is `mandatory: true` unless you write
 `mandatory: false`.
 
 - **Dispatches.** Each dispatch costs `fixed + per_km × route km + per_hour ×
-  hours`, with the costs of its owned group or spot offer. Hours run from the
-  start of loading at the origin to the end of unloading at the last stop. A
+  hours + per_unit × quantity carried`, with the costs of its owned group or
+  spot offer. Hours run from the start of loading at the origin to the end of
+  unloading at the last stop. `per_unit` is a price per quantity dimension;
+  the quantities a dispatch carries are priced whatever the distance. A
   dispatch of a mandatory owned group does not pay `fixed`; that is paid in the
   next part. A dispatch of a group with `mandatory: false` pays `fixed` like a
   spot dispatch.
@@ -134,6 +137,24 @@ groups are mandatory by default: a group is `mandatory: true` unless you write
   due time of its demand. It costs `rules.service.penalty × primary quantity
   × started hours late` (`Evaluation.service_cost`).
 
+Lateness is also a rule. `primary quantity × started hours late` is the amount
+of `lateness`, and `penalties` weighs it like every other rule, on top of the
+cost above:
+
+- `lateness: 0` leaves lateness a cost: the plan pays `rules.service.penalty`
+  and nothing more. This is what a 0.1 or 0.2 document means, where lateness
+  was not a rule yet.
+- A weight adds to that cost, per unit and started hour.
+- `lateness: hard` makes the due times limits: the solvers plan to meet them,
+  and a plan that does not is not feasible.
+- Without its own line, `other` applies, as for every rule.
+
+Unloading late and not carrying at all are weighed against each other. A load
+that would be two hours late counts twice its quantity under `lateness` and
+once under `coverage`, so with equal weights, or with both rules hard, the
+solvers leave it behind. Give `lateness` a smaller weight than `coverage` when
+a late delivery is better than none.
+
 ### A worked example
 
 Three centers, one owned truck on the line A to B and spot trucks for
@@ -141,7 +162,7 @@ everything else. Demand AB (800 desi) is ready at 08:00; demand AC (500 desi)
 is ready at 06:00 and due at 08:00, so it cannot arrive in time.
 
 ```yaml title="examples/objectives/worked_cost.yaml"
-schema: pirilib/linehaul@0.2
+schema: pirilib/linehaul@0.3
 name: Worked cost example
 
 calendar: {start: 2026-06-01, end: 2026-06-01}
@@ -180,6 +201,7 @@ objective:
   cost: 1
   penalties:
     coverage: 1000
+    lateness: 0
     other: 100000
 ```
 
@@ -195,7 +217,10 @@ plan sends the owned truck to B and a spot truck to C:
 | Lateness of AC | 0.5 × 500 desi × 1 started hour (unloaded 48 minutes late) | 250 |
 | Total cost | | 1626 |
 
-No rule is broken, so the objective is `1 × 1626 = 1626`. The same numbers
+The load to C is unloaded late, which breaks the `lateness` rule by 500 desi ×
+1 hour. The rule has weight 0 here, so lateness is paid for through
+`rules.service.penalty` alone and the objective is `1 × 1626 = 1626`. The same
+numbers
 from Python, where `source` is the position of the owned group or spot offer
 in the document (here the first of each; see
 [Plans and their evaluation](guide.md#2-plans-and-their-evaluation)):
@@ -216,7 +241,7 @@ assert [round(value, 2) for value in evaluation.dispatch_cost] == [200.0, 776.0]
 assert evaluation.owned_fixed_cost == 400.0
 assert evaluation.service_cost == 250.0
 assert round(evaluation.total_cost, 2) == 1626.0
-assert evaluation.feasible
+assert evaluation.violated() == {"lateness": 500.0}
 assert round(goal(evaluation), 2) == 1626.0
 ```
 
@@ -237,7 +262,7 @@ The solver finds the first plan:
 result = pirilib.solve(instance, goal, seed=1)
 
 assert round(result.objective, 2) == 1626.0
-assert result.evaluation.feasible
+assert result.evaluation.violated() == {"lateness": 500.0}
 ```
 
 ## Choosing penalty weights
@@ -245,7 +270,8 @@ assert result.evaluation.feasible
 **Compare with your costs.** A penalty is money per unit of violation. Look at
 what a single dispatch costs in your document, and at the unit of the rule.
 
-- For a rule that must hold, make one unit of violation more expensive than
+- For a rule that must hold, write `hard` (see below). To choose the number
+  yourself, make one unit of violation more expensive than
   anything breaking it could save: 10 to 1000 times the most expensive
   dispatch for count rules. For quantity rules, a weight per unit above the
   most expensive dispatch makes even one desi count. The generated documents
@@ -259,6 +285,35 @@ what a single dispatch costs in your document, and at the unit of the rule.
   per desi"; above that, the solver leaves it behind. A `min_fill` penalty of
   1000 per missing desi says an under-filled truck is acceptable when the
   alternative is worse.
+
+**Hard rules.** Write `hard` instead of a weight for a rule that must hold:
+
+```yaml
+objective:
+  cost: 1
+  penalties:
+    coverage: 1000
+    min_fill: 50
+    other: hard
+```
+
+- The solvers treat a hard rule as a limit. It gets a weight of 1e9 per unit of
+  violation, or 100 times the largest weight of the section when that is more,
+  so no saving is worth breaking it. You do not have to find a large enough
+  number yourself.
+- `evaluation.feasible` then means that no hard rule is broken. The rules with a
+  weight are trade-offs you priced: a plan that leaves 40 desi behind for 1000
+  each is feasible, and `evaluation.violated()` still lists what it broke.
+  `evaluation.broken()` lists the broken hard rules.
+- When the hard rules cannot all hold, the solver does not stop. It returns the
+  plan that breaks them least; the plan is not feasible, and `pirilib solve`
+  writes it, names the broken rules and exits with status 3.
+- When no rule is hard, every rule counts for `feasible`, as before.
+- A hard rule is as hard as the solver can make it. The ant colony and the exact
+  solver keep most rules by construction (see
+  [the table in the guide](guide.md#which-solver-keeps-which-rule)); `handling`
+  and `vehicle_limit` are shared by all dispatches at a center, and a plan can
+  still exceed them. It is then reported as not feasible.
 
 **`other`.** `other` gives one weight to every built-in rule you did not name.
 It is the usual way to treat the rules that should never break alike, while
@@ -303,14 +358,20 @@ worked example, and `goal` the objective of `worked_cost.yaml`:
 from pirilib import objective as obj
 from pirilib.constraints import CATALOG
 
-others = [name for name in CATALOG if name != "coverage"]
-by_hand = obj.total_cost() + 1000 * obj.violation("coverage") + 100000 * obj.violations(others)
+others = [name for name in CATALOG if name not in ("coverage", "lateness")]
+by_hand = (
+    obj.total_cost()
+    + 1000 * obj.violation("coverage")
+    + 0 * obj.violation("lateness")
+    + 100000 * obj.violations(others)
+)
 
 assert by_hand(evaluation) == goal(evaluation)
 assert obj.linear_form(by_hand) == obj.linear_form(goal)
 assert by_hand.breakdown(evaluation) == {
     "total_cost": 600.0,
     "violation[coverage]": 500000.0,
+    "violation[lateness]": 0.0,
     "violations": 0.0,
 }
 ```
@@ -503,14 +564,14 @@ A rule without a penalty, when `other` is missing:
 
 ```text
 problem.yaml: invalid problem specification
-- objective.penalties: no penalty for route, load_route, ready, deferral, ban, owned_line, owned_availability, spot_availability, handling, vehicle_limit, capacity, min_fill, stopover, max_stops, stretch, forward_only, split, overdelivery; every rule needs a weight: add them, or 'other' for every rule not named
+- objective.penalties: no penalty for route, load_route, ready, deferral, lateness, ban, owned_line, owned_availability, spot_availability, handling, vehicle_limit, capacity, min_fill, stopover, max_stops, stretch, forward_only, split, overdelivery; every rule needs a weight: add them, or 'other' for every rule not named
 ```
 
 A misspelt rule name:
 
 ```text
 problem.yaml: invalid problem specification
-- objective.penalties.coverge: unknown rule 'coverge'; known: route, load_route, ready, deferral, ban, owned_line, owned_availability, spot_availability, handling, vehicle_limit, capacity, min_fill, stopover, max_stops, stretch, forward_only, split, coverage, overdelivery, other
+- objective.penalties.coverge: unknown rule 'coverge'; known: route, load_route, ready, deferral, lateness, ban, owned_line, owned_availability, spot_availability, handling, vehicle_limit, capacity, min_fill, stopover, max_stops, stretch, forward_only, split, coverage, overdelivery, other
 ```
 
 Invalid weights and fields, all reported at once:
@@ -555,7 +616,7 @@ misspelt name in `obj.violation` fails when the first plan is evaluated, and a
 term of an unknown kind fails before solving:
 
 ```text
-KeyError: "no constraint named 'capacty'; known: route, load_route, ready, deferral, ban, owned_line, owned_availability, spot_availability, handling, vehicle_limit, capacity, min_fill, stopover, max_stops, stretch, forward_only, split, coverage, overdelivery"
+KeyError: "no constraint named 'capacty'; known: route, load_route, ready, deferral, lateness, ban, owned_line, owned_availability, spot_availability, handling, vehicle_limit, capacity, min_fill, stopover, max_stops, stretch, forward_only, split, coverage, overdelivery"
 ValueError: the objective uses unknown features ['dispatches[rented]']
 ```
 
@@ -569,7 +630,7 @@ holds small synthetic documents that differ mainly in their objective:
 | `every_load.yaml` | `coverage` 10,000,000, `min_fill` 1000 | every load goes; minimum fill broken by 80 desi |
 | `hard_min_fill.yaml` | `coverage` 1000, `min_fill` 10,000,000 | minimum fill holds; 40 desi stay behind |
 | `distance_aware.yaml` | `distance_km` 20 | two direct trips (220 km) instead of one detour (300 km) |
-| `worked_cost.yaml` | `cost` 1 | the worked example above |
+| `worked_cost.yaml` | `cost` 1, `lateness` 0 | the worked example above: one load is an hour late and pays for it |
 
 In `distance_aware.yaml`, one van can serve B and C on a 300 km route for 1300,
 or two vans can go direct, 220 km in all, for 2220. Without the distance weight

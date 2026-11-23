@@ -94,6 +94,26 @@ def test_solve_with_settings(
     assert "unknown ACO settings ['bees']" in err
 
 
+def test_solve_takes_a_time_limit(
+    capsys: pytest.CaptureFixture[str], example_path: Path, tmp_path: Path
+) -> None:
+    numbers = tmp_path / "summary.json"
+
+    code, _, _ = run(
+        capsys, "solve", str(example_path), "--time-limit", "0.000001", "--summary", str(numbers)
+    )
+
+    assert code == 0
+
+
+def test_solve_refuses_a_time_limit_of_zero(
+    capsys: pytest.CaptureFixture[str], example_path: Path
+) -> None:
+    code, _, err = run(capsys, "solve", str(example_path), "--time-limit", "0")
+
+    assert (code, "time_limit must be above 0" in err) == (1, True)
+
+
 def test_tune(capsys: pytest.CaptureFixture[str], example_path: Path, tmp_path: Path) -> None:
     base, output = tmp_path / "base.json", tmp_path / "tuned.json"
     base.write_text(json.dumps({"ants": 4, "iterations": 2, "patience": 1}), encoding="utf-8")
@@ -163,6 +183,41 @@ def rewrite(path: Path, change: Callable[[dict[str, Any]], None]) -> Path:
     return path
 
 
+def one_kamyonet_a_day(document: dict[str, Any]) -> None:
+    """Limit the ``kamyonet`` spot offer of the example to one vehicle a day."""
+    document["fleet"]["spot"][2]["available"] = 1
+
+
+def test_solve_warns_when_a_daily_spot_limit_is_used_up(
+    capsys: pytest.CaptureFixture[str], example_copy: Path
+) -> None:
+    problem = rewrite(example_copy, one_kamyonet_a_day)
+
+    _, _, err = run(capsys, "solve", str(problem), "--seed", "1")
+
+    assert "warning: 2 daily spot limit(s) were used up" in err
+
+
+def test_solve_does_not_warn_without_a_spot_limit(
+    capsys: pytest.CaptureFixture[str], example_path: Path
+) -> None:
+    _, _, err = run(capsys, "solve", str(example_path), "--seed", "1")
+
+    assert err == ""
+
+
+def test_the_summary_holds_the_stats_of_the_solver(
+    capsys: pytest.CaptureFixture[str], example_copy: Path, tmp_path: Path
+) -> None:
+    problem = rewrite(example_copy, one_kamyonet_a_day)
+    numbers = tmp_path / "summary.json"
+
+    run(capsys, "solve", str(problem), "--seed", "1", "--summary", str(numbers))
+
+    stats = json.loads(numbers.read_text(encoding="utf-8"))["stats"]
+    assert (stats["mode"], stats["spot_limits_reached"]) == ("linear", 2)
+
+
 def test_a_problem_without_objective_is_still_valid(
     capsys: pytest.CaptureFixture[str], example_copy: Path
 ) -> None:
@@ -220,7 +275,7 @@ def test_schema(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     path = tmp_path / "schema.json"
     code, _, _ = run(capsys, "schema", str(path))
     assert code == 0
-    assert json.loads(path.read_text(encoding="utf-8"))["title"].startswith("pirilib/linehaul@0.2")
+    assert json.loads(path.read_text(encoding="utf-8"))["title"].startswith("pirilib/linehaul@0.3")
 
 
 def test_usage_errors(capsys: pytest.CaptureFixture[str]) -> None:

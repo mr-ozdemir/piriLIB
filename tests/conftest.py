@@ -14,7 +14,7 @@ from pirilib.spec import LineHaulInstance, parse_spec
 EXAMPLE = Path(__file__).parents[1] / "examples" / "linehaul_mini" / "problem.yaml"
 
 _DOCUMENT: dict[str, Any] = {
-    "schema": "pirilib/linehaul@0.1",
+    "schema": "pirilib/linehaul@0.3",
     "calendar": {"start": "2026-01-05", "end": "2026-01-06"},
     "centers": [
         {"id": "A", "lat": 0.0, "lon": 0.0},
@@ -186,7 +186,7 @@ def random_document(seed: int) -> dict[str, Any]:
     if rng.random() < 0.3:
         stopover["max_stops"] = int(rng.integers(1, 4))
     return {
-        "schema": "pirilib/linehaul@0.1",
+        "schema": "pirilib/linehaul@0.3",
         "calendar": {"start": "2026-06-01", "end": f"2026-06-0{days}"},
         "centers": centers,
         "matrix": {"source": "haversine", "factor": 1.2},

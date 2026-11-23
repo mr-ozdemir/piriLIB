@@ -29,6 +29,7 @@ from numpy.typing import NDArray
 from pirilib.evaluation import TOLERANCE
 from pirilib.plan import SPOT
 from pirilib.solvers._colony import Shared
+from pirilib.solvers._routing import route_gap
 from pirilib.solvers._sequential import RouteList, SequentialSolver
 from pirilib.solvers.decompose import Routes, Subproblem
 
@@ -47,10 +48,11 @@ class DirectPlanner:
         self.shared = shared
         self.available = available
 
-    def cost(self, option: int, node: int) -> float:
-        """Dispatch cost of a direct trip of ``option`` to ``node``."""
+    def cost(self, option: int, node: int, load: NDArray[np.float64]) -> float:
+        """Dispatch cost of a direct trip of ``option`` to ``node`` carrying ``load``."""
         problem = self.problem
-        return float(problem.fixed[option] + problem.per_km[option] * problem.origin_km[node])
+        trip = float(problem.fixed[option] + problem.per_km[option] * problem.origin_km[node])
+        return trip + float(problem.per_unit[option] @ load)
 
     def options(self, node: int) -> list[int]:
         """Options with vehicles left that may go straight to ``node``."""
@@ -72,10 +74,9 @@ class DirectPlanner:
         return float(min(1.0, float(np.min(capacity[positive] / total[positive]))))
 
     def reaches_fill(self, option: int, load: NDArray[np.float64]) -> bool:
-        problem, shared = self.problem, self.shared
-        capacity = float(problem.capacity[option, shared.primary])
-        needed = float(shared.min_fill[problem.kind[option]]) * capacity
-        return float(load[shared.primary]) >= needed - TOLERANCE * capacity
+        problem = self.problem
+        kind = int(problem.kind[option])
+        return route_gap(self.shared, kind, problem.capacity[option], load)[0] == 0.0
 
     def cheapest_fitting(self, options: Sequence[int], node: int, load: NDArray[np.float64]) -> int:
         """The cheapest option that fits ``load``, preferring one that reaches its minimum fill.
@@ -87,7 +88,7 @@ class DirectPlanner:
             return -1
         filled = [option for option in fitting if self.reaches_fill(option, load)]
         pool = filled or fitting
-        return min(pool, key=lambda option: (self.cost(option, node), option))
+        return min(pool, key=lambda option: (self.cost(option, node, load), option))
 
     def fits(self, option: int, load: NDArray[np.float64]) -> bool:
         capacity = self.problem.capacity[option]
@@ -107,7 +108,13 @@ class DirectPlanner:
         if not options or remaining <= _EPSILON:
             return remaining
         shares = {option: self.share(option, total) for option in options}
-        best = min(options, key=lambda option: (self.cost(option, node) / shares[option], option))
+        best = min(
+            options,
+            key=lambda option: (
+                self.cost(option, node, total * shares[option]) / shares[option],
+                option,
+            ),
+        )
         carried = min(shares[best], remaining)
         self.take(best)
         routes.add(best, (node,), (total * carried,))
@@ -154,7 +161,8 @@ class DirectPlanner:
             opened = min(
                 options,
                 key=lambda option: (
-                    self.cost(option, node) / float(problem.capacity[option, primary]),
+                    self.cost(option, node, problem.capacity[option])
+                    / float(problem.capacity[option, primary]),
                     option,
                 ),
             )

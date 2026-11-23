@@ -36,7 +36,7 @@ from pirilib.evaluation import Evaluation
 from pirilib.plan import SPOT, Dispatch, Kind, Load, Plan
 from pirilib.spec._format import bullets
 from pirilib.spec.instance import LineHaulInstance
-from pirilib.spec.tables import LIST_SEPARATOR
+from pirilib.spec.tables import LIST_SEPARATOR, parse_number
 
 __all__ = [
     "columns",
@@ -329,13 +329,10 @@ def _read_row(
             problems.append(f"unknown demand '{cell['demand']}'")
         quantities = []
         for name in instance.dimensions:
-            text = cell.get(name, "").replace(" ", "")
-            if decimal == ",":
-                text = text.replace(".", "").replace(",", ".")
             try:
-                quantities.append(float(text))
-            except ValueError:
-                problems.append(f"'{name}': '{cell.get(name, '')}' is not a number")
+                quantities.append(parse_number(cell.get(name, ""), decimal))
+            except ValueError as error:
+                problems.append(f"'{name}': {error}")
         if demand is not None and len(quantities) == len(instance.dimensions):
             load = Load(demand, tuple(quantities))
     if problems:
@@ -365,4 +362,5 @@ def summary(evaluation: Evaluation) -> dict[str, Any]:
         "unserved": float(evaluation.unserved.sum()),
         "feasible": evaluation.feasible,
         "violations": evaluation.violated(),
+        "hard_violations": evaluation.broken() if evaluation.hard else {},
     }

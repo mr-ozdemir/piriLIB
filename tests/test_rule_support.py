@@ -79,6 +79,11 @@ def owned_without_stopovers(document: dict[str, Any]) -> None:
         group["stopovers"] = False
 
 
+def spot_without_stopovers(document: dict[str, Any]) -> None:
+    for offer in document["fleet"]["spot"]:
+        offer["stopovers"] = False
+
+
 def no_split(document: dict[str, Any]) -> None:
     document["rules"]["split_demand"] = False
     for row in document["demand"]:
@@ -95,6 +100,39 @@ def two_dimensions(document: dict[str, Any]) -> None:
         vehicle["capacity"]["kg"] = vehicle["capacity"]["desi"] / 4
     for row in document["demand"]:
         row["quantity"]["kg"] = row["quantity"]["desi"] / 3
+
+
+def min_fill_in_both_dimensions(document: dict[str, Any]) -> None:
+    """A vehicle is filled at 40 % of its desi or half of its kg; missing it costs 50 a unit."""
+    two_dimensions(document)
+    document["rules"]["min_fill"] = {
+        "spot": {"desi": 0.4, "kg": 0.5},
+        "owned": {"desi": 0.3, "kg": 0.3},
+    }
+    document["objective"]["penalties"]["min_fill"] = 50.0
+
+
+def min_fill_in_the_second_dimension(document: dict[str, Any]) -> None:
+    """Only the weight of a spot vehicle counts; the primary dimension has no minimum."""
+    two_dimensions(document)
+    document["rules"]["min_fill"] = {"spot": {"kg": 0.4}}
+    document["objective"]["penalties"]["min_fill"] = 50.0
+
+
+def costs_per_unit(document: dict[str, Any]) -> None:
+    """The larger the spot vehicle, the cheaper the unit; owned vehicles charge least."""
+    prices = {"tir": 0.2, "kamyon": 0.5, "kamyonet": 1.0}
+    for offer in document["fleet"]["spot"]:
+        offer["cost"]["per_unit"] = {"desi": prices[offer["type"]]}
+    for group in document["fleet"]["owned"]:
+        group["cost"]["per_unit"] = {"desi": 0.1}
+
+
+def costs_per_unit_in_both_dimensions(document: dict[str, Any]) -> None:
+    two_dimensions(document)
+    costs_per_unit(document)
+    for offer in document["fleet"]["spot"]:
+        offer["cost"]["per_unit"]["kg"] = 1.5
 
 
 def ready_times(document: dict[str, Any]) -> None:
@@ -135,6 +173,28 @@ def handling_time(document: dict[str, Any]) -> None:
     document["rules"]["handling"] = {"minutes_per_unit": 0.02}
 
 
+def price_tiers(document: dict[str, Any]) -> None:
+    """Every spot offer becomes two: two vehicles a day at its price, then dearer ones."""
+    tiers: list[dict[str, Any]] = []
+    for offer in document["fleet"]["spot"]:
+        dearer = offer["cost"] | {"fixed": offer["cost"]["fixed"] * 1.5}
+        tiers.append(offer | {"name": f"{offer['type']} contract", "available": 2})
+        tiers.append(offer | {"name": f"{offer['type']} market", "cost": dearer})
+    document["fleet"]["spot"] = tiers
+
+
+def line_durations(document: dict[str, Any]) -> None:
+    """Half of the lines get a travel time of their own, longer for the largest type."""
+    names = [center["id"] for center in document["centers"]]
+    rows: list[dict[str, Any]] = []
+    for first, origin in enumerate(names):
+        for second in range(first + 1, len(names)):
+            line = {"origin": origin, "destination": names[second]}
+            rows.append(line | {"hours": 2.0 + (first + second) % 4})
+            rows.append(line | {"hours": 3.5 + (first + second) % 4, "vehicle_type": "tir"})
+    document["matrix"]["durations"] = rows
+
+
 SCENARIOS: dict[str, tuple[Change, ...]] = {
     "generated": (),
     "plain": (no_min_fill,),
@@ -143,20 +203,31 @@ SCENARIOS: dict[str, tuple[Change, ...]] = {
     "two-stops": (no_min_fill, two_stops),
     "any-direction": (no_min_fill, any_direction),
     "owned-without-stopovers": (no_min_fill, owned_without_stopovers),
+    "spot-without-stopovers": (no_min_fill, spot_without_stopovers),
     "no-split": (no_min_fill, no_split),
     "spot-limits": (no_min_fill, spot_limits),
+    "price-tiers": (no_min_fill, price_tiers),
+    "price-tiers-with-min-fill": (high_min_fill, price_tiers),
     "two-dimensions": (no_min_fill, two_dimensions),
+    "min-fill-both-dimensions": (min_fill_in_both_dimensions,),
+    "min-fill-second-dimension": (min_fill_in_the_second_dimension,),
+    "costs-per-unit": (no_min_fill, costs_per_unit),
+    "costs-per-unit-with-min-fill": (high_min_fill, costs_per_unit),
+    "costs-per-unit-both-dimensions": (no_min_fill, costs_per_unit_in_both_dimensions),
     "ready-times": (no_min_fill, ready_times),
     "deferral": (no_min_fill, spot_limits, deferral),
     "handling-capacity": (no_min_fill, handling_capacity),
     "vehicle-limits": (no_min_fill, vehicle_limits),
     "late-and-tight": (late_and_tight,),
     "handling-time": (handling_time,),
+    "durations": (late_and_tight, line_durations),
+    "durations-handling-time": (handling_time, line_durations),
 }
 """Problems that put the rules to work: the changes each makes to the generated document."""
 
 SETTING = {
     "deferral": "deferral",
+    "lateness": "late-and-tight",
     "handling": "handling-capacity",
     "vehicle_limit": "vehicle-limits",
     "min_fill": "generated",
@@ -177,7 +248,7 @@ SKIPS = {
     "ortools": pytest.mark.skipif(not HAS_ORTOOLS, reason="ortools is not installed"),
 }
 
-EXACT_REFUSES = {"no-split", "handling-time"}
+EXACT_REFUSES = {"no-split", "handling-time", "durations-handling-time"}
 """Scenarios the exact solver does not plan: unsplittable demand, and handling that takes time."""
 
 EVERY_RUN = [
@@ -388,6 +459,41 @@ def test_the_score_of_a_solver_is_the_objective_of_its_plan(name: str, scenario:
 
     assert isinstance(result, SolveResult)
     assert result.stats["score"] == pytest.approx(result.objective, rel=SCORE_TOLERANCE)
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "high-min-fill",
+        "min-fill-both-dimensions",
+        "min-fill-second-dimension",
+        "costs-per-unit",
+        "costs-per-unit-with-min-fill",
+        "costs-per-unit-both-dimensions",
+    ],
+)
+def test_the_colony_does_not_beat_the_exact_solver(scenario: str) -> None:
+    """Without shared limits the subproblems are independent and the exact plan is optimal.
+
+    A colony below it would mean that the exact model charges a minimum fill or a
+    cost per unit that the evaluator does not.
+    """
+    exact, colony = outcome(SOLVERS["exact"], scenario), outcome(SOLVERS["aco"], scenario)
+
+    assert isinstance(exact, SolveResult)
+    assert isinstance(colony, SolveResult)
+    assert exact.objective <= colony.objective * (1 + SCORE_TOLERANCE)
+
+
+@pytest.mark.parametrize(
+    "name", [pytest.param(name, marks=SKIPS[name]) for name in ("pyvrp", "ortools")]
+)
+def test_the_adapters_refuse_costs_per_unit(name: str) -> None:
+    """A cost that depends on what a vehicle carries has no place in their routing model."""
+    instance, goal = problem("costs-per-unit")
+
+    with pytest.raises(ValueError, match=r"costs per unit carried \(cost\.per_unit\)"):
+        SOLVERS[name].solve(instance, goal, seed=0)
 
 
 def test_the_guide_shows_the_record() -> None:

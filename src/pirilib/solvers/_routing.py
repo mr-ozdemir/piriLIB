@@ -4,6 +4,8 @@ They mirror :func:`pirilib.solvers._colony.scores` and the evaluator: a route is
 an option and its stops in visiting order; its value is the part of a linear
 objective that the route contributes. On scheduled instances the caller times
 the route (see :mod:`pirilib.solvers._timing`) and passes its hours and lateness.
+Lateness counts twice in an objective: as the cost ``rules.service.penalty`` under
+``service``, and as the amount of the ``lateness`` rule.
 """
 
 import itertools
@@ -56,6 +58,25 @@ def fits(problem: Subproblem, option: int, load: NDArray[np.float64]) -> bool:
     return bool(np.all(load <= capacity + TOLERANCE * capacity))
 
 
+def route_gap(
+    shared: Shared, kind: int, capacity: NDArray[np.float64], load: NDArray[np.float64]
+) -> tuple[float, int]:
+    """The load one vehicle misses to its minimum fill, and the dimension it is measured in.
+
+    ``(0.0, -1)`` when the vehicle reaches the minimum of any dimension or has none;
+    otherwise the smallest of its gaps, as :func:`pirilib.evaluation.fill_shortfall`.
+    """
+    least, nearest = 0.0, -1
+    for column, share in shared.thresholds[kind]:
+        room = float(capacity[column])
+        gap = share * room - float(load[column])
+        if gap <= TOLERANCE * room:
+            return 0.0, -1
+        if nearest < 0 or gap < least:
+            least, nearest = gap, column
+    return least, nearest
+
+
 def route_value(
     problem: Subproblem,
     coefficients: Mapping[str, float],
@@ -65,27 +86,66 @@ def route_value(
     load: NDArray[np.float64],
     *,
     hours: float = 0.0,
-    service: float = 0.0,
+    late: float = 0.0,
 ) -> float:
-    """The route's share of the linear objective; ``service`` is its lateness penalty."""
+    """The route's share of the linear objective.
+
+    ``late`` is the primary quantity of its loads times the started hours they are
+    late: it costs ``rules.service.penalty`` under ``service`` and is the amount of
+    the ``lateness`` rule.
+    """
     kind = "owned" if problem.kind[option] == OWNED else "spot"
     cost = float(problem.fixed[option] + problem.per_km[option] * km)
     if hours:
         cost += float(problem.per_hour[option]) * hours
+    if problem.unit_priced:
+        cost += float(problem.per_unit[option] @ load)
     capacity = float(problem.capacity[option, shared.primary])
     carried = float(load[shared.primary])
-    shortfall = float(shared.min_fill[problem.kind[option]]) * capacity - carried
+    shortfall = route_gap(shared, int(problem.kind[option]), problem.capacity[option], load)[0]
     value = (
         coefficients.get(f"cost[{kind}]", 0.0) * cost
         + coefficients.get(f"km[{kind}]", 0.0) * km
         + coefficients.get(f"dispatches[{kind}]", 0.0)
         + coefficients.get(f"unused[{kind}]", 0.0) * max(capacity - carried, 0.0)
     )
-    if shortfall > TOLERANCE * capacity:
+    if shortfall:
         value += coefficients.get("violation[min_fill]", 0.0) * shortfall
-    if service:
-        value += coefficients.get("service", 0.0) * service
+    if late:
+        value += coefficients.get("service", 0.0) * (shared.penalty * late)
+        value += coefficients.get("violation[lateness]", 0.0) * late
     return value
+
+
+def leave_weights(coefficients: Mapping[str, float], shared: Shared) -> NDArray[np.float64]:
+    """(D,) what the objective charges per unit of demand that stays uncarried."""
+    both = coefficients.get("unserved", 0.0) + coefficients.get("violation[coverage]", 0.0)
+    return np.array(
+        [both + coefficients.get(f"unserved[{name}]", 0.0) for name in shared.dimensions]
+    )
+
+
+def defer_excess(
+    problem: Subproblem, coefficients: Mapping[str, float], shared: Shared
+) -> NDArray[np.float64] | None:
+    """(k, I): by how much carrying an item tomorrow is estimated to cost more than leaving it.
+
+    Demand that may wait is valued by the estimate of carrying it the next day
+    (:attr:`~pirilib.solvers.decompose.Subproblem.defer_cost` and
+    ``defer_late``). When leaving the item uncarried scores better than that,
+    the next day will leave it, so waiting is worth no more than leaving: the
+    excess is taken off the estimate. 0 for final items; None when no item has an
+    excess.
+    """
+    if not problem.deferrable:
+        return None
+    estimate = problem.item_quantity[:, :, shared.primary] * (
+        coefficients.get("service", 0.0) * problem.defer_cost
+        + coefficients.get("violation[lateness]", 0.0) * problem.defer_late
+    )
+    leave = problem.item_quantity @ leave_weights(coefficients, shared)
+    excess = np.where(problem.item_final, 0.0, np.clip(estimate - leave, 0.0, None))
+    return np.asarray(excess, dtype=np.float64) if excess.any() else None
 
 
 def unserved_value(
@@ -99,7 +159,9 @@ def unserved_value(
 
     Items that may wait for the next day (whole items: those in ``item_left``)
     cost their :attr:`~pirilib.solvers.decompose.Subproblem.defer_cost` under
-    ``service`` instead of counting as unserved.
+    ``service``, and their estimated lateness under the ``lateness`` rule, instead
+    of counting as unserved, but never more than leaving them uncarried would
+    (see :func:`defer_excess`).
     """
     value = 0.0
     if problem.deferrable:
@@ -115,6 +177,13 @@ def unserved_value(
             waiting = quantity * (waits & item_left)[:, :, None]
         deferred = float(np.sum(waiting[:, :, primary] * problem.defer_cost))
         value += coefficients.get("service", 0.0) * deferred
+        weight = coefficients.get("violation[lateness]", 0.0)
+        if weight:
+            value += weight * float(np.sum(waiting[:, :, primary] * problem.defer_late))
+        excess = defer_excess(problem, coefficients, shared)
+        if excess is not None:
+            whole = np.where(quantity[:, :, primary] > 0, quantity[:, :, primary], 1.0)
+            value -= float(np.sum(excess * waiting[:, :, primary] / whole))
         remaining = np.clip(remaining - waiting.sum(axis=1), 0.0, None)
     value += coefficients.get("unserved", 0.0) * float(remaining.sum())
     for column, name in enumerate(shared.dimensions):

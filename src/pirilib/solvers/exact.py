@@ -37,13 +37,24 @@ import numpy as np
 from numpy.typing import NDArray
 
 from pirilib.constraints import Constraint
-from pirilib.evaluation import TOLERANCE, evaluate
-from pirilib.objective import Objective, linear_form
+from pirilib.evaluation import evaluate
+from pirilib.objective import Objective, hard_rules, linear_form
 from pirilib.plan import OWNED, SPOT
 from pirilib.solvers._colony import Batch, Colony, Shared, scores
-from pirilib.solvers._routing import route_km, route_ok, route_value
+from pirilib.solvers._routing import (
+    defer_excess,
+    route_gap,
+    route_km,
+    route_ok,
+    route_value,
+)
 from pirilib.solvers._timing import late_hours, route_timing, timeline
-from pirilib.solvers.base import SolveResult, linear_coefficients, require_objective
+from pirilib.solvers.base import (
+    SolveResult,
+    limit_stats,
+    linear_coefficients,
+    require_objective,
+)
 from pirilib.solvers.decompose import (
     MINUTES_PER_DAY,
     UNBOUNDED,
@@ -177,18 +188,19 @@ class ExactSolver:
             else:
                 score += result.value
         plan = builder.build()
-        evaluation = evaluate(instance, plan)
+        evaluation = evaluate(instance, plan, hard=hard_rules(goal))
+        stats: dict[str, float | int | str] = {
+            "mode": "exact",
+            "optimal": str(optimal),
+            "columns": columns,
+            "score": score + coefficients.get("owned_fixed", 0.0) * evaluation.owned_fixed_cost,
+        }
         return SolveResult(
             plan=plan,
             evaluation=evaluation,
             objective=float(goal(evaluation)),
             seconds=time.perf_counter() - started,
-            stats={
-                "mode": "exact",
-                "optimal": str(optimal),
-                "columns": columns,
-                "score": score + coefficients.get("owned_fixed", 0.0) * evaluation.owned_fixed_cost,
-            },
+            stats=stats | limit_stats(instance, plan),
         )
 
 
@@ -239,8 +251,8 @@ class ColumnTimes:
 
     Attributes:
         hours: (routes,) from the start of loading to the end of the last unloading
-        late: Per (route, node), the lateness penalty of the route carrying all of
-            the node's demand
+        late: Per (route, node), the primary quantity times the started hours late
+            of the route carrying all of the node's demand
         start: (routes,) day loading starts at the origin
         arrival: Per (route, node), day the route reaches the stop
     """
@@ -283,7 +295,7 @@ class ColumnTimes:
                 arrival[(r, stop)] = day_of(finish)
                 if stop in carried:
                     overdue = late_hours(finish - problem.item_due[stop])
-                    late[(r, stop)] = shared.penalty * float(
+                    late[(r, stop)] = float(
                         np.sum(problem.item_quantity[stop, :, primary] * overdue)
                     )
         return cls(hours, late, start_day, arrival)
@@ -368,11 +380,22 @@ def solve_subproblem(
 
     On scheduled instances routes are timed (handling must take no time), and
     handling and vehicles beyond ``room`` cost their violation weights.
+
+    With a minimum fill in several dimensions, every candidate route is a column
+    once per dimension: the vehicles of a column are judged by that dimension
+    alone, and the optimum puts each vehicle in the column where it misses least.
     """
     from scipy.optimize import Bounds, LinearConstraint, linprog, milp
     from scipy.sparse import coo_array
 
-    routes = candidate_routes(problem, shared, max_nodes)
+    fill_weight = coefficients.get("violation[min_fill]", 0.0)
+    routes: list[tuple[int, tuple[int, ...]]] = []
+    judged: list[tuple[int, float] | None] = []
+    for option, stops in candidate_routes(problem, shared, max_nodes):
+        minimums = shared.thresholds[int(problem.kind[option])] if fill_weight else ()
+        for minimum in minimums or (None,):
+            routes.append((option, stops))
+            judged.append(minimum)
     demand = problem.demand
     loaded = [node for node in range(problem.size) if demand[node].max() > 0]
     dimensions = demand.shape[1]
@@ -419,15 +442,25 @@ def solve_subproblem(
         upper[r] = bound
     kind_of = ["owned" if problem.kind[option] == OWNED else "spot" for option, _ in routes]
     service = coefficients.get("service", 0.0)
+    lateness = coefficients.get("violation[lateness]", 0.0)
     for index, (r, node) in enumerate(shares):
+        late = times.late.get((r, node), 0.0)
         cost[f_base + index] = -coefficients.get(f"unused[{kind_of[r]}]", 0.0) * demand[
             node, primary
-        ] + service * times.late.get((r, node), 0.0)
+        ] + service * (shared.penalty * late)
+        if lateness:
+            cost[f_base + index] += lateness * late
+        if problem.unit_priced:
+            cost[f_base + index] += coefficients.get(f"cost[{kind_of[r]}]", 0.0) * float(
+                problem.per_unit[routes[r][0]] @ demand[node]
+            )
+    excess = defer_excess(problem, coefficients, shared)
     for position, node in enumerate(loaded):
         waits = ~problem.item_final[node]
         quantity = demand[node] - problem.item_quantity[node][waits].sum(axis=0)
         waiting = problem.item_quantity[node, waits, primary]
         deferred = float(np.sum(waiting * problem.defer_cost[node, waits]))
+        overdue = float(np.sum(waiting * problem.defer_late[node, waits]))
         cost[u_base + position] = (
             coefficients.get("unserved", 0.0) * quantity.sum()
             + sum(
@@ -436,9 +469,11 @@ def solve_subproblem(
             )
             + coefficients.get("violation[coverage]", 0.0) * quantity.sum()
             + service * deferred
+            + lateness * overdue
+            - (0.0 if excess is None else float(excess[node].sum()))
         )
         upper[u_base + position] = 1.0
-    cost[s_base:h_base] = coefficients.get("violation[min_fill]", 0.0)
+    cost[s_base:h_base] = fill_weight
     cost[h_base:v_base] = coefficients.get("violation[handling]", 0.0)
     cost[v_base:] = coefficients.get("violation[vehicle_limit]", 0.0)
 
@@ -455,10 +490,11 @@ def solve_subproblem(
         for column in range(dimensions):
             entries = [(f_base + index, demand[shares[index][1], column]) for index in indices]
             add_row([*entries, (r, -float(problem.capacity[option, column]))], -np.inf, 0.0)
-        share = float(shared.min_fill[problem.kind[option]])
-        if share > 0 and coefficients.get("violation[min_fill]", 0.0):
-            capacity = float(problem.capacity[option, primary])
-            entries = [(f_base + index, -demand[shares[index][1], primary]) for index in indices]
+        minimum = judged[r]
+        if minimum is not None:
+            column, share = minimum
+            capacity = float(problem.capacity[option, column])
+            entries = [(f_base + index, -demand[shares[index][1], column]) for index in indices]
             add_row([*entries, (r, share * capacity), (s_base + r, -1.0)], -np.inf, 0.0)
         else:
             upper[s_base + r] = 0.0
@@ -542,10 +578,5 @@ def _shortfall_part(
     load: NDArray[np.float64],
 ) -> float:
     """The minimum-fill part of :func:`route_value` (handled by a variable instead)."""
-    capacity = float(problem.capacity[option, shared.primary])
-    shortfall = float(shared.min_fill[problem.kind[option]]) * capacity - float(
-        load[shared.primary]
-    )
-    if shortfall > TOLERANCE * capacity:
-        return coefficients.get("violation[min_fill]", 0.0) * shortfall
-    return 0.0
+    shortfall = route_gap(shared, int(problem.kind[option]), problem.capacity[option], load)[0]
+    return coefficients.get("violation[min_fill]", 0.0) * shortfall

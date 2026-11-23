@@ -33,7 +33,7 @@ mkdocs build --strict
 After changing the specification models, regenerate the JSON Schema:
 
 ```bash
-python -m pirilib.spec.schema schemas/linehaul-0.2.schema.json
+python -m pirilib.spec.schema schemas/linehaul-0.3.schema.json
 ```
 
 ## Code and tests

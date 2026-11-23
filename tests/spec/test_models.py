@@ -176,7 +176,9 @@ def test_a_document_without_demand_is_valid(document: dict[str, Any]) -> None:
     assert spec.demand_ids == ()
 
 
-@pytest.mark.parametrize("schema", ["pirilib/linehaul@0.1", "pirilib/linehaul@0.2"])
+@pytest.mark.parametrize(
+    "schema", ["pirilib/linehaul@0.1", "pirilib/linehaul@0.2", "pirilib/linehaul@0.3"]
+)
 def test_known_schema_versions_are_accepted(document: dict[str, Any], schema: str) -> None:
     document["schema"] = schema
 
@@ -190,7 +192,10 @@ def test_an_unknown_schema_version_is_rejected(document: dict[str, Any]) -> None
 
     found = reported_problems(document)
 
-    assert found == ["schema: Input should be 'pirilib/linehaul@0.1' or 'pirilib/linehaul@0.2'"]
+    assert found == [
+        "schema: Input should be 'pirilib/linehaul@0.1', 'pirilib/linehaul@0.2' or "
+        "'pirilib/linehaul@0.3'"
+    ]
 
 
 def test_a_parsed_spec_cannot_be_changed(document: dict[str, Any]) -> None:
@@ -425,7 +430,8 @@ def test_duplicates_are_reported(document: dict[str, Any]) -> None:
     """Each table reports its second entry with a name already used; other fields are filler."""
     document["centers"].append({"id": "A", "lat": 1.0, "lon": 1.0})
     document["vehicle_types"].append({"name": "big", "capacity": {"desi": 5.0}})
-    document["fleet"]["spot"].append({"type": "small", "cost": {}})
+    document["fleet"]["spot"][0]["name"] = "market"
+    document["fleet"]["spot"].append({"type": "small", "name": "market", "cost": {}})
     document["demand"][2]["id"] = "D000001"
 
     found = reported_problems(document)
@@ -433,7 +439,7 @@ def test_duplicates_are_reported(document: dict[str, Any]) -> None:
     assert found == [
         "centers[3]: duplicate center id 'A'",
         "vehicle_types[2]: duplicate vehicle type 'big'",
-        "fleet.spot[2]: duplicate spot offer for 'small'",
+        "fleet.spot[2]: duplicate spot offer name 'market'",
         "demand[2]: duplicate demand id 'D000001'",
     ]
 
@@ -777,3 +783,24 @@ def test_ready_with_a_utc_offset_is_rejected_next_to_a_due_time(document: dict[s
     assert found == [
         "demand[0].ready: must not have a UTC offset; times are local times of the centers"
     ]
+
+
+def test_owned_vehicles_and_spot_offers_may_stop_over_by_default(document: dict[str, Any]) -> None:
+    """The fixture gives ``stopovers`` nowhere: one owned group and two spot offers."""
+    spec = parse_spec(document)
+
+    assert [group.stopovers for group in spec.fleet.owned] == [True]
+    assert [offer.stopovers for offer in spec.fleet.spot] == [True, True]
+
+
+def test_stopovers_can_be_switched_off_per_owned_group_and_spot_offer(
+    document: dict[str, Any],
+) -> None:
+    """The owned group and the second spot offer say ``false``; the first offer says nothing."""
+    document["fleet"]["owned"][0]["stopovers"] = False
+    document["fleet"]["spot"][1]["stopovers"] = False
+
+    instance = parse_spec(document).compile()
+
+    assert instance.owned_stopovers.tolist() == [False]
+    assert instance.spot_stopovers.tolist() == [True, False]

@@ -23,6 +23,7 @@ __all__ = [
     "TOLERANCE",
     "Evaluation",
     "evaluate",
+    "fill_shortfall",
 ]
 
 TOLERANCE: Final = 1e-9
@@ -52,8 +53,10 @@ class Evaluation:
         served: Per demand and dimension
         unserved: Per demand and dimension, never negative
         owned_fixed_cost: Fixed cost of mandatory owned vehicles over the calendar
-        service_cost: Lateness penalty
+        service_cost: The price of lateness: rules.service.penalty per unit and hour of
+            the ``lateness`` violation
         violations: Built-in constraints first, then your own
+        hard: Names of the rules that must hold; empty when none is declared
     """
 
     instance: LineHaulInstance
@@ -74,6 +77,7 @@ class Evaluation:
     owned_fixed_cost: float
     service_cost: float
     violations: Mapping[str, float]
+    hard: frozenset[str] = frozenset()
 
     @property
     def total_cost(self) -> float:
@@ -92,15 +96,29 @@ class Evaluation:
 
     @property
     def feasible(self) -> bool:
-        """True when no constraint is violated."""
-        return not any(self.violations.values())
+        """True when no hard rule is broken; see :meth:`broken`."""
+        return not self.broken()
 
     def violated(self) -> dict[str, float]:
         """The violated constraints and their amounts."""
         return {name: amount for name, amount in self.violations.items() if amount}
 
+    def broken(self) -> dict[str, float]:
+        """The violated constraints that make the plan infeasible, and their amounts.
+
+        These are the violated ones among :attr:`hard`. When no rule is declared
+        hard, every violated constraint counts.
+        """
+        violated = self.violated()
+        if not self.hard:
+            return violated
+        return {name: amount for name, amount in violated.items() if name in self.hard}
+
     def __repr__(self) -> str:
-        state = "feasible" if self.feasible else f"violated={self.violated()}"
+        violated = self.violated()
+        state = f"violated={violated}" if violated else "feasible"
+        if violated and self.feasible:
+            state = f"feasible, {state}"
         return (
             f"Evaluation(total_cost={self.total_cost:.2f}, dispatches={len(self.plan)}, "
             f"total_km={self.total_km:.1f}, {state})"
@@ -108,9 +126,17 @@ class Evaluation:
 
 
 def evaluate(
-    instance: LineHaulInstance, plan: Plan, constraints: Iterable[Constraint] = ()
+    instance: LineHaulInstance,
+    plan: Plan,
+    constraints: Iterable[Constraint] = (),
+    *,
+    hard: Iterable[str] = (),
 ) -> Evaluation:
     """Evaluate ``plan`` for ``instance``, with optional constraints of your own.
+
+    ``hard`` names the rules that must hold, built-in or your own; they decide
+    :attr:`Evaluation.feasible`. Without it, every rule counts. A name that is
+    not a rule of the evaluation is a :class:`ValueError`.
 
     Raises :class:`~pirilib.PlanError` if the plan refers to days, centers,
     vehicles or demands that the instance does not have.
@@ -144,7 +170,8 @@ def evaluate(
         violations=MappingProxyType(context.violations()),
     )
     own = list(constraints)
-    if not own:
+    declared = frozenset(hard)
+    if not own and not declared:
         return evaluation
     violations = dict(evaluation.violations)
     for item in own:
@@ -154,7 +181,10 @@ def evaluate(
         if not (math.isfinite(amount) and amount >= 0):
             raise ValueError(f"constraint '{item.name}' returned {amount}, expected a number >= 0")
         violations[item.name] = amount
-    return dataclasses.replace(evaluation, violations=MappingProxyType(violations))
+    unknown = sorted(declared - set(violations))
+    if unknown:
+        raise ValueError(f"hard rules {unknown} are not rules of this evaluation")
+    return dataclasses.replace(evaluation, violations=MappingProxyType(violations), hard=declared)
 
 
 class _Context:
@@ -191,9 +221,9 @@ class _Context:
         self.capacity = instance.capacity[self.vehicle_type]
         self.capacity_primary = self.capacity[:, instance.primary_dimension]
         self.served = _sum_rows(plan.load_demand, plan.load_quantity, len(instance.demand_ids))
-        self._timeline(legs)
+        self._timeline(previous)
 
-    def _timeline(self, legs: NDArray[np.float64]) -> None:
+    def _timeline(self, previous: NDArray[np.int64]) -> None:
         """When every dispatch loads, travels and unloads; when every load arrives."""
         instance, plan = self.instance, self.plan
         size, primary = len(plan), instance.primary_dimension
@@ -216,9 +246,9 @@ class _Context:
 
         loading = _minutes(per_unit * self.load[:, primary])
         unloading = _minutes(per_unit * self.unload)
-        speed = instance.speed_kmh[self.vehicle_type[self.stop_dispatch]]
-        with np.errstate(invalid="ignore", divide="ignore"):
-            travel = np.where(np.isfinite(speed), _minutes(legs / speed * 60.0), 0.0)
+        travel = instance.travel_minutes(
+            self.vehicle_type[self.stop_dispatch], previous, plan.stop_center
+        )
         ready = np.full(size, -np.inf)
         np.maximum.at(ready, plan.load_dispatch, instance.demand_ready[plan.load_demand])
         day_start = plan.day * 1440.0
@@ -261,7 +291,13 @@ class _Context:
         per_km = self._per_kind(instance.owned_per_km, instance.spot_per_km, np.float64)
         per_hour = self._per_kind(instance.owned_per_hour, instance.spot_per_hour, np.float64)
         hours = (self.end_minute - self.start_minute) / 60.0
-        return np.asarray(fixed + per_km * self.route_km + per_hour * hours, dtype=np.float64)
+        per_unit = np.zeros_like(self.load)
+        per_unit[self.owned_rows] = instance.owned_per_unit[self.owned_source]
+        per_unit[self.spot_rows] = instance.spot_per_unit[self.spot_source]
+        carried = (per_unit * self.load).sum(axis=1)
+        return np.asarray(
+            fixed + per_km * self.route_km + per_hour * hours + carried, dtype=np.float64
+        )
 
     def violations(self) -> dict[str, float]:
         amounts = {
@@ -269,6 +305,7 @@ class _Context:
             "load_route": self._load_route(),
             "ready": self._ready(),
             "deferral": self._deferral(),
+            "lateness": self._lateness(),
             "ban": self._ban(),
             "owned_line": self._owned_line(),
             "owned_availability": self._owned_availability(),
@@ -315,6 +352,10 @@ class _Context:
         delay = plan.day[plan.load_dispatch] - instance.demand_day[plan.load_demand]
         allowed = instance.rules.service.max_deferral_days
         return int(np.count_nonzero((delay < 0) | (delay > allowed)))
+
+    def _lateness(self) -> float:
+        primary = self.instance.primary_dimension
+        return float(np.sum(self.plan.load_quantity[:, primary] * self.load_late_hours))
 
     def _touches(
         self,
@@ -393,15 +434,15 @@ class _Context:
         return float(excess[excess > TOLERANCE * self.capacity].sum())
 
     def _min_fill(self) -> float:
-        min_fill = self.instance.rules.min_fill
-        share = np.where(self.is_spot, min_fill.spot, min_fill.owned)
-        primary = self.load[:, self.instance.primary_dimension]
-        shortfall = share * self.capacity_primary - primary
-        return float(shortfall[shortfall > TOLERANCE * self.capacity_primary].sum())
+        instance = self.instance
+        share = np.where(self.is_spot[:, None], instance.min_fill_spot, instance.min_fill_owned)
+        shortfall = fill_shortfall(share, self.capacity, self.load)
+        return float(shortfall[shortfall > 0].sum())
 
     def _stopover(self) -> int:
         allowed = np.full(len(self.plan), self.instance.rules.stopover.enabled)
         allowed[self.owned_rows] &= self.instance.owned_stopovers[self.owned_source]
+        allowed[self.spot_rows] &= self.instance.spot_stopovers[self.spot_source]
         return int(np.count_nonzero((self.counts > 1) & ~allowed))
 
     def _max_stops(self) -> int:
@@ -440,6 +481,22 @@ class _Context:
             "coverage": float(missing[missing > threshold].sum()),
             "overdelivery": float(-missing[-missing > threshold].sum()),
         }
+
+
+def fill_shortfall(
+    share: NDArray[np.float64], capacity: NDArray[np.float64], load: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """The load each vehicle misses to its minimum fill.
+
+    The arguments are (vehicles, dimensions); a share of 0 means the dimension
+    has no minimum. A vehicle that reaches the minimum of any dimension misses
+    nothing. Otherwise it misses the smallest of the gaps to its minimums: the
+    least it would have to load more, in one dimension, to count as filled.
+    """
+    gap = share * capacity - load
+    counted = np.where(gap > TOLERANCE * capacity, gap, 0.0)
+    least = np.where(share > 0, counted, np.inf).min(axis=-1)
+    return np.where(np.isfinite(least), least, 0.0)
 
 
 def _sum_rows(

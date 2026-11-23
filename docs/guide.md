@@ -28,11 +28,12 @@ Python 3.12 or newer.
 
 ## 1. Describe the problem
 
-A problem is a YAML file (schema `pirilib/linehaul@0.2`; 0.1 files still load). Large tables can be
-CSV files next to it. A complete example is in `examples/linehaul_mini`.
+A problem is a YAML file (schema `pirilib/linehaul@0.3`; 0.1 and 0.2 files still
+load, see [Schema versions](#schema-versions)). Large tables can be CSV files
+next to it. A complete example is in `examples/linehaul_mini`.
 
 ```yaml
-schema: pirilib/linehaul@0.2
+schema: pirilib/linehaul@0.3
 name: My network
 calendar: {start: 2026-05-11, end: 2026-05-12}
 
@@ -49,7 +50,7 @@ vehicle_types:
 fleet:
   owned:
     - {type: tir, origin: Istanbul, destination: Ankara, count: 2,
-       cost: {fixed: 7500, per_km: 12}, mandatory: true, stopovers: false}
+       cost: {fixed: 7500, per_km: 12}, mandatory: true, stopovers: true}
   spot:
     - {type: tir, cost: {fixed: 12000, per_km: 24}}
     - {type: kamyon, cost: {fixed: 8000, per_km: 20}, available: 5}
@@ -81,25 +82,49 @@ What the fields mean:
 - **Distances.** With `haversine` they are great-circle distances from the
   coordinates, times `factor`. With `explicit` you give arcs
   (`{origin, destination, km}`) for every ordered pair. `symmetric: true`
-  fills in each missing reverse direction.
+  fills in each missing reverse direction. Both kinds take `durations`:
+  travel times per line, see
+  [Times and service](#times-and-service-schema-02).
 - **Vehicle types.** Every type needs the same capacity dimensions (desi, kg,
   ...). Every demand must give every dimension.
 - **Owned vehicles** are bound to a line.
   - `count` vehicles run on one line every day.
   - With `mandatory: true`, the default, their fixed cost is paid every day,
-    used or not; a dispatch then only costs `per_km`. With `mandatory: false`
+    used or not; a dispatch then only costs `per_km` (and `per_hour` and
+    `per_unit`, where given). With `mandatory: false`
     a dispatch pays `fixed` too, and idle vehicles cost nothing.
-  - With `stopovers: true` they may drop loads at centers on the way, but they
-    always end at the line's destination.
+  - With `stopovers: true`, the default, they may drop loads at centers on the
+    way, but they always end at the line's destination. With
+    `stopovers: false` they carry loads for that destination only.
 - **Spot offers** are vehicles hired per dispatch.
   - Each dispatch costs `fixed + per_km x route km`.
+  - `per_unit` prices what a dispatch carries, per quantity dimension and
+    whatever the distance: `cost: {fixed: 0, per_unit: {desi: 0.8}}` is a
+    carrier paid by the desi. Owned groups take it too. The solvers count it
+    when they pick a vehicle.
   - `available` limits vehicles per day; leave it out for unlimited.
-  - There is one offer per vehicle type.
+  - Several offers may have the same vehicle type: price tiers, such as two
+    vehicles a day at the contract price and further ones at the market
+    price, or the offers of different carriers. Each offer has its own cost
+    and its own `available`, and the solvers take the cheaper one first. A
+    `name` tells them apart in reports; a plan refers to an offer by its
+    position, as in `fleet.spot[1]`.
+  - With `stopovers: true`, the default, a vehicle may serve several
+    destinations on one route. With `stopovers: false` every vehicle of the
+    offer goes to one destination, as a vehicle hired for a single delivery
+    does.
 - **Demand** is shipped on its date. Ids are generated (`D000001`, ...) when left out.
 - **Routes** are one-way: from the origin through the stops in order. There is no return trip.
 - **Minimum fill.** `min_fill` is the share of capacity a vehicle must carry,
-  for spot and owned vehicles separately, in the `primary_dimension`. The
-  primary dimension defaults to the first capacity dimension.
+  for spot and owned vehicles separately.
+  - A number, as in `spot: 0.10`, is the share of the `primary_dimension`,
+    which defaults to the first capacity dimension.
+  - A mapping gives a share per dimension, as in
+    `spot: {desi: 0.4, kg: 0.5}`. A vehicle is filled when it reaches the
+    share of any one of them, so a load that is heavy but not bulky does not
+    count as empty. A dimension that is left out is not looked at.
+  - A vehicle that reaches no minimum misses the smallest of its gaps: the
+    least it would have to load more, in one dimension, to count as filled.
 - **Split demand.** With `split_demand: true` a demand may travel in several
   vehicles.
 - **Stopover rules.**
@@ -148,13 +173,17 @@ a time with a UTC offset such as `+03:00` or `Z`, is reported as a problem.
   - Loading starts at the dispatch's `start` (minutes after 00:00 of its day;
     by default as soon as every load is ready).
   - Loading takes `minutes_per_unit × load` minutes.
-  - Each leg takes `km / speed_kmh` hours, rounded up to whole minutes.
+  - Each leg takes `km / speed_kmh` hours, rounded up to whole minutes, or
+    the duration you give for it (see below).
   - Unloading at a stop takes `minutes_per_unit × what is unloaded there`.
 - **Hours** run from the start of loading to the end of the last unloading and
   are charged with `per_hour`.
 - **Lateness.** A load is late when the unloading at its stop ends after the
   due time of its demand. Every started hour costs `penalty × quantity`. The
-  total is `Evaluation.service_cost` and part of `total_cost`.
+  total is `Evaluation.service_cost` and part of `total_cost`. The same
+  amount, `quantity × started hours`, is the `lateness` rule: the objective
+  gives it a weight like every other rule, or `hard` for due times that must
+  hold (see [the objective page](objective.md#how-the-total-cost-is-computed)).
 - **Deferral.** A demand may leave up to `max_deferral_days` days after its
   date. Its due time stays, so lateness grows.
 - **Handling capacity.** Each center loads and unloads at most
@@ -163,9 +192,34 @@ a time with a UTC offset such as `+03:00` or `Z`, is reported as a problem.
 - **Vehicle limits.** At most this many vehicles of a type start loading at or
   arrive at the center per day.
 
+**Travel times per line.** A speed gives every leg the same pace. When you
+know how long a line takes, breaks and traffic included, give it under
+`matrix.durations`:
+
+```yaml
+matrix:
+  source: haversine
+  durations:
+    - {origin: Istanbul, destination: Ankara, hours: 6.5}
+    - {origin: Istanbul, destination: Ankara, hours: 7.5, vehicle_type: tir}
+```
+
+- A row is for one direction; give `Ankara` to `Istanbul` as well, or that
+  leg is timed from the speed.
+- A row with `vehicle_type` is for that type alone and wins over the row for
+  every type.
+- `hours` are rounded up to whole minutes, like every other time.
+- A leg without a duration takes `km / speed_kmh`. When every ordered pair of
+  centers has a duration for a type, that type needs no `speed_kmh`.
+- The evaluator, the checker and the solvers all time a leg this way; distances
+  and per-km costs do not change.
+- `durations` may come from a CSV file with the columns `origin`,
+  `destination`, `hours` and, if you use it, `vehicle_type`.
+
 ### Tables from CSV
 
-`centers`, `demand` and `matrix.arcs` accept a file reference:
+`centers`, `demand`, `matrix.arcs` and `matrix.durations` accept a file
+reference:
 
 ```yaml
 demand:
@@ -180,12 +234,32 @@ demand:
 
 - `file` is relative to the YAML file.
 - `encoding` defaults to `utf-8-sig`.
-- With `decimal: ","`, a `.` is read as a thousands separator.
+- With `decimal: ","`, a `.` may only group thousands, as in `1.234,5`. A
+  `.` anywhere else is reported as a problem: `12.5` is not read as 125.
 - `date_format` defaults to ISO dates.
 - `columns` maps fields to column names. `quantity`, for demand only, maps
   each dimension to its column.
 
 Lists inside a cell, such as banned vehicle types, are separated by `|`.
+
+### Schema versions
+
+The first line of a document names its schema. A document of an older schema
+is read as a 0.3 document that does not use the newer fields, so it keeps
+working.
+
+| Schema | What it added |
+|---|---|
+| `pirilib/linehaul@0.1` | centers, distances, vehicle types, the fleet, demand and the rules |
+| `pirilib/linehaul@0.2` | times and service: speeds, hourly costs, ready and due times, deferral, handling time, handling capacity and vehicle limits |
+| `pirilib/linehaul@0.3` | `stopovers` on spot offers, `min_fill` per dimension, `cost.per_unit`, `hard` under `objective.penalties`, `matrix.durations`, the `lateness` rule, several spot offers per vehicle type and their `name` |
+
+Lateness was a cost and not a rule before 0.3. A 0.1 or 0.2 document
+therefore gives `lateness` the weight 0 unless it names it, whatever its
+`other` says; a 0.3 document treats it like every other rule.
+
+The JSON Schema of the current version is in
+`schemas/linehaul-0.3.schema.json`; `pirilib schema` prints it.
 
 ### Validation
 
@@ -234,7 +308,7 @@ Every rule has a violation amount that is zero when the rule holds:
 | `owned_line` | owned dispatches off their line |
 | `owned_availability`, `spot_availability` | vehicles used beyond the daily count |
 | `capacity` | load above capacity (quantity) |
-| `min_fill` | load missing to the minimum fill (quantity) |
+| `min_fill` | load missing to the minimum fill: the smallest gap when no dimension reaches its minimum (quantity) |
 | `stopover`, `max_stops` | stopovers where not allowed, stops beyond the limit |
 | `stretch` | route km above `max_stretch` x the direct km |
 | `forward_only` | stops not farther than the one before |
@@ -242,6 +316,7 @@ Every rule has a violation amount that is zero when the rule holds:
 | `coverage`, `overdelivery` | quantity not carried, quantity carried beyond the demand |
 | `ready` | loads that start loading before their demand is ready |
 | `deferral` | loads that leave before their demand day or after `max_deferral_days` |
+| `lateness` | quantity unloaded after its due time x the started hours it is late |
 | `handling` | quantity handled at a center on a day beyond `handling_capacity` |
 | `vehicle_limit` | vehicles of a type at a center on a day beyond `vehicle_limits` |
 
@@ -277,7 +352,9 @@ goal.breakdown(evaluation)
 ```
 
 `cost` weighs the total cost, `penalties` give a weight per unit of violation
-of each rule of section 2 (`other` for the rules not named), and the optional
+of each rule of section 2 (`other` for the rules not named), or `hard` for a
+rule that must hold: a plan is feasible when no hard rule is broken, and the
+optional
 weights `distance_km`, `dispatches` and `unused_capacity` add terms.
 `build_objective()` returns a `Sum` from `pirilib.objective`, and
 `breakdown` gives the value of every term. A document without the section
@@ -343,9 +420,9 @@ The default solver is the ant colony (`pirilib.ACOSolver`):
 - **Construction.** Each ant picks a vehicle and a first stop, then either
   extends the route or ends it. Pheromone is MAX-MIN in the hypercube
   framework.
-- **Guarantees.** Every rule except minimum fill, coverage, handling capacity
-  and vehicle limits holds by construction; see the table at the end of this
-  section.
+- **Guarantees.** Every rule except minimum fill, coverage, lateness, handling
+  capacity and vehicle limits holds by construction; see the table at the end
+  of this section.
 - **Local search.** It then changes vehicles, merges, relocates and rebalances
   routes, serves leftover demand and drops routes that cost more than they
   carry.
@@ -374,6 +451,15 @@ The default solver is the ant colony (`pirilib.ACOSolver`):
 | `update` | `iteration_best` | which solution lays pheromone |
 | `local_search` | true | improve the best routes of every subproblem |
 | `exact_nodes` | 0 | solve subproblems with at most this many destinations exactly (needs scipy; not with times or center limits) |
+| `time_limit` | none | seconds the colonies may search; see below |
+
+`time_limit` caps the search, it does not make it faster. The time is shared
+out over the subproblems, and a colony whose share is used up starts no
+further iteration. Every subproblem still gets one iteration and its local
+search, so a plan always comes back and a solve can run past the limit;
+`result.stats["time_limit_stops"]` counts the colonies the limit stopped. With
+a limit the plan depends on the speed of the machine: the same seed no longer
+gives the same plan. On the command line it is `pirilib solve --time-limit 30`.
 
 `pirilib.solvers.exact.ExactSolver` solves every subproblem to optimality by
 mixed-integer programming. It is meant for small problems and for measuring
@@ -397,6 +483,7 @@ A solver deals with a rule in one of three ways:
 | `load_route` | kept | kept | kept | kept |
 | `ready` | kept | kept | kept | kept |
 | `deferral` | kept | kept | kept | refused |
+| `lateness` | penalized | penalized | penalized | refused |
 | `ban` | kept | kept | kept | kept |
 | `owned_line` | kept | kept | kept | kept |
 | `owned_availability` | kept | kept | kept | kept |
@@ -546,7 +633,11 @@ pirilib solve problem.yaml -o plan.csv
 
 - `generate` writes a synthetic problem.
 - `--delimiter ";" --decimal ","` writes the plan for Turkish Excel.
-- `check` reads .csv and .xlsx plans and exits with status 1 if a rule is broken.
+- `check` reads .csv and .xlsx plans and exits with status 1 if the plan is
+  not feasible: a hard rule of the problem's objective is broken, or any rule
+  when it has no hard rule.
+- `solve` exits with status 3 when its plan breaks a rule the objective calls
+  `hard`. The plan is still written, and the message names the rules.
 - The last `solve` plans the week that `forecast --problem` wrote.
 - `forecast --network` without `--quantile` warns: the problem then plans the
   expected forecast, and about half of the days get more than that.
@@ -634,10 +725,13 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
 ## Known limits
 
 - One-way line haul only: no return trips, working hours or driver rules.
-- Costs are fixed, per km and per hour; there are no costs per unit carried.
+- A cost per unit carried does not depend on the distance; there is no cost
+  per unit and km.
 - With times, deferral or center limits the ant colony plans greedily, day by
   day and subproblem by subproblem: an earlier subproblem never gives up room
-  for a later one, and deferral does not look at the next day's capacity.
+  for a later one, and deferral does not look at the next day's capacity:
+  demand that may wait is valued by an estimate of carrying it the next day
+  on a direct spot trip, or by leaving it uncarried when that scores better.
   While building routes it counts all handling on the departure day; the exact
   days are used only afterwards, so room after midnight is partly left unused
   and, rarely, a limit is exceeded (the penalty then shows it). Departures are
@@ -656,7 +750,9 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
 - When spot offers have daily limits, origins of a day take vehicles one after
   another, greedily. `result.stats["spot_limits_reached"]` counts the (day,
   offer) pairs whose limit was used up; above zero, the greedy sharing may have
-  bound the plan.
+  bound the plan. Every solver reports it, `pirilib solve` warns when it is
+  above zero, and `--summary` writes the solver's `stats` with the other
+  numbers.
 - Forecasts cover one quantity dimension, up to 7 days ahead, per day; time
   waves come from shares learned per line and weekday, not from a model. In walk-forward tests on real demand, forecasts ran about
   6 % low because of week-to-week swings around holidays. None of the
