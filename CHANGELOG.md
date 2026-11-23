@@ -40,6 +40,11 @@ uses [Semantic Versioning](https://semver.org/).
   directly, `objective.Sum` carries them in `hard`, and the plan summary has
   `hard_violations`.
 
+- `ACOConfig.time_limit` and `pirilib solve --time-limit`: seconds the colonies
+  may search. The time is shared out over the subproblems; every subproblem
+  still gets one iteration and its local search, so a plan always comes back.
+  `stats["time_limit_stops"]` counts the colonies the limit stopped.
+
 ### Changed
 
 - `stopovers` of an owned group now defaults to `true`: owned vehicles may

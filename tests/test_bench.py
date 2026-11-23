@@ -561,6 +561,7 @@ def test_a_report_keeps_the_settings_of_a_solver(report: Report) -> None:
                 "update": "iteration_best",
                 "local_search": True,
                 "exact_nodes": 0,
+                "time_limit": None,
             }
         },
     )

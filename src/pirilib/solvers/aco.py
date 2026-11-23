@@ -83,6 +83,12 @@ class ACOConfig:
         local_search: Improve the best routes of every subproblem (linear objectives)
         exact_nodes: Solve subproblems with at most this many destinations exactly
             (scipy); ignored on scheduled instances
+        time_limit: Seconds the colonies may search, or None for no limit. The time
+            is shared out over the subproblems; a colony whose share is used up
+            starts no further iteration. Every subproblem still gets one iteration
+            and its local search, so a plan always comes back, and a solve can run
+            past the limit. With a limit the plan depends on the speed of the
+            machine, so the same seed no longer gives the same plan
     """
 
     ants: int = 16
@@ -96,6 +102,7 @@ class ACOConfig:
     update: Literal["iteration_best", "best_so_far"] = "iteration_best"
     local_search: bool = True
     exact_nodes: int = 0
+    time_limit: float | None = None
 
     def __post_init__(self) -> None:
         problems = [
@@ -110,6 +117,10 @@ class ACOConfig:
                 (not 0 <= self.exploitation <= 1, "exploitation must be in [0, 1]"),
                 (not 0 < self.tau_min <= 1, "tau_min must be in (0, 1]"),
                 (self.exact_nodes < 0, "exact_nodes must not be negative"),
+                (
+                    self.time_limit is not None and not self.time_limit > 0,
+                    "time_limit must be above 0",
+                ),
                 (
                     self.update not in ("iteration_best", "best_so_far"),
                     "update must be 'iteration_best' or 'best_so_far'",
@@ -137,7 +148,7 @@ class ACOSolver:
     ) -> SolveResult:
         goal = require_objective(objective, "ACOSolver.solve")
         started = time.perf_counter()
-        search = _Search(instance, self.config, seed)
+        search = _Search(instance, self.config, seed, started)
         form = linear_form(goal)
         if form is not None and not constraints:
             builder = search.linear(linear_coefficients(instance, form))
@@ -147,6 +158,8 @@ class ACOSolver:
         evaluation = evaluate(instance, plan, constraints, hard=hard_rules(goal))
         if search.limited:
             search.stats["spot_limits_reached"] = _limits_reached(instance, plan)
+        if self.config.time_limit is not None:
+            search.stats["time_limit_stops"] = search.stopped
         return SolveResult(
             plan=plan,
             evaluation=evaluation,
@@ -193,10 +206,19 @@ class _Outcome:
 
 
 class _Search:
-    """Runs the colonies of one solve; shared by both search modes."""
+    """Runs the colonies of one solve; shared by both search modes.
 
-    def __init__(self, instance: LineHaulInstance, config: ACOConfig, seed: int) -> None:
+    Attributes:
+        started: When the solve began, on the clock of :func:`time.perf_counter`
+        stopped: Colonies that the time limit kept from a further iteration
+    """
+
+    def __init__(
+        self, instance: LineHaulInstance, config: ACOConfig, seed: int, started: float
+    ) -> None:
         self.instance, self.config, self.seed = instance, config, seed
+        self.started = started
+        self.stopped = 0
         self.shared = Shared.of(instance)
         self.scheduled = instance.scheduled
         self.pieces = [] if self.scheduled else subproblems(instance)
@@ -206,6 +228,24 @@ class _Search:
         self.limited = bool(np.any(instance.spot_available != UNLIMITED))
         self.stats: dict[str, float | int | str] = {"subproblems": len(self.pieces)}
         self.iterations = self.constructions = 0
+
+    def _deadline(self, share: float) -> float | None:
+        """When the colonies that end ``share`` of the work must stop iterating.
+
+        The time limit is handed out in proportion to the work done so far, so
+        time an early colony does not use is left for the later ones.
+        """
+        limit = self.config.time_limit
+        return None if limit is None else self.started + limit * share
+
+    def _out_of_time(self, deadline: float | None, turn: int) -> bool:
+        """True if iteration ``turn`` was not the last one and the deadline has passed."""
+        if deadline is None or turn + 1 >= self.config.iterations:
+            return False
+        if time.perf_counter() < deadline:
+            return False
+        self.stopped += 1
+        return True
 
     def _batches(self, pieces: list[Subproblem]) -> list[Batch]:
         batches = [Batch(group, self.shared) for group in self._groups(pieces)]
@@ -325,7 +365,11 @@ class _Search:
             ]
             score += self._exact(small, coefficients, spot_left, builder)
             pieces = [p for p in pieces if p not in small]
-        for index, batch in enumerate(self._batches(pieces)):
+        batches = self._batches(pieces)
+        total = sum(batch.count for batch in batches)
+        done = 0
+        for index, batch in enumerate(batches):
+            done += batch.count
             available = batch.available.copy()
             which, option, offers = self._spot_rows(batch)
             days = np.array([problem.day for problem in batch.problems])
@@ -333,7 +377,9 @@ class _Search:
                 [spot_left[day][offer] for day, offer in zip(days[which], offers, strict=True)]
             )
             available[which, option] = np.minimum(available[which, option], left)
-            best = self._colonies(batch, index, coefficients, available)
+            best = self._colonies(
+                batch, index, coefficients, available, deadline=self._deadline(done / total)
+            )
             for slot, problem in enumerate(batch.problems):
                 routes, remaining = best.routes[slot], best.remaining[slot]
                 if config.local_search:
@@ -371,21 +417,23 @@ class _Search:
         coordinator = Coordinator(self.instance)
         score = 0.0
         count = index = 0
-        for day in range(len(self.instance.days)):
+        days = len(self.instance.days)
+        for day in range(days):
             problems = coordinator.day(day)
             count += len(problems)
             free = [] if self.limited else [p for p in problems if self._free(p)]
             bound = [p for p in problems if not any(p is other for other in free)]
             groups = [*self._groups(free), *([problem] for problem in bound)]
-            for group in groups:
+            for position, group in enumerate(groups):
                 batch = Batch(group, self.shared)
+                deadline = self._deadline((day + (position + 1) / len(groups)) / days)
                 room = None if group[0] in free else ledger.room(group[0])
                 available = batch.available.copy()
                 for slot, problem in enumerate(group):
                     spot = problem.kind == SPOT
                     options = available[slot, : problem.options]
                     options[spot] = np.minimum(options[spot], spot_left[day][problem.source[spot]])
-                best = self._colonies(batch, index, coefficients, available, room)
+                best = self._colonies(batch, index, coefficients, available, room, deadline)
                 index += 1
                 for slot, problem in enumerate(group):
                     score += self._settle(
@@ -460,8 +508,9 @@ class _Search:
         coefficients: Mapping[str, float],
         available: NDArray[np.int64],
         room: Room | None = None,
+        deadline: float | None = None,
     ) -> _Outcome:
-        """Run the colonies of a batch until they stop improving."""
+        """Run the colonies of a batch until they stop improving or ``deadline`` passes."""
         config, ants = self.config, self.config.ants
         count = batch.count
         rng = np.random.default_rng([self.seed, index])
@@ -474,7 +523,7 @@ class _Search:
         best_usage = np.zeros((count, batch.n), dtype=np.int64)
         stale = np.zeros(count, dtype=np.int64)
         active = np.ones(count, dtype=np.bool_)
-        for _ in range(config.iterations):
+        for turn in range(config.iterations):
             self.iterations += 1
             self.constructions += int(active.sum()) * ants
             colony = self._build(
@@ -500,7 +549,7 @@ class _Search:
                 used = best_used
             pheromone.update(used, config.evaporation, config.tau_min, active)
             active &= stale < config.patience
-            if not active.any():
+            if not active.any() or self._out_of_time(deadline, turn):
                 break
         routes = [route for route in best_routes if route is not None]
         remaining = [left for left in best_remaining if left is not None]
@@ -552,6 +601,7 @@ class _Search:
         best_routes: list[list[Routes]] = []
         stale = iterations = 0
         days = len(self.instance.days)
+        deadline = self._deadline(1.0)
         for iteration in range(config.iterations):
             iterations += 1
             spot_left = np.broadcast_to(self.limits, (days, ants, self.limits.size)).copy()
@@ -613,7 +663,7 @@ class _Search:
                         best_mark.copy_from(mark, everyone)
                     mark = best_mark
                 pheromone.update(mark, config.evaporation, config.tau_min, everyone)
-            if stale >= config.patience:
+            if stale >= config.patience or self._out_of_time(deadline, iteration):
                 break
         builder = PlanBuilder(self.instance)
         for batch, routes in zip(self.waves, best_routes, strict=True):

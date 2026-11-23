@@ -94,6 +94,9 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument(
         "--exact-nodes", type=int, help="solve subproblems this small exactly (scipy)"
     )
+    command.add_argument(
+        "--time-limit", type=float, help="seconds the colonies may search (default: no limit)"
+    )
     command.add_argument("--no-local-search", action="store_true")
     _table_options(command)
     command.set_defaults(run=_solve)
@@ -408,6 +411,7 @@ def _solve(arguments: argparse.Namespace) -> int:
         ants=arguments.ants,
         iterations=arguments.iterations,
         exact_nodes=arguments.exact_nodes,
+        time_limit=arguments.time_limit,
         local_search=False if arguments.no_local_search else None,
     )
     result = ACOSolver(config).solve(instance, goal, seed=arguments.seed)
