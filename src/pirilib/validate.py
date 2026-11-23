@@ -396,7 +396,9 @@ class _Checker:
             if kind == "owned":
                 limit, what = int(instance.owned_count[source]), f"owned group {source}"
             else:
-                limit, what = int(instance.spot_available[source]), f"spot offer {source}"
+                label = instance.spot_names[source] if instance.spot_names else ""
+                what = f"spot offer {source}" + (f" ({label})" if label else "")
+                limit = int(instance.spot_available[source])
             if limit != UNLIMITED and count > limit:
                 self.add(
                     f"{kind}_availability",

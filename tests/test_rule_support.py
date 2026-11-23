@@ -173,6 +173,16 @@ def handling_time(document: dict[str, Any]) -> None:
     document["rules"]["handling"] = {"minutes_per_unit": 0.02}
 
 
+def price_tiers(document: dict[str, Any]) -> None:
+    """Every spot offer becomes two: two vehicles a day at its price, then dearer ones."""
+    tiers: list[dict[str, Any]] = []
+    for offer in document["fleet"]["spot"]:
+        dearer = offer["cost"] | {"fixed": offer["cost"]["fixed"] * 1.5}
+        tiers.append(offer | {"name": f"{offer['type']} contract", "available": 2})
+        tiers.append(offer | {"name": f"{offer['type']} market", "cost": dearer})
+    document["fleet"]["spot"] = tiers
+
+
 def line_durations(document: dict[str, Any]) -> None:
     """Half of the lines get a travel time of their own, longer for the largest type."""
     names = [center["id"] for center in document["centers"]]
@@ -196,6 +206,8 @@ SCENARIOS: dict[str, tuple[Change, ...]] = {
     "spot-without-stopovers": (no_min_fill, spot_without_stopovers),
     "no-split": (no_min_fill, no_split),
     "spot-limits": (no_min_fill, spot_limits),
+    "price-tiers": (no_min_fill, price_tiers),
+    "price-tiers-with-min-fill": (high_min_fill, price_tiers),
     "two-dimensions": (no_min_fill, two_dimensions),
     "min-fill-both-dimensions": (min_fill_in_both_dimensions,),
     "min-fill-second-dimension": (min_fill_in_the_second_dimension,),

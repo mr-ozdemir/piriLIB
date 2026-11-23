@@ -196,9 +196,22 @@ class OwnedVehicles(_Model):
 
 
 class SpotOffer(_Model):
-    """On-demand vehicles of one type, hired per dispatch."""
+    """On-demand vehicles of one type, hired per dispatch.
+
+    Several offers may have the same vehicle type: price tiers, such as two
+    vehicles a day at the contract price and further ones at the market price,
+    or the offers of different carriers. Each offer has its own cost and its
+    own daily limit.
+    """
 
     type: Name
+    name: Name | None = Field(
+        default=None,
+        description=(
+            "A label for reports, for example the carrier or the price tier; no two "
+            "offers may have the same name."
+        ),
+    )
     cost: Cost
     available: Vehicles | None = Field(
         default=None, description="Vehicles per day; null means unlimited."
@@ -671,7 +684,7 @@ def _consistency_issues(spec: LineHaulSpec) -> list[Issue]:
         *_duplicates(("centers",), "center id", [center.id for center in spec.centers]),
         *_duplicates(("vehicle_types",), "vehicle type", [v.name for v in spec.vehicle_types]),
         *_duplicates(
-            ("fleet", "spot"), "spot offer for", [offer.type for offer in spec.fleet.spot]
+            ("fleet", "spot"), "spot offer name", [offer.name for offer in spec.fleet.spot]
         ),
         *_duplicates(("demand",), "demand id", [row.id for row in spec.demand]),
         *_dimension_issues(spec),

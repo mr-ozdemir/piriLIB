@@ -430,7 +430,8 @@ def test_duplicates_are_reported(document: dict[str, Any]) -> None:
     """Each table reports its second entry with a name already used; other fields are filler."""
     document["centers"].append({"id": "A", "lat": 1.0, "lon": 1.0})
     document["vehicle_types"].append({"name": "big", "capacity": {"desi": 5.0}})
-    document["fleet"]["spot"].append({"type": "small", "cost": {}})
+    document["fleet"]["spot"][0]["name"] = "market"
+    document["fleet"]["spot"].append({"type": "small", "name": "market", "cost": {}})
     document["demand"][2]["id"] = "D000001"
 
     found = reported_problems(document)
@@ -438,7 +439,7 @@ def test_duplicates_are_reported(document: dict[str, Any]) -> None:
     assert found == [
         "centers[3]: duplicate center id 'A'",
         "vehicle_types[2]: duplicate vehicle type 'big'",
-        "fleet.spot[2]: duplicate spot offer for 'small'",
+        "fleet.spot[2]: duplicate spot offer name 'market'",
         "demand[2]: duplicate demand id 'D000001'",
     ]
 

@@ -63,6 +63,10 @@ uses [Semantic Versioning](https://semver.org/).
   weight or `hard`, and the ant colony and the exact solver weigh it while
   they plan. `rules.service.penalty` still prices the same amount as a cost.
 
+- Several spot offers may have the same vehicle type, each with its own cost
+  and daily limit: price tiers or the offers of different carriers. An offer
+  takes an optional `name` for reports. Every solver plans with them.
+
 ### Changed
 
 - A plan that unloads after a due time now breaks a rule. In a 0.3 document
