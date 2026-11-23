@@ -175,7 +175,10 @@ a time with a UTC offset such as `+03:00` or `Z`, is reported as a problem.
   are charged with `per_hour`.
 - **Lateness.** A load is late when the unloading at its stop ends after the
   due time of its demand. Every started hour costs `penalty × quantity`. The
-  total is `Evaluation.service_cost` and part of `total_cost`.
+  total is `Evaluation.service_cost` and part of `total_cost`. The same
+  amount, `quantity × started hours`, is the `lateness` rule: the objective
+  gives it a weight like every other rule, or `hard` for due times that must
+  hold (see [the objective page](objective.md#how-the-total-cost-is-computed)).
 - **Deferral.** A demand may leave up to `max_deferral_days` days after its
   date. Its due time stays, so lateness grows.
 - **Handling capacity.** Each center loads and unloads at most
@@ -244,7 +247,11 @@ working.
 |---|---|
 | `pirilib/linehaul@0.1` | centers, distances, vehicle types, the fleet, demand and the rules |
 | `pirilib/linehaul@0.2` | times and service: speeds, hourly costs, ready and due times, deferral, handling time, handling capacity and vehicle limits |
-| `pirilib/linehaul@0.3` | `stopovers` on spot offers, `min_fill` per dimension, `cost.per_unit`, `hard` under `objective.penalties`, `matrix.durations` |
+| `pirilib/linehaul@0.3` | `stopovers` on spot offers, `min_fill` per dimension, `cost.per_unit`, `hard` under `objective.penalties`, `matrix.durations`, the `lateness` rule |
+
+Lateness was a cost and not a rule before 0.3. A 0.1 or 0.2 document
+therefore gives `lateness` the weight 0 unless it names it, whatever its
+`other` says; a 0.3 document treats it like every other rule.
 
 The JSON Schema of the current version is in
 `schemas/linehaul-0.3.schema.json`; `pirilib schema` prints it.
@@ -304,6 +311,7 @@ Every rule has a violation amount that is zero when the rule holds:
 | `coverage`, `overdelivery` | quantity not carried, quantity carried beyond the demand |
 | `ready` | loads that start loading before their demand is ready |
 | `deferral` | loads that leave before their demand day or after `max_deferral_days` |
+| `lateness` | quantity unloaded after its due time x the started hours it is late |
 | `handling` | quantity handled at a center on a day beyond `handling_capacity` |
 | `vehicle_limit` | vehicles of a type at a center on a day beyond `vehicle_limits` |
 
@@ -407,9 +415,9 @@ The default solver is the ant colony (`pirilib.ACOSolver`):
 - **Construction.** Each ant picks a vehicle and a first stop, then either
   extends the route or ends it. Pheromone is MAX-MIN in the hypercube
   framework.
-- **Guarantees.** Every rule except minimum fill, coverage, handling capacity
-  and vehicle limits holds by construction; see the table at the end of this
-  section.
+- **Guarantees.** Every rule except minimum fill, coverage, lateness, handling
+  capacity and vehicle limits holds by construction; see the table at the end
+  of this section.
 - **Local search.** It then changes vehicles, merges, relocates and rebalances
   routes, serves leftover demand and drops routes that cost more than they
   carry.
@@ -470,6 +478,7 @@ A solver deals with a rule in one of three ways:
 | `load_route` | kept | kept | kept | kept |
 | `ready` | kept | kept | kept | kept |
 | `deferral` | kept | kept | kept | refused |
+| `lateness` | penalized | penalized | penalized | refused |
 | `ban` | kept | kept | kept | kept |
 | `owned_line` | kept | kept | kept | kept |
 | `owned_availability` | kept | kept | kept | kept |

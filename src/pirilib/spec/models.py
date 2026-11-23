@@ -46,6 +46,9 @@ SCHEMA_ID: Final = "pirilib/linehaul@0.3"
 SchemaId = Literal["pirilib/linehaul@0.1", "pirilib/linehaul@0.2", "pirilib/linehaul@0.3"]
 """Accepted schema ids; an older document is a 0.3 document without the newer fields."""
 
+_BEFORE_LATENESS: Final = ("pirilib/linehaul@0.1", "pirilib/linehaul@0.2")
+"""Schema ids from before lateness was a rule; there it was a cost and had no penalty."""
+
 type Issue = tuple[Loc, str]
 
 
@@ -368,7 +371,12 @@ class Stopover(_Model):
 
 
 class Service(_Model):
-    """Due times, the cost of lateness and how long demand may wait."""
+    """Due times, the cost of lateness and how long demand may wait.
+
+    Unloading after the due time also breaks the ``lateness`` rule, which the
+    objective weighs like every other rule: 0 leaves lateness a cost only, and
+    ``hard`` makes the due times limits.
+    """
 
     due_hours: PositiveFloat | None = Field(
         default=None,
@@ -597,6 +605,24 @@ class LineHaulSpec(_Model):
                 row = row.model_copy(update={"id": generated})
             numbered.append(row)
         return {**data, "demand": numbered}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_older_schemas(cls, data: Any) -> Any:
+        """Keep the meaning of older documents: lateness, a rule since 0.3, gets weight 0.
+
+        A 0.1 or 0.2 document that names ``lateness`` under ``penalties`` keeps what
+        it wrote.
+        """
+        if not isinstance(data, Mapping) or data.get("schema") not in _BEFORE_LATENESS:
+            return data
+        objective = data.get("objective")
+        if not isinstance(objective, Mapping):
+            return data
+        penalties = objective.get("penalties")
+        if not isinstance(penalties, Mapping) or "lateness" in penalties:
+            return data
+        return {**data, "objective": {**objective, "penalties": {**penalties, "lateness": 0.0}}}
 
     @model_validator(mode="after")
     def _check_consistency(self) -> Self:

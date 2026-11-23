@@ -57,8 +57,21 @@ uses [Semantic Versioning](https://semver.org/).
   the speed. A type whose every leg has a duration needs no `speed_kmh`.
   `LineHaulInstance.travel_minutes` gives the time of any leg.
 
+- The `lateness` rule: the primary quantity unloaded after the due time of its
+  demand, times the started hours it is late. The evaluator and the checker
+  report it with the other violations, `objective.penalties` gives it a
+  weight or `hard`, and the ant colony and the exact solver weigh it while
+  they plan. `rules.service.penalty` still prices the same amount as a cost.
+
 ### Changed
 
+- A plan that unloads after a due time now breaks a rule. In a 0.3 document
+  `other` applies to `lateness` unless it is named, and a late plan is not
+  feasible unless the objective declares its hard rules without it; write
+  `lateness: 0` to keep lateness a cost only. A 0.1 or 0.2 document gives
+  `lateness` the weight 0 unless it names it, so its plans do not change, but
+  a late plan of it is also reported as not feasible when no rule is hard.
+  In Python, `obj.violations()` now includes the lateness amount.
 - The schema id of problem documents is `pirilib/linehaul@0.3`; 0.1 and 0.2
   documents still load. The new fields of this release belong to 0.3, and the
   JSON Schema file is now `schemas/linehaul-0.3.schema.json`. Generated

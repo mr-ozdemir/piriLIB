@@ -37,4 +37,5 @@ objective:
   cost: 1
   penalties:
     coverage: 1000
+    lateness: 0
     other: 100000

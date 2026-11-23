@@ -46,11 +46,12 @@ FENCE = re.compile(r"^```(?P<info>[^\n]*)\n(?P<body>.*?)^```[ \t]*$", re.MULTILI
 TITLED_YAML = re.compile(r'^yaml title="(?P<path>[^"]+)"$')
 KNOWN_INFO = re.compile(r'^(python|\{\.python \.no-run\}|yaml|text|bash|yaml title="[^"]+")$')
 """Info strings a block may have: run, skipped Python, not Python, or a titled file."""
-RULE_ROW = re.compile(r"^\| `(?P<name>[a-z_]+)` \| (?P<unit>[a-z]+) \|", re.MULTILINE)
+RULE_ROW = re.compile(r"^\| `(?P<name>[a-z_]+)` \| (?P<unit>[a-z ]+) \|", re.MULTILINE)
 OTHER_UNIT = re.compile(r"\((quantity|km)\)\.$")
 """A catalog description that ends with a unit other than ``count``."""
 SMALL = ACOConfig(ants=8, iterations=20, patience=5)
 MEASURED = {
+    "lateness": "quantity hours",
     "handling": "quantity",
     "capacity": "quantity",
     "min_fill": "quantity",
@@ -97,7 +98,7 @@ EXPECTED = {
     "every_load.yaml": Scenario({"min_fill": 80.0}, 7),
     "hard_min_fill.yaml": Scenario({"coverage": 40.0}, 6),
     "distance_aware.yaml": Scenario({}, 2),
-    "worked_cost.yaml": Scenario({}, 2),
+    "worked_cost.yaml": Scenario({"lateness": 500.0}, 2),
 }
 
 

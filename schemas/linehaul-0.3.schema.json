@@ -552,6 +552,7 @@
               "load_route",
               "ready",
               "deferral",
+              "lateness",
               "ban",
               "owned_line",
               "owned_availability",
@@ -691,7 +692,7 @@
     },
     "Service": {
       "additionalProperties": false,
-      "description": "Due times, the cost of lateness and how long demand may wait.",
+      "description": "Due times, the cost of lateness and how long demand may wait.\n\nUnloading after the due time also breaks the ``lateness`` rule, which the\nobjective weighs like every other rule: 0 leaves lateness a cost only, and\n``hard`` makes the due times limits.",
       "properties": {
         "due_hours": {
           "anyOf": [

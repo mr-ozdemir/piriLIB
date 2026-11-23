@@ -15,7 +15,9 @@ carried or no vehicle can carry more. Choices are random, weighted by
   extra cost of the detour, times the share of capacity it fills;
 - for ending the route: 1, or 0.1 while the minimum fill is not reached.
 
-Every built-in rule except minimum fill and coverage holds by construction.
+Every built-in rule except minimum fill, coverage and lateness holds by
+construction (handling capacity and vehicle limits: see the scheduled instances
+below).
 
 Pheromone follows the MAX-MIN hypercube framework: values stay in
 ``[tau_min, 1]`` and ``tau = (1 - rho) * tau + rho * used`` does not depend on

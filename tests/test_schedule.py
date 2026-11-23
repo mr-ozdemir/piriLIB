@@ -19,12 +19,19 @@ from pirilib import (
     synthetic,
 )
 from pirilib import objective as obj
+from pirilib.constraints import CATALOG
 from pirilib.solvers.exact import ExactSolver
 from pirilib.spec import LineHaulInstance, parse_spec
 
 A, B, C = 0, 1, 2
 BIG, SMALL = 0, 1
-GOAL = obj.total_cost() + 1e6 * obj.violations()
+PRICED = tuple(name for name in CATALOG if name != "lateness")
+"""Every rule but lateness: these problems price it with ``rules.service.penalty`` alone."""
+
+GOAL = obj.total_cost() + 1e6 * obj.violations(PRICED)
+
+LATE_ONLY = {"lateness"}
+"""The rules a plan may break and still count as planned: it only delivers late."""
 
 
 def timed(document: dict[str, Any]) -> dict[str, Any]:
@@ -79,7 +86,7 @@ def test_timeline_and_lateness(
     assert evaluation.dispatch_cost[0] == pytest.approx(
         1.0 * 6371.0 * 3.141592653589793 / 180 + hourly
     )
-    assert evaluation.feasible
+    assert evaluation.violated() == {"lateness": 900 * 2 + 250 * 2}
 
 
 def test_loading_before_ready(
@@ -90,12 +97,12 @@ def test_loading_before_ready(
         day=0, kind="owned", source=0, origin=A, stops=(B,), loads=OWNED_AB.loads, start=480.0
     )
     evaluation = agree(instance, plan(early, SMALL_AC, SMALL_BA))
-    assert evaluation.violated() == {"ready": 1}
+    assert evaluation.violated() == {"ready": 1, "lateness": 900 * 1 + 250 * 2}
     late_start = Dispatch(
         day=0, kind="owned", source=0, origin=A, stops=(B,), loads=OWNED_AB.loads, start=600.0
     )
     evaluation = agree(instance, plan(late_start, SMALL_AC, SMALL_BA))
-    assert evaluation.feasible
+    assert evaluation.violated() == {"lateness": 900 * 3 + 250 * 2}
     assert evaluation.start_minute[0] == 600.0
 
 
@@ -105,12 +112,15 @@ def test_deferral(
     document = timed(document)
     later = Dispatch(day=1, kind="owned", source=0, origin=A, stops=(B,), loads=OWNED_AB.loads)
     instance = compile_document(document)
-    assert agree(instance, plan(later, SMALL_AC, SMALL_BA)).violated() == {"deferral": 1}
+    assert agree(instance, plan(later, SMALL_AC, SMALL_BA)).violated() == {
+        "deferral": 1,
+        "lateness": 900 * 17 + 250 * 2,
+    }
 
     document["rules"]["service"]["max_deferral_days"] = 1
     instance = compile_document(document)
     evaluation = agree(instance, plan(later, SMALL_AC, SMALL_BA))
-    assert evaluation.feasible
+    assert evaluation.violated() == {"lateness": 900 * 17 + 250 * 2}
     assert evaluation.start_minute[0] == 1440.0
     assert evaluation.load_late_hours.tolist()[0] == 17.0
 
@@ -123,7 +133,11 @@ def test_handling_capacity_and_vehicle_limits(
     document["centers"][0]["vehicle_limits"] = {"small": 0}
     instance = compile_document(document)
     evaluation = agree(instance, plan(OWNED_AB, SMALL_AC, SMALL_BA))
-    assert evaluation.violated() == {"handling": 150.0, "vehicle_limit": 2}
+    assert evaluation.violated() == {
+        "lateness": 900 * 2 + 250 * 2,
+        "handling": 150.0,
+        "vehicle_limit": 2,
+    }
 
 
 def test_untimed_documents_behave_as_before(instance: LineHaulInstance) -> None:
@@ -215,7 +229,7 @@ def test_the_colony_plans_with_handling_capacity() -> None:
     assert result.stats["score"] == pytest.approx(result.objective, rel=1e-6)
 
     roomy = ACOSolver().solve(synthetic_case(250000.0), GOAL, seed=0)
-    assert roomy.evaluation.feasible
+    assert roomy.evaluation.violated().keys() <= LATE_ONLY
     assert roomy.evaluation.total_cost < 1_059_052
     assert roomy.stats["score"] == pytest.approx(roomy.evaluation.total_cost, rel=1e-6)
 
@@ -270,7 +284,7 @@ def test_what_does_not_fit_waits_for_the_next_day(
     result = ACOSolver(QUICK).solve(instance, GOAL, seed=0)
     evaluation = result.evaluation
     plan = evaluation.plan
-    assert evaluation.feasible
+    assert evaluation.violated().keys() <= LATE_ONLY
     assert plan.day.tolist() == [0, 1]
     assert plan.load_demand.tolist() == [0, 0]
     assert plan.load_quantity[:, 0].tolist() == [500.0, 400.0]
@@ -361,7 +375,7 @@ def test_the_exact_solver_defers_what_does_not_fit(
     instance = compile_document(no_handling_time(deferral_document(document, 1)))
     result = ExactSolver().solve(instance, GOAL)
     evaluation = result.evaluation
-    assert evaluation.feasible
+    assert evaluation.violated().keys() <= LATE_ONLY
     assert evaluation.plan.day.tolist() == [0, 1]
     assert evaluation.plan.load_quantity[:, 0].tolist() == pytest.approx([500.0, 400.0])
     assert evaluation.start_minute.tolist() == [540.0, 1440.0]
@@ -376,7 +390,7 @@ def test_the_exact_solver_keeps_vehicle_limits(
     instance = compile_document(document)
     result = ExactSolver().solve(instance, GOAL)
     evaluation = result.evaluation
-    assert evaluation.feasible
+    assert evaluation.violated().keys() <= LATE_ONLY
     plan = evaluation.plan
     stop_type = evaluation.vehicle_type[np.repeat(np.arange(len(plan)), np.diff(plan.stop_start))]
     assert not np.any((plan.stop_center == B) & (stop_type == BIG))
@@ -390,6 +404,6 @@ def test_the_exact_solver_prices_lateness(
     instance = compile_document(no_handling_time(timed(document)))
     result = ExactSolver().solve(instance, GOAL)
     colony = ACOSolver(QUICK).solve(instance, GOAL, seed=0)
-    assert result.evaluation.feasible
+    assert result.evaluation.violated().keys() <= LATE_ONLY
     assert result.objective <= colony.objective * (1 + 1e-9)
     assert result.stats["score"] == pytest.approx(result.evaluation.total_cost, rel=1e-9)

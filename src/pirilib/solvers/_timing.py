@@ -3,11 +3,13 @@
 A route starts loading when its loads are ready (and not before 00:00 of its
 day), loads everything at the origin, then drives every leg and unloads at every
 stop. Every handling and every leg takes whole minutes, rounded up; a leg takes
-its duration when the problem gives one, else its distance over the speed. A load is
-late by the started hours between its due time and the end of the unloading at
-its stop. :func:`timeline` times every route of a colony at once, with the
-segment sums of :mod:`pirilib.evaluation`; :func:`route_timing` and
-:func:`route_lateness` time a single route for the local search.
+its duration when the problem gives one, else its distance over the speed. A load
+is late by the started hours between its due time and the end of the unloading
+at its stop; the quantity late times those hours is the amount of the
+``lateness`` rule, and ``rules.service.penalty`` times it the lateness cost.
+:func:`timeline` times every route of a colony at once, with the segment sums of
+:mod:`pirilib.evaluation`; :func:`route_timing` and :func:`route_lateness` time a
+single route for the local search.
 """
 
 import math
@@ -55,6 +57,8 @@ class Timeline:
         finish: (stops,) minute unloading there ends
         unload: (stops,) primary quantity unloaded
         service: (routes,) lateness penalty of the route's loads
+        late: (routes,) primary quantity of the route's loads times the started
+            hours they are late
     """
 
     route_row: NDArray[np.int64]
@@ -68,6 +72,7 @@ class Timeline:
     finish: NDArray[np.float64]
     unload: NDArray[np.float64]
     service: NDArray[np.float64]
+    late: NDArray[np.float64]
 
     @property
     def hours(self) -> NDArray[np.float64]:
@@ -144,7 +149,8 @@ def timeline(batch: "Batch", colony: "Colony", shared: "Shared") -> Timeline:
         quantity = batch.item_quantity[(*where, np.full(stop.size, primary))]
         late = quantity * late_hours(finish[stop] - batch.item_due[where])
         late_route = stop_route[stop]
-    service = shared.penalty * np.bincount(late_route, weights=late, minlength=option.size)
+    overdue = np.bincount(late_route, weights=late, minlength=option.size)
+    service = shared.penalty * overdue
     return Timeline(
         route_row=colony.route_row,
         route_type=batch.vehicle_type[of, option],
@@ -157,6 +163,7 @@ def timeline(batch: "Batch", colony: "Colony", shared: "Shared") -> Timeline:
         finish=finish,
         unload=unload,
         service=service,
+        late=overdue,
     )
 
 
@@ -190,7 +197,10 @@ def route_lateness(
     items: Sequence[Sequence[int]],
     finishes: Sequence[float],
 ) -> float:
-    """Lateness penalty of one route; ``items`` are the item slots of each stop (whole items)."""
+    """Primary quantity times started hours late, summed over the loads of one route.
+
+    ``items`` are the item slots of each stop (whole items).
+    """
     primary = shared.primary
     total = 0.0
     for stop, amount, slots, finish in zip(stops, amounts, items, finishes, strict=True):
@@ -205,7 +215,7 @@ def route_lateness(
             quantity = problem.item_quantity[stop, chosen, primary]
             hours = late_hours(finish - problem.item_due[stop, chosen])
         total += float(np.sum(quantity * hours))
-    return shared.penalty * total
+    return total
 
 
 def _minutes(value: float) -> float:

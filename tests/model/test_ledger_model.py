@@ -135,6 +135,7 @@ def single_stop_timeline(
         finish=np.array([arrival]),
         unload=np.array([load]),
         service=np.zeros(1),
+        late=np.zeros(1),
     )
 
 
