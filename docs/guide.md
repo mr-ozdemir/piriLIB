@@ -729,7 +729,9 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
   per unit and km.
 - With times, deferral or center limits the ant colony plans greedily, day by
   day and subproblem by subproblem: an earlier subproblem never gives up room
-  for a later one, and deferral does not look at the next day's capacity.
+  for a later one, and deferral does not look at the next day's capacity:
+  demand that may wait is valued by an estimate of carrying it the next day
+  on a direct spot trip, or by leaving it uncarried when that scores better.
   While building routes it counts all handling on the departure day; the exact
   days are used only afterwards, so room after midnight is partly left unused
   and, rarely, a limit is exceeded (the penalty then shows it). Departures are

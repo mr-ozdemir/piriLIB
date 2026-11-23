@@ -41,7 +41,13 @@ from pirilib.evaluation import evaluate
 from pirilib.objective import Objective, hard_rules, linear_form
 from pirilib.plan import OWNED, SPOT
 from pirilib.solvers._colony import Batch, Colony, Shared, scores
-from pirilib.solvers._routing import route_gap, route_km, route_ok, route_value
+from pirilib.solvers._routing import (
+    defer_excess,
+    route_gap,
+    route_km,
+    route_ok,
+    route_value,
+)
 from pirilib.solvers._timing import late_hours, route_timing, timeline
 from pirilib.solvers.base import (
     SolveResult,
@@ -448,6 +454,7 @@ def solve_subproblem(
             cost[f_base + index] += coefficients.get(f"cost[{kind_of[r]}]", 0.0) * float(
                 problem.per_unit[routes[r][0]] @ demand[node]
             )
+    excess = defer_excess(problem, coefficients, shared)
     for position, node in enumerate(loaded):
         waits = ~problem.item_final[node]
         quantity = demand[node] - problem.item_quantity[node][waits].sum(axis=0)
@@ -463,6 +470,7 @@ def solve_subproblem(
             + coefficients.get("violation[coverage]", 0.0) * quantity.sum()
             + service * deferred
             + lateness * overdue
+            - (0.0 if excess is None else float(excess[node].sum()))
         )
         upper[u_base + position] = 1.0
     cost[s_base:h_base] = fill_weight

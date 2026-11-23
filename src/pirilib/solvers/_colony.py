@@ -188,6 +188,42 @@ class Batch:
             self.item_quantity[..., primary] * ~self.item_final * self.defer_late, axis=2
         )
         self.node_late = np.where(self.demand[..., primary] > 0, overdue / safe[..., primary], 0.0)
+        self._excess: tuple[int, tuple[NDArray[np.float64], NDArray[np.float64]] | None] | None = (
+            None
+        )
+
+    def excess(
+        self, coefficients: Mapping[str, float], shared: Shared
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]] | None:
+        """Per item (subproblems, k, I) and per primary unit of a node (subproblems, k):
+        by how much carrying waiting demand tomorrow is estimated to cost more than
+        leaving it uncarried; None when nowhere.
+
+        Waiting is then worth no more than leaving, as in
+        :func:`pirilib.solvers._routing.defer_excess`. Kept for the coefficients
+        it was last asked for.
+        """
+        if self._excess is not None and self._excess[0] == id(coefficients):
+            return self._excess[1]
+        primary = shared.primary
+        both = coefficients.get("unserved", 0.0) + coefficients.get("violation[coverage]", 0.0)
+        weights = np.array(
+            [both + coefficients.get(f"unserved[{name}]", 0.0) for name in shared.dimensions]
+        )
+        estimate = self.item_quantity[..., primary] * (
+            coefficients.get("service", 0.0) * self.defer_cost
+            + coefficients.get("violation[lateness]", 0.0) * self.defer_late
+        )
+        item = np.where(
+            self.item_final, 0.0, np.clip(estimate - self.item_quantity @ weights, 0.0, None)
+        )
+        found = None
+        if item.any():
+            demand = self.demand[..., primary]
+            node = np.where(demand > 0, item.sum(axis=2) / np.where(demand > 0, demand, 1.0), 0.0)
+            found = (item, node)
+        self._excess = (id(coefficients), found)
+        return found
 
 
 def _first_choices(
@@ -984,8 +1020,9 @@ def scores(
     amount of the ``lateness`` rule, and only demand that may not wait for the
     next day counts as unserved. Demand that may wait costs its
     :attr:`~pirilib.solvers.decompose.Subproblem.defer_cost` under ``service``
-    and its estimated lateness under the rule, unless ``waiting`` is False (it
-    is then planned, and paid for, the next day). With a ``room`` (one
+    and its estimated lateness under the rule, but never more than leaving it
+    uncarried would (:meth:`Batch.excess`), unless ``waiting`` is False (it is
+    then planned, and paid for, the next day). With a ``room`` (one
     subproblem), handling and vehicles beyond it are violations.
     """
     rows = colony.remaining.shape[0]
@@ -1037,6 +1074,14 @@ def scores(
     for feature, weight in coefficients.items():
         if feature in features:
             total += weight * features[feature]
+    excess = batch.excess(coefficients, shared) if timing is not None and waiting else None
+    if excess is not None:
+        of_row = np.arange(rows) // colony.ants
+        if shared.rules.split_demand:
+            total -= np.sum(colony.remaining[..., shared.primary] * excess[1][of_row], axis=1)
+        else:
+            waits = colony.item_left & ~batch.item_final[of_row]
+            total -= np.sum(waits * excess[0][of_row], axis=(1, 2))
     return total.reshape(batch.count, colony.ants)
 
 

@@ -225,6 +225,38 @@ def test_a_load_that_can_only_arrive_late_stays_behind_when_lateness_is_hard(
     assert result.evaluation.violated() == {"coverage": DESI}
 
 
+@pytest.mark.parametrize("name", SOLVERS)
+def test_a_load_that_may_wait_is_not_sent_late_when_leaving_it_scores_better(
+    name: str, document: dict[str, Any]
+) -> None:
+    """The demand may leave a day later, which would make it later still, so in the end
+    it stays behind. Sending it on the first day, two hours late, would break the hard
+    rule to avoid a wait that ends the same way."""
+    document = late_or_dear(document, "hard")
+    del document["fleet"]["spot"][FAST]
+    document["rules"]["service"]["max_deferral_days"] = 1
+    spec = parse_spec(document)
+
+    result = SOLVERS[name].solve(spec.compile(), spec.build_objective())
+
+    assert result.evaluation.violated() == {"coverage": DESI}
+
+
+@pytest.mark.parametrize("name", SOLVERS)
+def test_a_load_that_may_wait_is_sent_late_when_that_scores_better_than_leaving_it(
+    name: str, document: dict[str, Any]
+) -> None:
+    """With a weight of 1 the two late hours cost 600 and leaving the load 3e9."""
+    document = late_or_dear(document, 1.0)
+    del document["fleet"]["spot"][FAST]
+    document["rules"]["service"]["max_deferral_days"] = 1
+    spec = parse_spec(document)
+
+    result = SOLVERS[name].solve(spec.compile(), spec.build_objective())
+
+    assert result.evaluation.violated() == {"lateness": AMOUNT}
+
+
 def test_a_late_plan_breaks_hard_lateness(
     document: dict[str, Any], compile_document: CompileDocument
 ) -> None:
