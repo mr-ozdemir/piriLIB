@@ -17,7 +17,7 @@ from pirilib.evaluation import evaluate
 from pirilib.objective import Objective, hard_rules
 from pirilib.plan import SPOT
 from pirilib.solvers._colony import Shared
-from pirilib.solvers.base import SolveResult, require_objective
+from pirilib.solvers.base import SolveResult, limit_stats, require_objective
 from pirilib.solvers.decompose import UNBOUNDED, PlanBuilder, Routes, Subproblem, subproblems
 from pirilib.spec.instance import UNLIMITED, LineHaulInstance
 
@@ -114,6 +114,7 @@ class SequentialSolver:
             count += 1
         stats["subproblems"] = count
         plan = builder.build()
+        stats |= limit_stats(instance, plan)
         evaluation = evaluate(instance, plan, constraints, hard=hard_rules(goal))
         return SolveResult(
             plan=plan,

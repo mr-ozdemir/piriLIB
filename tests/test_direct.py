@@ -481,6 +481,44 @@ def test_spot_limit_leaves_the_demand_beyond_it_uncarried(
     assert violated == expected
 
 
+@pytest.mark.parametrize(
+    ("available", "reached"),
+    [
+        pytest.param(2, 1, id="limit-below-lines"),
+        pytest.param(3, 1, id="limit-equal-to-lines"),
+        pytest.param(4, 0, id="limit-above-lines"),
+    ],
+)
+def test_the_stats_count_the_spot_limits_that_were_used_up(
+    available: int,
+    reached: int,
+    document: dict[str, Any],
+    compile_document: CompileDocument,
+) -> None:
+    """Three 300 desi lines on one day need three ``small`` vehicles of the only offer."""
+    document["fleet"] = {
+        "spot": [{"type": "small", "cost": {"fixed": 1.0}, "available": available}]
+    }
+    document["demand"] = [line("A", "C", 300.0), line("B", "C", 300.0), line("C", "A", 300.0)]
+    instance = compile_document(document)
+
+    result = DirectShipping().solve(instance, GOAL)
+
+    assert result.stats["spot_limits_reached"] == reached
+
+
+def test_without_a_spot_limit_the_stats_do_not_count_one(
+    document: dict[str, Any], compile_document: CompileDocument
+) -> None:
+    document["fleet"] = {"spot": [{"type": "small", "cost": {"fixed": 1.0}}]}
+    document["demand"] = [line("A", "C", 300.0)]
+    instance = compile_document(document)
+
+    result = DirectShipping().solve(instance, GOAL)
+
+    assert "spot_limits_reached" not in result.stats
+
+
 FILL_FLEET: dict[str, Any] = {
     "spot": [
         {"type": "big", "cost": {"fixed": 100.0}},

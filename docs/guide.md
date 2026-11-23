@@ -690,7 +690,9 @@ thin entry point that builds a class and calls it (`solve`, `tune`, `evaluate`,
 - When spot offers have daily limits, origins of a day take vehicles one after
   another, greedily. `result.stats["spot_limits_reached"]` counts the (day,
   offer) pairs whose limit was used up; above zero, the greedy sharing may have
-  bound the plan.
+  bound the plan. Every solver reports it, `pirilib solve` warns when it is
+  above zero, and `--summary` writes the solver's `stats` with the other
+  numbers.
 - Forecasts cover one quantity dimension, up to 7 days ahead, per day; time
   waves come from shares learned per line and weekday, not from a model. In walk-forward tests on real demand, forecasts ran about
   6 % low because of week-to-week swings around holidays. None of the
