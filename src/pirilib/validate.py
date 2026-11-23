@@ -298,6 +298,12 @@ class _Checker:
                 if late > 1e-9:
                     hours = math.ceil(round(late / 60.0, 9))
                     self.service += penalty * item.quantity[primary] * hours
+                    if item.quantity[primary] > 0:
+                        self.add(
+                            "lateness",
+                            item.quantity[primary] * hours,
+                            f"{label}: demand {demand} is unloaded {hours} hour(s) after it is due",
+                        )
         return (clock - start) / 60.0
 
     def travel(self, vehicle: int, origin: int, destination: int, speed: float) -> float:

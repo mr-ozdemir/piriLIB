@@ -53,7 +53,8 @@ class Evaluation:
         served: Per demand and dimension
         unserved: Per demand and dimension, never negative
         owned_fixed_cost: Fixed cost of mandatory owned vehicles over the calendar
-        service_cost: Lateness penalty
+        service_cost: The price of lateness: rules.service.penalty per unit and hour of
+            the ``lateness`` violation
         violations: Built-in constraints first, then your own
         hard: Names of the rules that must hold; empty when none is declared
     """
@@ -304,6 +305,7 @@ class _Context:
             "load_route": self._load_route(),
             "ready": self._ready(),
             "deferral": self._deferral(),
+            "lateness": self._lateness(),
             "ban": self._ban(),
             "owned_line": self._owned_line(),
             "owned_availability": self._owned_availability(),
@@ -350,6 +352,10 @@ class _Context:
         delay = plan.day[plan.load_dispatch] - instance.demand_day[plan.load_demand]
         allowed = instance.rules.service.max_deferral_days
         return int(np.count_nonzero((delay < 0) | (delay > allowed)))
+
+    def _lateness(self) -> float:
+        primary = self.instance.primary_dimension
+        return float(np.sum(self.plan.load_quantity[:, primary] * self.load_late_hours))
 
     def _touches(
         self,

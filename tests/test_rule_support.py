@@ -215,6 +215,7 @@ SCENARIOS: dict[str, tuple[Change, ...]] = {
 
 SETTING = {
     "deferral": "deferral",
+    "lateness": "late-and-tight",
     "handling": "handling-capacity",
     "vehicle_limit": "vehicle-limits",
     "min_fill": "generated",

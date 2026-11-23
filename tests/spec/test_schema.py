@@ -32,6 +32,7 @@ BUILT_IN_RULES = (
     "load_route",
     "ready",
     "deferral",
+    "lateness",
     "ban",
     "owned_line",
     "owned_availability",

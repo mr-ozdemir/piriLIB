@@ -83,6 +83,7 @@ class Batch:
         final_share: (subproblems, k, D) share of each node's demand that may not wait
         node_defer: (subproblems, k) cost per primary unit of the node's demand left
             for the next day, items in proportion (split demand)
+        node_late: (subproblems, k) hours of lateness per primary unit in that cost
     """
 
     def __init__(self, problems: Sequence[Subproblem], shared: Shared) -> None:
@@ -122,6 +123,7 @@ class Batch:
         self.item_due = np.full((count, k, items), np.inf)
         self.item_final = np.ones((count, k, items), dtype=np.bool_)
         self.defer_cost = np.zeros((count, k, items))
+        self.defer_late = np.zeros((count, k, items))
         self.node_ready = np.full((count, k), -np.inf)
         for index, problem in enumerate(self.problems):
             size, options, width = problem.size, problem.options, problem.item_row.shape[1]
@@ -137,6 +139,7 @@ class Batch:
             self.item_due[index, :size, :width] = problem.item_due
             self.item_final[index, :size, :width] = problem.item_final
             self.defer_cost[index, :size, :width] = problem.defer_cost
+            self.defer_late[index, :size, :width] = problem.defer_late
             self.node_ready[index, :size] = problem.node_ready
             self.origin_km[index, :size] = problem.origin_km
             self.node_km[index, :size, :size] = problem.node_km
@@ -181,6 +184,10 @@ class Batch:
             self.item_quantity[..., primary] * ~self.item_final * self.defer_cost, axis=2
         )
         self.node_defer = np.where(self.demand[..., primary] > 0, waiting / safe[..., primary], 0.0)
+        overdue = np.sum(
+            self.item_quantity[..., primary] * ~self.item_final * self.defer_late, axis=2
+        )
+        self.node_late = np.where(self.demand[..., primary] > 0, overdue / safe[..., primary], 0.0)
 
 
 def _first_choices(
@@ -973,12 +980,13 @@ def scores(
     """(subproblems, ants): the linear objective of every solution, without constants.
 
     On scheduled instances the routes are timed as the evaluator times them:
-    hourly costs join the dispatch costs, lateness joins ``service``, and only
-    demand that may not wait for the next day counts as unserved. Demand that
-    may wait costs its :attr:`~pirilib.solvers.decompose.Subproblem.defer_cost`
-    under ``service``, unless ``waiting`` is False (it is then planned, and paid
-    for, the next day). With a ``room`` (one subproblem), handling and vehicles
-    beyond it are violations.
+    hourly costs join the dispatch costs, lateness joins ``service`` and is the
+    amount of the ``lateness`` rule, and only demand that may not wait for the
+    next day counts as unserved. Demand that may wait costs its
+    :attr:`~pirilib.solvers.decompose.Subproblem.defer_cost` under ``service``
+    and its estimated lateness under the rule, unless ``waiting`` is False (it
+    is then planned, and paid for, the next day). With a ``room`` (one
+    subproblem), handling and vehicles beyond it are violations.
     """
     rows = colony.remaining.shape[0]
     of = colony.route_row // colony.ants
@@ -1006,9 +1014,11 @@ def scores(
         features[f"unused[{name}]"] = per_row(np.clip(capacity - load, 0.0, None), mask)
     remaining = colony.remaining
     if timing is not None:
-        remaining, deferred = _waiting(batch, colony, shared)
+        remaining, deferred, overdue = _waiting(batch, colony, shared)
         service = per_row(timing.service, every)
         features["service"] = service + deferred if waiting else service
+        late = per_row(timing.late, every)
+        features["violation[lateness]"] = late + overdue if waiting else late
     if room is not None and timing is not None:
         handling, vehicles = room.excess(timing, rows)
         features["violation[handling]"] = handling
@@ -1032,16 +1042,19 @@ def scores(
 
 def _waiting(
     batch: Batch, colony: Colony, shared: Shared
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Per row: the uncarried demand that may not wait, and the cost of the rest waiting."""
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """Per row: the uncarried demand that may not wait, then the cost and the lateness
+    (quantity hours) of the rest waiting."""
     primary = shared.primary
     of = np.arange(colony.remaining.shape[0]) // colony.ants
     if shared.rules.split_demand:
         final = colony.remaining * batch.final_share[of]
         cost = np.sum(colony.remaining[..., primary] * batch.node_defer[of], axis=1)
-        return final, cost
+        late = np.sum(colony.remaining[..., primary] * batch.node_late[of], axis=1)
+        return final, cost, late
     waits = colony.item_left & ~batch.item_final[of]
     quantity = batch.item_quantity[of]
     final = np.clip(colony.remaining - np.sum(quantity * waits[..., None], axis=2), 0.0, None)
     cost = np.sum(quantity[..., primary] * waits * batch.defer_cost[of], axis=(1, 2))
-    return final, cost
+    late = np.sum(quantity[..., primary] * waits * batch.defer_late[of], axis=(1, 2))
+    return final, cost, late

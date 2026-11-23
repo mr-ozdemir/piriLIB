@@ -4,6 +4,8 @@ They mirror :func:`pirilib.solvers._colony.scores` and the evaluator: a route is
 an option and its stops in visiting order; its value is the part of a linear
 objective that the route contributes. On scheduled instances the caller times
 the route (see :mod:`pirilib.solvers._timing`) and passes its hours and lateness.
+Lateness counts twice in an objective: as the cost ``rules.service.penalty`` under
+``service``, and as the amount of the ``lateness`` rule.
 """
 
 import itertools
@@ -84,9 +86,14 @@ def route_value(
     load: NDArray[np.float64],
     *,
     hours: float = 0.0,
-    service: float = 0.0,
+    late: float = 0.0,
 ) -> float:
-    """The route's share of the linear objective; ``service`` is its lateness penalty."""
+    """The route's share of the linear objective.
+
+    ``late`` is the primary quantity of its loads times the started hours they are
+    late: it costs ``rules.service.penalty`` under ``service`` and is the amount of
+    the ``lateness`` rule.
+    """
     kind = "owned" if problem.kind[option] == OWNED else "spot"
     cost = float(problem.fixed[option] + problem.per_km[option] * km)
     if hours:
@@ -104,8 +111,9 @@ def route_value(
     )
     if shortfall:
         value += coefficients.get("violation[min_fill]", 0.0) * shortfall
-    if service:
-        value += coefficients.get("service", 0.0) * service
+    if late:
+        value += coefficients.get("service", 0.0) * (shared.penalty * late)
+        value += coefficients.get("violation[lateness]", 0.0) * late
     return value
 
 
@@ -120,7 +128,8 @@ def unserved_value(
 
     Items that may wait for the next day (whole items: those in ``item_left``)
     cost their :attr:`~pirilib.solvers.decompose.Subproblem.defer_cost` under
-    ``service`` instead of counting as unserved.
+    ``service``, and their estimated lateness under the ``lateness`` rule, instead
+    of counting as unserved.
     """
     value = 0.0
     if problem.deferrable:
@@ -136,6 +145,9 @@ def unserved_value(
             waiting = quantity * (waits & item_left)[:, :, None]
         deferred = float(np.sum(waiting[:, :, primary] * problem.defer_cost))
         value += coefficients.get("service", 0.0) * deferred
+        weight = coefficients.get("violation[lateness]", 0.0)
+        if weight:
+            value += weight * float(np.sum(waiting[:, :, primary] * problem.defer_late))
         remaining = np.clip(remaining - waiting.sum(axis=1), 0.0, None)
     value += coefficients.get("unserved", 0.0) * float(remaining.sum())
     for column, name in enumerate(shared.dimensions):

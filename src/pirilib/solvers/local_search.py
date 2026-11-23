@@ -168,7 +168,7 @@ class _Search:
             self.p, self.shared, route.option, nodes, unloads, float(max(ready, default=-np.inf))
         )
         items = [stop.items for stop in route.stops]
-        service = route_lateness(self.p, self.shared, nodes, unloads, items, finishes)
+        late = route_lateness(self.p, self.shared, nodes, unloads, items, finishes)
         return route_value(
             self.p,
             self.coefficients,
@@ -177,7 +177,7 @@ class _Search:
             km,
             route.load,
             hours=(finishes[-1] - start) / 60.0,
-            service=service,
+            late=late,
         )
 
     def uncarried(

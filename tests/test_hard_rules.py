@@ -92,7 +92,7 @@ def test_a_rule_can_be_written_as_hard(document: dict[str, Any]) -> None:
 
 
 def test_other_can_make_every_unnamed_rule_hard(document: dict[str, Any]) -> None:
-    """Two rules are named with weights; the other 17 of the 19 built-in rules are hard."""
+    """Two rules are named with weights; the other 18 of the 20 built-in rules are hard."""
     document["objective"] = {
         "cost": 1,
         "penalties": {"coverage": 1000, "min_fill": 50, "other": "hard"},
@@ -102,7 +102,7 @@ def test_other_can_make_every_unnamed_rule_hard(document: dict[str, Any]) -> Non
 
     assert spec.objective is not None
     hard = spec.objective.hard_rules()
-    assert len(hard) == 17
+    assert len(hard) == 18
     assert hard.isdisjoint({"coverage", "min_fill"})
 
 

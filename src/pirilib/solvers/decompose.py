@@ -67,6 +67,8 @@ class Subproblem:
             the next day: the lateness if it leaves at 00:00 on a direct trip of its
             own, plus the cost of that trip, with the cheapest spot offer; 0 for
             final items
+        defer_late: (k, I) the started hours of lateness in that estimate, per
+            primary unit
     """
 
     day: int
@@ -97,6 +99,7 @@ class Subproblem:
     item_final: NDArray[np.bool_]
     node_ready: NDArray[np.float64]
     defer_cost: NDArray[np.float64]
+    defer_late: NDArray[np.float64]
 
     @property
     def size(self) -> int:
@@ -306,10 +309,11 @@ def _subproblem(
     last = day >= len(instance.days) - 1
     item_final = ~present | last | (waited >= rules.service.max_deferral_days)
     defer_cost = np.zeros(item_row.shape)
+    defer_late = np.zeros(item_row.shape)
     deferrable = present & ~item_final
     if deferrable.any():
         node_of_item = np.nonzero(deferrable)[0]
-        defer_cost[deferrable] = _defer_costs(
+        defer_cost[deferrable], defer_late[deferrable] = _defer_costs(
             instance,
             day,
             item_quantity[deferrable, primary],
@@ -359,6 +363,7 @@ def _subproblem(
         item_final=item_final,
         node_ready=np.max(item_ready, axis=1, initial=-np.inf),
         defer_cost=defer_cost,
+        defer_late=defer_late,
     )
 
 
@@ -373,8 +378,8 @@ def _defer_costs(
     spot: NDArray[np.intp],
     origin: int,
     centers: NDArray[np.int64],
-) -> NDArray[np.float64]:
-    """Per item and primary unit, see :attr:`Subproblem.defer_cost`.
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Per item and primary unit, :attr:`Subproblem.defer_cost` and its hours of lateness.
 
     ``allowed`` is (spot offers, items): the offer may stop at the item's node;
     ``centers`` are the centers of those nodes.
@@ -384,6 +389,7 @@ def _defer_costs(
     handling = np.ceil(np.round(rules.handling.minutes_per_unit * quantity, 9))
     start = np.maximum((day + 1) * MINUTES_PER_DAY, ready)
     best = np.full(quantity.size, np.inf)
+    overdue = np.zeros(quantity.size)
     for position, offer in enumerate(spot):
         kind = instance.spot_type[offer]
         travel = instance.travel_minutes(int(kind), origin, centers)
@@ -396,8 +402,14 @@ def _defer_costs(
         )
         trips = np.ceil(np.round(quantity / float(instance.capacity[kind, primary]), 9))
         value = rules.service.penalty * hours + trip * trips / quantity
-        best = np.where(allowed[position], np.minimum(best, value), best)
-    return np.asarray(np.where(np.isfinite(best), best, 0.0), dtype=np.float64)
+        better = allowed[position] & (value < best)
+        best = np.where(better, value, best)
+        overdue = np.where(better, hours, overdue)
+    found = np.isfinite(best)
+    return (
+        np.asarray(np.where(found, best, 0.0), dtype=np.float64),
+        np.asarray(np.where(found, overdue, 0.0), dtype=np.float64),
+    )
 
 
 @dataclass(frozen=True, eq=False, slots=True)

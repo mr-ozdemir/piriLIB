@@ -245,8 +245,8 @@ class ColumnTimes:
 
     Attributes:
         hours: (routes,) from the start of loading to the end of the last unloading
-        late: Per (route, node), the lateness penalty of the route carrying all of
-            the node's demand
+        late: Per (route, node), the primary quantity times the started hours late
+            of the route carrying all of the node's demand
         start: (routes,) day loading starts at the origin
         arrival: Per (route, node), day the route reaches the stop
     """
@@ -289,7 +289,7 @@ class ColumnTimes:
                 arrival[(r, stop)] = day_of(finish)
                 if stop in carried:
                     overdue = late_hours(finish - problem.item_due[stop])
-                    late[(r, stop)] = shared.penalty * float(
+                    late[(r, stop)] = float(
                         np.sum(problem.item_quantity[stop, :, primary] * overdue)
                     )
         return cls(hours, late, start_day, arrival)
@@ -436,10 +436,14 @@ def solve_subproblem(
         upper[r] = bound
     kind_of = ["owned" if problem.kind[option] == OWNED else "spot" for option, _ in routes]
     service = coefficients.get("service", 0.0)
+    lateness = coefficients.get("violation[lateness]", 0.0)
     for index, (r, node) in enumerate(shares):
+        late = times.late.get((r, node), 0.0)
         cost[f_base + index] = -coefficients.get(f"unused[{kind_of[r]}]", 0.0) * demand[
             node, primary
-        ] + service * times.late.get((r, node), 0.0)
+        ] + service * (shared.penalty * late)
+        if lateness:
+            cost[f_base + index] += lateness * late
         if problem.unit_priced:
             cost[f_base + index] += coefficients.get(f"cost[{kind_of[r]}]", 0.0) * float(
                 problem.per_unit[routes[r][0]] @ demand[node]
@@ -449,6 +453,7 @@ def solve_subproblem(
         quantity = demand[node] - problem.item_quantity[node][waits].sum(axis=0)
         waiting = problem.item_quantity[node, waits, primary]
         deferred = float(np.sum(waiting * problem.defer_cost[node, waits]))
+        overdue = float(np.sum(waiting * problem.defer_late[node, waits]))
         cost[u_base + position] = (
             coefficients.get("unserved", 0.0) * quantity.sum()
             + sum(
@@ -457,6 +462,7 @@ def solve_subproblem(
             )
             + coefficients.get("violation[coverage]", 0.0) * quantity.sum()
             + service * deferred
+            + lateness * overdue
         )
         upper[u_base + position] = 1.0
     cost[s_base:h_base] = fill_weight

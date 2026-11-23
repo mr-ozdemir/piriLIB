@@ -43,6 +43,10 @@ CATALOG: Final[Mapping[str, str]] = MappingProxyType(
             "Loads that leave before their demand's date, or more than "
             "rules.service.max_deferral_days after it (count)."
         ),
+        "lateness": (
+            "Primary quantity unloaded after the due time of its demand, times the started "
+            "hours it is late (quantity hours)."
+        ),
         "ban": "Origins and stops where the vehicle type is banned (count).",
         "owned_line": (
             "Owned dispatches that do not leave from their line's origin or do not end at "

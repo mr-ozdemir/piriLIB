@@ -61,23 +61,31 @@ def _record(*, penalized: Iterable[str], refused: Iterable[str] = ()) -> Mapping
 
 SUPPORT: Final[Mapping[type, Mapping[str, Support]]] = MappingProxyType(
     {
-        ACOSolver: _record(penalized=("handling", "vehicle_limit", "min_fill", "coverage")),
-        ExactSolver: _record(
-            penalized=("handling", "vehicle_limit", "min_fill", "coverage"), refused=("split",)
+        ACOSolver: _record(
+            penalized=("lateness", "handling", "vehicle_limit", "min_fill", "coverage")
         ),
-        DirectShipping: _record(penalized=("handling", "vehicle_limit", "min_fill", "coverage")),
+        ExactSolver: _record(
+            penalized=("lateness", "handling", "vehicle_limit", "min_fill", "coverage"),
+            refused=("split",),
+        ),
+        DirectShipping: _record(
+            penalized=("lateness", "handling", "vehicle_limit", "min_fill", "coverage")
+        ),
         RoutingAdapter: _record(
             penalized=("coverage",),
-            refused=("deferral", "handling", "vehicle_limit", "min_fill", "split"),
+            refused=("deferral", "lateness", "handling", "vehicle_limit", "min_fill", "split"),
         ),
     }
 )
 """By solver class, the way it deals with each rule of the catalog, in catalog order.
 
 :class:`~pirilib.solvers.adapters.base.RoutingAdapter` stands for the PyVRP and
-OR-Tools adapters. They also refuse problems with hourly costs or due times,
-which are costs and not rules of the catalog.
+OR-Tools adapters. They also refuse problems with hourly costs, which are costs
+and not rules of the catalog.
 
+- The ant colony and the exact solver time their routes and weigh ``lateness``
+  against the costs, by its penalty and by ``rules.service.penalty``. Direct
+  shipping does not look at due times.
 - The ant colony and the exact solver weigh ``min_fill`` and ``coverage``
   against the costs: a vehicle leaves below its minimum fill, or a demand stays
   behind, when that is cheaper under the objective.
