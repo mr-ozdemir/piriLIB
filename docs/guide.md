@@ -394,6 +394,15 @@ The default solver is the ant colony (`pirilib.ACOSolver`):
 | `update` | `iteration_best` | which solution lays pheromone |
 | `local_search` | true | improve the best routes of every subproblem |
 | `exact_nodes` | 0 | solve subproblems with at most this many destinations exactly (needs scipy; not with times or center limits) |
+| `time_limit` | none | seconds the colonies may search; see below |
+
+`time_limit` caps the search, it does not make it faster. The time is shared
+out over the subproblems, and a colony whose share is used up starts no
+further iteration. Every subproblem still gets one iteration and its local
+search, so a plan always comes back and a solve can run past the limit;
+`result.stats["time_limit_stops"]` counts the colonies the limit stopped. With
+a limit the plan depends on the speed of the machine: the same seed no longer
+gives the same plan. On the command line it is `pirilib solve --time-limit 30`.
 
 `pirilib.solvers.exact.ExactSolver` solves every subproblem to optimality by
 mixed-integer programming. It is meant for small problems and for measuring

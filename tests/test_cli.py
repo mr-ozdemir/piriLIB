@@ -94,6 +94,26 @@ def test_solve_with_settings(
     assert "unknown ACO settings ['bees']" in err
 
 
+def test_solve_takes_a_time_limit(
+    capsys: pytest.CaptureFixture[str], example_path: Path, tmp_path: Path
+) -> None:
+    numbers = tmp_path / "summary.json"
+
+    code, _, _ = run(
+        capsys, "solve", str(example_path), "--time-limit", "0.000001", "--summary", str(numbers)
+    )
+
+    assert code == 0
+
+
+def test_solve_refuses_a_time_limit_of_zero(
+    capsys: pytest.CaptureFixture[str], example_path: Path
+) -> None:
+    code, _, err = run(capsys, "solve", str(example_path), "--time-limit", "0")
+
+    assert (code, "time_limit must be above 0" in err) == (1, True)
+
+
 def test_tune(capsys: pytest.CaptureFixture[str], example_path: Path, tmp_path: Path) -> None:
     base, output = tmp_path / "base.json", tmp_path / "tuned.json"
     base.write_text(json.dumps({"ants": 4, "iterations": 2, "patience": 1}), encoding="utf-8")
