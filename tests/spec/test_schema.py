@@ -168,6 +168,16 @@ def test_schema_rejects_unknown_field(
         pytest.param("centers", TABLE_REFERENCE, id="centers"),
         pytest.param("demand", TABLE_REFERENCE, id="demand"),
         pytest.param("matrix", {"source": "explicit", "arcs": TABLE_REFERENCE}, id="matrix-arcs"),
+        pytest.param(
+            "matrix",
+            {"source": "explicit", "arcs": [], "durations": TABLE_REFERENCE},
+            id="explicit-matrix-durations",
+        ),
+        pytest.param(
+            "matrix",
+            {"source": "haversine", "durations": TABLE_REFERENCE},
+            id="haversine-matrix-durations",
+        ),
     ],
 )
 def test_table_field_may_be_a_file_reference(

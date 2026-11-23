@@ -173,6 +173,18 @@ def handling_time(document: dict[str, Any]) -> None:
     document["rules"]["handling"] = {"minutes_per_unit": 0.02}
 
 
+def line_durations(document: dict[str, Any]) -> None:
+    """Half of the lines get a travel time of their own, longer for the largest type."""
+    names = [center["id"] for center in document["centers"]]
+    rows: list[dict[str, Any]] = []
+    for first, origin in enumerate(names):
+        for second in range(first + 1, len(names)):
+            line = {"origin": origin, "destination": names[second]}
+            rows.append(line | {"hours": 2.0 + (first + second) % 4})
+            rows.append(line | {"hours": 3.5 + (first + second) % 4, "vehicle_type": "tir"})
+    document["matrix"]["durations"] = rows
+
+
 SCENARIOS: dict[str, tuple[Change, ...]] = {
     "generated": (),
     "plain": (no_min_fill,),
@@ -196,6 +208,8 @@ SCENARIOS: dict[str, tuple[Change, ...]] = {
     "vehicle-limits": (no_min_fill, vehicle_limits),
     "late-and-tight": (late_and_tight,),
     "handling-time": (handling_time,),
+    "durations": (late_and_tight, line_durations),
+    "durations-handling-time": (handling_time, line_durations),
 }
 """Problems that put the rules to work: the changes each makes to the generated document."""
 
@@ -221,7 +235,7 @@ SKIPS = {
     "ortools": pytest.mark.skipif(not HAS_ORTOOLS, reason="ortools is not installed"),
 }
 
-EXACT_REFUSES = {"no-split", "handling-time"}
+EXACT_REFUSES = {"no-split", "handling-time", "durations-handling-time"}
 """Scenarios the exact solver does not plan: unsplittable demand, and handling that takes time."""
 
 EVERY_RUN = [

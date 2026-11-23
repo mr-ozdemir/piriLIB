@@ -37,6 +37,8 @@ class LineHaulInstance:
         min_fill_spot: (dimensions,) the same for spot vehicles
         demand_quantity: (demands, dimensions)
         speed_kmh: (vehicle types,), NaN where not given
+        duration_minutes: (vehicle types, centers, centers) whole minutes from
+            ``matrix.durations``, NaN where there is none; None without durations
         spot_per_unit: (spot offers, dimensions) cost per unit carried
         owned_per_unit: (owned groups, dimensions) cost per unit carried
         handling_capacity: (centers,) primary quantity per day, inf: no limit
@@ -85,6 +87,28 @@ class LineHaulInstance:
     demand_ready: NDArray[np.float64]
     demand_due: NDArray[np.float64]
     timed: bool
+    duration_minutes: NDArray[np.float64] | None = None
+
+    def travel_minutes(
+        self,
+        vehicle_type: NDArray[np.int64] | int,
+        origin: NDArray[np.int64] | int,
+        destination: NDArray[np.int64] | int,
+    ) -> NDArray[np.float64]:
+        """Whole minutes a vehicle of ``vehicle_type`` takes from ``origin`` to ``destination``.
+
+        The duration of the leg when ``matrix.durations`` gives one, else the
+        distance over the speed of the type, rounded up; 0 when there is neither.
+        The arguments broadcast.
+        """
+        km = self.distance_km[origin, destination]
+        speed = self.speed_kmh[vehicle_type]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            driven = np.where(np.isfinite(speed), np.ceil(np.round(km / speed * 60.0, 9)), 0.0)
+        if self.duration_minutes is not None:
+            given = self.duration_minutes[vehicle_type, origin, destination]
+            driven = np.where(np.isnan(given), driven, given)
+        return np.asarray(driven, dtype=np.float64)
 
     @property
     def scheduled(self) -> bool:
@@ -194,6 +218,7 @@ def compile_spec(spec: LineHaulSpec) -> LineHaulInstance:
         demand_ready=_floats(_minutes(start, row.date, row.ready) for row in demand),
         demand_due=_floats(_due(spec, row) for row in demand),
         timed=needs_time(spec),
+        duration_minutes=_durations(spec, center_index, type_index),
     )
 
 
@@ -210,6 +235,28 @@ def _due(spec: LineHaulSpec, row: Demand) -> float:
     if hours is None:
         return float("inf")
     return _minutes(start, row.date, row.ready) + 60.0 * hours
+
+
+def _durations(
+    spec: LineHaulSpec, center_index: Mapping[str, int], type_index: Mapping[str, int]
+) -> NDArray[np.float64] | None:
+    """(vehicle types, centers, centers) whole minutes, NaN where no duration is given.
+
+    A row for one vehicle type wins over a row for every type.
+    """
+    rows = spec.matrix.durations
+    if not rows:
+        return None
+    size = len(center_index)
+    minutes = np.full((len(type_index), size, size), np.nan, dtype=np.float64)
+    for row in sorted(rows, key=lambda row: row.vehicle_type is not None):
+        whole = float(np.ceil(np.round(row.hours * 60.0, 9)))
+        where = (center_index[row.origin], center_index[row.destination])
+        if row.vehicle_type is None:
+            minutes[:, where[0], where[1]] = whole
+        else:
+            minutes[type_index[row.vehicle_type], where[0], where[1]] = whole
+    return _read_only(minutes)
 
 
 def _distance_matrix(spec: LineHaulSpec, center_index: Mapping[str, int]) -> NDArray[np.float64]:

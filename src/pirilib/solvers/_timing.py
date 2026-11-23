@@ -2,7 +2,8 @@
 
 A route starts loading when its loads are ready (and not before 00:00 of its
 day), loads everything at the origin, then drives every leg and unloads at every
-stop. Every handling and every leg takes whole minutes, rounded up. A load is
+stop. Every handling and every leg takes whole minutes, rounded up; a leg takes
+its duration when the problem gives one, else its distance over the speed. A load is
 late by the started hours between its due time and the end of the unloading at
 its stop. :func:`timeline` times every route of a colony at once, with the
 segment sums of :mod:`pirilib.evaluation`; :func:`route_timing` and
@@ -101,6 +102,11 @@ def timeline(batch: "Batch", colony: "Colony", shared: "Shared") -> Timeline:
     speed = batch.speed[of, option][stop_route]
     with np.errstate(invalid="ignore", divide="ignore"):
         travel = np.where(np.isfinite(speed), whole_minutes(legs / speed * 60.0), 0.0)
+    if batch.duration is not None:
+        start = np.where(opening, batch.origin[stop_of], batch.nodes[stop_of, previous])
+        kind = batch.vehicle_type[of, option][stop_route]
+        given = batch.duration[kind, start, batch.nodes[stop_of, node]]
+        travel = np.where(np.isnan(given), travel, given)
     per_unit = shared.minutes_per_unit
     unload = colony.stop_amount[:, primary]
     load = colony.route_load[:, primary]
@@ -164,15 +170,12 @@ def route_timing(
 ) -> tuple[float, list[float]]:
     """Start of one route and the end of the unloading at each stop, in minutes."""
     per_unit = shared.minutes_per_unit
-    speed = float(problem.speed[option])
     start = max(problem.day * MINUTES_PER_DAY, ready)
     clock = start + _minutes(per_unit * sum(unloads))
     finishes = []
     here = -1
     for stop, unload in zip(stops, unloads, strict=True):
-        km = float(problem.origin_km[stop] if here < 0 else problem.node_km[here, stop])
-        if math.isfinite(speed):
-            clock += _minutes(km / speed * 60.0)
+        clock += problem.leg_minutes(option, here, stop)
         clock += _minutes(per_unit * unload)
         finishes.append(clock)
         here = stop

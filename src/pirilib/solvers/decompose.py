@@ -57,6 +57,8 @@ class Subproblem:
         per_unit: (n, D) charged per unit carried
         unit_priced: an option has a cost per unit carried
         speed: (n,) km per hour, NaN where travel takes no time
+        duration: (vehicle types, centers, centers) whole minutes that replace
+            distance over speed, NaN where there is none; None without durations
         item_ready: (k, I) minutes, -inf where there is no item
         item_due: (k, I) minutes, inf where there is no due time
         item_final: (k, I) may not be left for the next day (True where there is no item)
@@ -89,6 +91,7 @@ class Subproblem:
     per_unit: NDArray[np.float64]
     unit_priced: bool
     speed: NDArray[np.float64]
+    duration: NDArray[np.float64] | None
     item_ready: NDArray[np.float64]
     item_due: NDArray[np.float64]
     item_final: NDArray[np.bool_]
@@ -102,6 +105,40 @@ class Subproblem:
     @property
     def options(self) -> int:
         return int(self.kind.size)
+
+    def leg_minutes(self, option: int, before: int, after: int) -> float:
+        """Whole minutes of ``option`` from node ``before`` (-1: the origin) to node ``after``."""
+        if self.duration is not None:
+            start = self.origin if before < 0 else int(self.nodes[before])
+            given = float(self.duration[self.vehicle_type[option], start, self.nodes[after]])
+            if given == given:
+                return given
+        speed = float(self.speed[option])
+        if not math.isfinite(speed):
+            return 0.0
+        km = float(self.origin_km[after] if before < 0 else self.node_km[before, after])
+        return float(math.ceil(round(km / speed * 60.0, 9)))
+
+    def hours_to(self, node: int | None = None) -> NDArray[np.float64]:
+        """(n, k) hours of every option to every node: from the origin, or from each node
+        to ``node`` (0 from ``node`` to itself).
+
+        Without durations the hours are distance over speed, not rounded: the
+        colony weighs its first choices with them.
+        """
+        km = self.origin_km if node is None else self.node_km[:, node]
+        speed = self.speed[:, None]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            hours = np.where(np.isfinite(speed), km[None, :] / speed, 0.0)
+        if self.duration is not None:
+            kind = self.vehicle_type[:, None]
+            if node is None:
+                given = self.duration[kind, self.origin, self.nodes[None, :]]
+            else:
+                given = self.duration[kind, self.nodes[None, :], self.nodes[node]]
+                given = np.where(np.arange(self.size)[None, :] == node, 0.0, given)
+            hours = np.where(np.isnan(given), hours, given / 60.0)
+        return np.asarray(hours, dtype=np.float64)
 
     @property
     def deferrable(self) -> bool:
@@ -281,6 +318,8 @@ def _subproblem(
             origin_km[node_of_item],
             allowed[groups.size :][:, node_of_item],
             spot,
+            origin,
+            nodes[node_of_item],
         )
     per_unit = np.concatenate([instance.owned_per_unit[groups], instance.spot_per_unit[spot]])
     return Subproblem(
@@ -314,6 +353,7 @@ def _subproblem(
         per_unit=per_unit,
         unit_priced=bool(per_unit.any()),
         speed=instance.speed_kmh[vehicle_type],
+        duration=instance.duration_minutes,
         item_ready=item_ready,
         item_due=item_due,
         item_final=item_final,
@@ -331,10 +371,13 @@ def _defer_costs(
     km: NDArray[np.float64],
     allowed: NDArray[np.bool_],
     spot: NDArray[np.intp],
+    origin: int,
+    centers: NDArray[np.int64],
 ) -> NDArray[np.float64]:
     """Per item and primary unit, see :attr:`Subproblem.defer_cost`.
 
-    ``allowed`` is (spot offers, items): the offer may stop at the item's node.
+    ``allowed`` is (spot offers, items): the offer may stop at the item's node;
+    ``centers`` are the centers of those nodes.
     """
     rules = instance.rules
     primary = instance.primary_dimension
@@ -343,8 +386,7 @@ def _defer_costs(
     best = np.full(quantity.size, np.inf)
     for position, offer in enumerate(spot):
         kind = instance.spot_type[offer]
-        speed = float(instance.speed_kmh[kind])
-        travel = np.ceil(np.round(km / speed * 60.0, 9)) if math.isfinite(speed) else 0.0 * km
+        travel = instance.travel_minutes(int(kind), origin, centers)
         late = start + 2 * handling + travel - due
         hours = np.where(late > 1e-9, np.ceil(np.round(late / 60.0, 9)), 0.0)
         trip = (

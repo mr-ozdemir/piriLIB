@@ -429,6 +429,43 @@ def test_symmetric_arcs_file_fills_both_directions_of_the_distance_matrix(
     )
 
 
+def test_durations_file_gives_the_travel_times(tmp_path: Path, document: dict[str, Any]) -> None:
+    """A line for every type (3 hours) and the same line for ``small`` alone (4,5 hours)."""
+    write_table(
+        tmp_path,
+        "durations.csv",
+        "Çıkış;Varış;Saat;Tip\nA;B;3;\nA;B;4,5;small\n",
+    )
+    document["matrix"]["durations"] = {
+        "file": "durations.csv",
+        "delimiter": ";",
+        "decimal": ",",
+        "columns": {
+            "origin": "Çıkış",
+            "destination": "Varış",
+            "hours": "Saat",
+            "vehicle_type": "Tip",
+        },
+    }
+    path = write_problem(tmp_path, document)
+
+    instance = load_spec(path).compile()
+
+    assert instance.duration_minutes is not None
+    assert instance.duration_minutes[:, 0, 1].tolist() == [180.0, 270.0]
+
+
+def test_duration_problems_name_file_and_line(tmp_path: Path, document: dict[str, Any]) -> None:
+    write_table(tmp_path, "durations.csv", "origin,destination,hours\nA,B,3\nA,Z,2\n")
+    document["matrix"]["durations"] = {"file": "durations.csv"}
+    path = write_problem(tmp_path, document)
+
+    with pytest.raises(SpecError) as info:
+        load_spec(path)
+
+    assert "- durations.csv:3: destination: unknown center 'Z'" in str(info.value)
+
+
 def test_arc_problems_name_file_and_line(tmp_path: Path, document: dict[str, Any]) -> None:
     """Line 4 names the unknown center ``D``, so no distance is left between ``B`` and ``C``."""
     write_table(tmp_path, "arcs.csv", "origin,destination,km\nA,B,10\nA,C,20\nB,D,15\n")

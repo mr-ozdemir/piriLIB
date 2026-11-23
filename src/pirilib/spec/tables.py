@@ -1,9 +1,9 @@
-"""Read table-shaped fields (centers, demand, distance arcs) from CSV files.
+"""Read table-shaped fields (centers, demand, distance arcs, durations) from CSV files.
 
-In a problem document, ``centers``, ``demand`` and ``matrix.arcs`` may be a list
-of rows or a reference to a CSV file. File references are replaced by their rows
-before the document is validated, so the validated specification never depends
-on files.
+In a problem document, ``centers``, ``demand``, ``matrix.arcs`` and
+``matrix.durations`` may be a list of rows or a reference to a CSV file. File
+references are replaced by their rows before the document is validated, so the
+validated specification never depends on files.
 """
 
 import codecs
@@ -110,6 +110,11 @@ _LAYOUTS: Final[Mapping[Loc, _Layout]] = {
         numbers=("km",),
         required=("origin", "destination", "km"),
     ),
+    ("matrix", "durations"): _Layout(
+        text=("origin", "destination", "vehicle_type"),
+        numbers=("hours",),
+        required=("origin", "destination", "hours"),
+    ),
 }
 
 
@@ -141,6 +146,7 @@ def materialize_tables(
         (("centers",), document, "centers"),
         (("demand",), document, "demand"),
         (("matrix", "arcs"), matrix, "arcs"),
+        (("matrix", "durations"), matrix, "durations"),
     ):
         if not isinstance(parent, dict) or not _is_reference(parent.get(key)):
             continue

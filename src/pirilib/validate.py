@@ -101,6 +101,9 @@ class _Checker:
         self.km: list[list[float]] = instance.distance_km.tolist()
         self.capacity: list[list[float]] = instance.capacity.tolist()
         self.banned: list[list[bool]] = instance.banned.tolist()
+        self.durations: list[list[list[float]]] | None = (
+            None if instance.duration_minutes is None else instance.duration_minutes.tolist()
+        )
         self.found: list[Violation] = []
         self.handled: defaultdict[tuple[int, int], float] = defaultdict(float)
         self.touches: Counter[tuple[int, int, int]] = Counter()
@@ -273,7 +276,7 @@ class _Checker:
         finish: dict[int, float] = {}
         here = dispatch.origin
         for stop in dispatch.stops:
-            travel = 0.0 if speed != speed else _whole_minutes(self.km[here][stop] / speed * 60.0)
+            travel = self.travel(vehicle, here, stop, speed)
             arrival = clock + travel
             amount = unload.get(stop, 0.0) if stop not in finish else 0.0
             self.handled[stop, _day(arrival)] += amount
@@ -296,6 +299,16 @@ class _Checker:
                     hours = math.ceil(round(late / 60.0, 9))
                     self.service += penalty * item.quantity[primary] * hours
         return (clock - start) / 60.0
+
+    def travel(self, vehicle: int, origin: int, destination: int, speed: float) -> float:
+        """Minutes of one leg: its duration if the problem gives one, else from the speed."""
+        if self.durations is not None:
+            given = self.durations[vehicle][origin][destination]
+            if given == given:
+                return given
+        if speed != speed:
+            return 0.0
+        return _whole_minutes(self.km[origin][destination] / speed * 60.0)
 
     def handling(self) -> None:
         instance = self.instance

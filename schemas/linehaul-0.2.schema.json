@@ -266,6 +266,48 @@
       "title": "Demand",
       "type": "object"
     },
+    "Duration": {
+      "additionalProperties": false,
+      "description": "How long vehicles take from one center to another, breaks included.",
+      "properties": {
+        "origin": {
+          "minLength": 1,
+          "title": "Origin",
+          "type": "string"
+        },
+        "destination": {
+          "minLength": 1,
+          "title": "Destination",
+          "type": "string"
+        },
+        "hours": {
+          "minimum": 0,
+          "title": "Hours",
+          "type": "number"
+        },
+        "vehicle_type": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The type the time is for; null: every type without a time of its own.",
+          "title": "Vehicle Type"
+        }
+      },
+      "required": [
+        "origin",
+        "destination",
+        "hours"
+      ],
+      "title": "Duration",
+      "type": "object"
+    },
     "ExplicitMatrix": {
       "additionalProperties": false,
       "description": "Distances given arc by arc.",
@@ -300,6 +342,22 @@
           "exclusiveMinimum": 0,
           "title": "Factor",
           "type": "number"
+        },
+        "durations": {
+          "anyOf": [
+            {
+              "default": [],
+              "description": "Travel times that replace distance / speed_kmh, one direction each; a leg without one is timed from the speed of the vehicle type.",
+              "items": {
+                "$ref": "#/$defs/Duration"
+              },
+              "title": "Durations",
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/TableSource"
+            }
+          ]
         }
       },
       "required": [
@@ -363,6 +421,22 @@
           "exclusiveMinimum": 0,
           "title": "Factor",
           "type": "number"
+        },
+        "durations": {
+          "anyOf": [
+            {
+              "default": [],
+              "description": "Travel times that replace distance / speed_kmh, one direction each; a leg without one is timed from the speed of the vehicle type.",
+              "items": {
+                "$ref": "#/$defs/Duration"
+              },
+              "title": "Durations",
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/TableSource"
+            }
+          ]
         }
       },
       "required": [
@@ -772,7 +846,7 @@
             }
           ],
           "default": null,
-          "description": "Average speed; needed for travel times (hourly costs, due times).",
+          "description": "Average speed; times the legs that matrix.durations does not, and is needed for hourly costs and due times unless every leg has a duration.",
           "title": "Speed Kmh"
         }
       },

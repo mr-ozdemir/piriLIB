@@ -49,6 +49,14 @@ uses [Semantic Versioning](https://semver.org/).
   the (day, spot offer) pairs whose daily limit was used up. `pirilib solve`
   warns when it is above zero, and `--summary` now holds the solver's `stats`.
 
+- `matrix.durations`: travel times per line, as rows of `origin`,
+  `destination`, `hours` and an optional `vehicle_type`, inline or from a CSV
+  file. A duration replaces distance over `speed_kmh` for that leg, in the
+  evaluator, the checker and every solver; a row for one vehicle type wins
+  over the row for every type, and a leg without a row is still timed from
+  the speed. A type whose every leg has a duration needs no `speed_kmh`.
+  `LineHaulInstance.travel_minutes` gives the time of any leg.
+
 ### Changed
 
 - `stopovers` of an owned group now defaults to `true`: owned vehicles may
