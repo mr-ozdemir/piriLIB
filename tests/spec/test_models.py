@@ -176,7 +176,9 @@ def test_a_document_without_demand_is_valid(document: dict[str, Any]) -> None:
     assert spec.demand_ids == ()
 
 
-@pytest.mark.parametrize("schema", ["pirilib/linehaul@0.1", "pirilib/linehaul@0.2"])
+@pytest.mark.parametrize(
+    "schema", ["pirilib/linehaul@0.1", "pirilib/linehaul@0.2", "pirilib/linehaul@0.3"]
+)
 def test_known_schema_versions_are_accepted(document: dict[str, Any], schema: str) -> None:
     document["schema"] = schema
 
@@ -190,7 +192,10 @@ def test_an_unknown_schema_version_is_rejected(document: dict[str, Any]) -> None
 
     found = reported_problems(document)
 
-    assert found == ["schema: Input should be 'pirilib/linehaul@0.1' or 'pirilib/linehaul@0.2'"]
+    assert found == [
+        "schema: Input should be 'pirilib/linehaul@0.1', 'pirilib/linehaul@0.2' or "
+        "'pirilib/linehaul@0.3'"
+    ]
 
 
 def test_a_parsed_spec_cannot_be_changed(document: dict[str, Any]) -> None:

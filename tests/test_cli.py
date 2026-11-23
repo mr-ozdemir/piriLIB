@@ -275,7 +275,7 @@ def test_schema(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     path = tmp_path / "schema.json"
     code, _, _ = run(capsys, "schema", str(path))
     assert code == 0
-    assert json.loads(path.read_text(encoding="utf-8"))["title"].startswith("pirilib/linehaul@0.2")
+    assert json.loads(path.read_text(encoding="utf-8"))["title"].startswith("pirilib/linehaul@0.3")
 
 
 def test_usage_errors(capsys: pytest.CaptureFixture[str]) -> None:

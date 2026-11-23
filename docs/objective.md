@@ -143,7 +143,7 @@ everything else. Demand AB (800 desi) is ready at 08:00; demand AC (500 desi)
 is ready at 06:00 and due at 08:00, so it cannot arrive in time.
 
 ```yaml title="examples/objectives/worked_cost.yaml"
-schema: pirilib/linehaul@0.2
+schema: pirilib/linehaul@0.3
 name: Worked cost example
 
 calendar: {start: 2026-06-01, end: 2026-06-01}
