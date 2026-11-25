@@ -4,13 +4,16 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses [Semantic Versioning](https://semver.org/).
 
-[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mr-ozdemir/piriLIB/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mr-ozdemir/piriLIB/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mr-ozdemir/piriLIB/releases/tag/v0.1.0
 
 ## [Unreleased]
+
+## [0.4.0] - 2026-11-25
 
 ### Added
 
