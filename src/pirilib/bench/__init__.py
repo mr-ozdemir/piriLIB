@@ -12,8 +12,11 @@ report.to_json("report.json")
 report.table.to_csv("results.csv")
 print(report.summary())
 ```
+
+A later run is compared with a saved one by :func:`compare`.
 """
 
+from pirilib.bench.compare import Change, Comparison, compare
 from pirilib.bench.families import FAMILIES, BenchInstance, Family, FamilyCatalog
 from pirilib.bench.report import Environment, InstanceInfo, Report, SolverInfo
 from pirilib.bench.results import (
@@ -32,6 +35,8 @@ __all__ = [
     "SOLVERS",
     "BenchInstance",
     "Benchmark",
+    "Change",
+    "Comparison",
     "Environment",
     "Family",
     "FamilyCatalog",
@@ -44,4 +49,5 @@ __all__ = [
     "SolverSummary",
     "Spread",
     "Summary",
+    "compare",
 ]

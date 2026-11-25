@@ -29,6 +29,11 @@ uses [Semantic Versioning](https://semver.org/).
   `by_choice`).
 - A demand CSV file may have `ready` and `due` columns and a centers CSV file
   `handling_capacity`; they were not read from files before.
+- `pirilib.bench.compare` and `pirilib bench --baseline report.json`: a
+  benchmark run next to a saved report, pair by pair, with the pairs that got
+  worse or better by more than `--tolerance` and the conditions that differ
+  between the two runs. The command exits with status 1 when a pair got
+  worse.
 
 ### Changed
 

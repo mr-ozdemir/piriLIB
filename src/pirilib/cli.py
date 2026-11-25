@@ -13,12 +13,14 @@ Commands::
     pirilib schema linehaul.schema.json
     pirilib bench small --solvers direct,aco,exact -o results.csv --summary summary.csv
     pirilib bench small --solvers direct,aco --seeds 5 --report report.json
+    pirilib bench small --solvers direct,aco --seeds 5 --baseline report.json --tolerance 0.01
 
 ``solve``, ``tune`` and ``bench`` minimize the objective that the problem
 documents define in their ``objective:`` section; there is no default one.
 
-Exit status: 0 on success, 1 when an input is invalid or a plan is not feasible
-(``check``), 2 for wrong usage, including solving or tuning a problem whose
+Exit status: 0 on success, 1 when an input is invalid, a plan is not feasible
+(``check``) or a benchmark is worse than its baseline (``bench --baseline``), 2
+for wrong usage, including solving or tuning a problem whose
 document has no ``objective:`` section, and 3 when ``solve`` wrote a plan that
 breaks a rule the objective declares hard.
 """
@@ -184,6 +186,15 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("-o", "--output", help="write one row per run as CSV")
     command.add_argument("--summary", help="write the summary per solver as CSV")
     command.add_argument("--report", help="write the run conditions, spread and records as JSON")
+    command.add_argument(
+        "--baseline", help="a report of an earlier run to compare with; exit 1 if worse"
+    )
+    command.add_argument(
+        "--tolerance",
+        type=float,
+        default=0.0,
+        help="relative rise of a median objective that --baseline lets pass (default 0)",
+    )
     command.set_defaults(run=_bench)
     return parser
 
@@ -535,7 +546,7 @@ def _generate(arguments: argparse.Namespace) -> int:
 
 
 def _bench(arguments: argparse.Namespace) -> int:
-    from pirilib.bench import FAMILIES, SOLVERS, Benchmark, Record
+    from pirilib.bench import FAMILIES, SOLVERS, Benchmark, Record, Report, compare
 
     if not arguments.family:
         print("families:")
@@ -547,6 +558,9 @@ def _bench(arguments: argparse.Namespace) -> int:
         return 0
     if arguments.seeds < 1:
         raise ValueError("--seeds must be at least 1")
+    if arguments.tolerance < 0:
+        raise ValueError("--tolerance must not be negative")
+    baseline = Report.from_json(arguments.baseline) if arguments.baseline else None
     family = FAMILIES.get(arguments.family)
     names = [name.strip() for name in arguments.solvers.split(",") if name.strip()]
     instances = family.instances(arguments.count, start=arguments.start)
@@ -575,7 +589,13 @@ def _bench(arguments: argparse.Namespace) -> int:
         print(f"summary written to {summary.to_csv(arguments.summary)}")
     if arguments.report:
         print(f"report written to {report.to_json(arguments.report)}")
-    return 0
+    if baseline is None:
+        return 0
+    comparison = compare(baseline, report)
+    print()
+    print(f"compared with {arguments.baseline}")
+    print(comparison.describe(arguments.tolerance))
+    return 1 if comparison.worse(arguments.tolerance) else 0
 
 
 def _schema(arguments: argparse.Namespace) -> int:

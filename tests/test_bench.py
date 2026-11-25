@@ -1,3 +1,4 @@
+import dataclasses
 import datetime as dt
 import json
 import math
@@ -5,6 +6,7 @@ from collections.abc import Callable, Sequence
 from fractions import Fraction
 from operator import attrgetter
 from pathlib import Path
+from types import MappingProxyType
 
 import numpy as np
 import pytest
@@ -17,6 +19,7 @@ from pirilib.bench import (
     FAMILIES,
     SOLVERS,
     Benchmark,
+    Change,
     Environment,
     Family,
     FamilyCatalog,
@@ -26,6 +29,7 @@ from pirilib.bench import (
     ResultTable,
     SolverInfo,
     Spread,
+    compare,
 )
 from pirilib.cli import main
 from pirilib.constraints import Constraint, MaxRouteKm
@@ -722,3 +726,246 @@ def test_the_command_line_writes_a_report(
     assert code == 0
     assert f"report written to {path}" in out
     assert len(Report.from_json(path).table) == 1
+
+
+def report_of(*records: Record, seeds: tuple[int, ...] = (0,), version: str = "1.0") -> Report:
+    """A report of ``records`` made under fixed conditions, so two of them compare alike."""
+    environment = Environment(
+        pirilib=version,
+        python="3.14.0",
+        platform="test",
+        machine="x86_64",
+        processor="test",
+        cpus=4,
+        packages=MappingProxyType({"numpy": "2.0"}),
+    )
+    solvers = {
+        name: SolverInfo(type="tests.Solver", settings=MappingProxyType({"ants": 4}))
+        for name in dict.fromkeys(item.solver for item in records)
+    }
+    return Report(
+        created=dt.datetime(2026, 1, 5, tzinfo=dt.UTC),
+        environment=environment,
+        solvers=MappingProxyType(solvers),
+        objective=(("total_cost", 1.0),),
+        constraints=(),
+        seeds=seeds,
+        instances=(),
+        table=ResultTable.of(records),
+    )
+
+
+BASELINE = report_of(
+    record("i1", "aco", 100.0),
+    record("i1", "direct", 150.0),
+    record("i2", "aco", 200.0),
+)
+"""Three pairs: the colony on two instances, direct shipping on the first."""
+
+NEW_RUN = report_of(
+    record("i1", "aco", 90.0, seconds=2.0),
+    record("i1", "direct", 150.0),
+    record("i2", "aco", 210.0),
+)
+"""The same pairs later: one better by 10 %, one unchanged, one worse by 5 %."""
+
+
+def test_a_comparison_has_one_change_per_pair_of_both_runs() -> None:
+    comparison = compare(BASELINE, NEW_RUN)
+
+    assert [(item.instance, item.solver) for item in comparison.changes] == [
+        ("i1", "aco"),
+        ("i1", "direct"),
+        ("i2", "aco"),
+    ]
+
+
+def test_a_change_holds_both_medians_and_their_relative_difference() -> None:
+    comparison = compare(BASELINE, NEW_RUN)
+
+    assert comparison.changes[0] == Change(
+        instance="i1",
+        solver="aco",
+        before=100.0,
+        after=90.0,
+        change=pytest.approx(-0.10),
+        seconds_before=1.0,
+        seconds_after=2.0,
+    )
+
+
+def test_a_pair_whose_median_rose_is_worse() -> None:
+    comparison = compare(BASELINE, NEW_RUN)
+
+    assert [(item.instance, item.solver) for item in comparison.worse()] == [("i2", "aco")]
+
+
+def test_a_pair_whose_median_fell_is_better() -> None:
+    comparison = compare(BASELINE, NEW_RUN)
+
+    assert [(item.instance, item.solver) for item in comparison.better()] == [("i1", "aco")]
+
+
+@pytest.mark.parametrize(
+    ("tolerance", "worse"),
+    [
+        pytest.param(0.04, 1, id="below-the-rise"),
+        pytest.param(0.05, 0, id="at-the-rise"),
+        pytest.param(0.5, 0, id="above-the-rise"),
+    ],
+)
+def test_a_rise_within_the_tolerance_is_not_worse(tolerance: float, worse: int) -> None:
+    """The colony's median on ``i2`` rose from 200 to 210, by 5 %."""
+    comparison = compare(BASELINE, NEW_RUN)
+
+    assert len(comparison.worse(tolerance)) == worse
+
+
+def test_the_median_over_the_seeds_is_what_is_compared() -> None:
+    """Medians 100 and 110: one seed of the new run is far better, the median is worse."""
+    before = report_of(
+        *(record("i1", "aco", value, seed=seed) for seed, value in enumerate((90.0, 100.0, 120.0)))
+    )
+    after = report_of(
+        *(record("i1", "aco", value, seed=seed) for seed, value in enumerate((10.0, 110.0, 130.0)))
+    )
+
+    comparison = compare(before, after)
+
+    assert (comparison.changes[0].before, comparison.changes[0].after) == (100.0, 110.0)
+
+
+def test_a_pair_the_new_run_did_not_solve_is_worse() -> None:
+    after = report_of(record("i1", "aco", math.nan, status="skipped"))
+
+    comparison = compare(report_of(record("i1", "aco", 100.0)), after)
+
+    assert [(item.instance, item.solver) for item in comparison.worse()] == [("i1", "aco")]
+
+
+def test_pairs_of_one_run_alone_are_listed_as_not_compared() -> None:
+    before = report_of(record("i1", "aco", 100.0), record("i2", "aco", 200.0))
+    after = report_of(record("i1", "aco", 100.0), record("i1", "direct", 150.0))
+
+    comparison = compare(before, after)
+
+    assert comparison.missing == (
+        "i2 with aco is only in the baseline",
+        "i1 with direct is only in the new run",
+    )
+
+
+def test_runs_under_the_same_conditions_have_no_differences() -> None:
+    comparison = compare(BASELINE, NEW_RUN)
+
+    assert comparison.differences == ()
+
+
+def test_a_comparison_says_which_conditions_differ() -> None:
+    after = report_of(record("i1", "aco", 100.0), seeds=(0, 1), version="1.1")
+
+    comparison = compare(report_of(record("i1", "aco", 100.0)), after)
+
+    assert comparison.differences == ("pirilib: 1.0 -> 1.1", "seeds: [0] -> [0, 1]")
+
+
+def test_a_comparison_says_which_setting_of_a_solver_changed() -> None:
+    before = report_of(record("i1", "aco", 100.0))
+    settings = MappingProxyType({"ants": 8, "iterations": 5})
+    after = dataclasses.replace(
+        before, solvers=MappingProxyType({"aco": SolverInfo("tests.Solver", settings)})
+    )
+
+    comparison = compare(before, after)
+
+    assert comparison.differences == (
+        "solver aco ants: 4 -> 8",
+        "solver aco iterations: absent -> 5",
+    )
+
+
+def test_a_comparison_looks_into_the_nested_settings_of_a_solver() -> None:
+    """The colony keeps its settings in ``config``; only the one that changed is named."""
+    before = report_of(record("i1", "aco", 100.0))
+    old = MappingProxyType({"config": {"ants": 16, "iterations": 60}})
+    new = MappingProxyType({"config": {"ants": 16, "iterations": 30}})
+    first = dataclasses.replace(
+        before, solvers=MappingProxyType({"aco": SolverInfo("tests.Solver", old)})
+    )
+    second = dataclasses.replace(
+        before, solvers=MappingProxyType({"aco": SolverInfo("tests.Solver", new)})
+    )
+
+    comparison = compare(first, second)
+
+    assert comparison.differences == ("solver aco config iterations: 60 -> 30",)
+
+
+def test_a_comparison_describes_itself_in_words() -> None:
+    comparison = compare(BASELINE, NEW_RUN)
+
+    assert comparison.describe(0.01).splitlines() == [
+        "3 pairs of instance and solver: 1 worse, 1 better, 1 within 1.00%",
+        "worse:",
+        "  i2  aco        200.00 -> 210.00  +5.00%",
+        "better:",
+        "  i1  aco        100.00 -> 90.00  -10.00%",
+    ]
+
+
+def test_two_runs_of_the_same_report_compare_as_unchanged(report: Report) -> None:
+    comparison = compare(report, report)
+
+    assert (comparison.worse(), comparison.better(), comparison.differences) == ((), (), ())
+
+
+def test_the_command_line_passes_a_run_that_matches_its_baseline(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """Direct shipping is deterministic: the second run is the first one again."""
+    path = tmp_path / "baseline.json"
+    main(["bench", "tiny", "--solvers", "direct", "--count", "2", "--report", str(path)])
+
+    code = main(["bench", "tiny", "--solvers", "direct", "--count", "2", "--baseline", str(path)])
+
+    out = capsys.readouterr().out
+    assert (code, "2 pairs of instance and solver: 0 worse, 0 better" in out) == (0, True)
+
+
+def test_the_command_line_fails_a_run_that_is_worse_than_its_baseline(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """The baseline claims half the objective the solver reaches."""
+    path = tmp_path / "baseline.json"
+    main(["bench", "tiny", "--solvers", "direct", "--count", "1", "--report", str(path)])
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["records"][0]["objective"] /= 2
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    code = main(["bench", "tiny", "--solvers", "direct", "--count", "1", "--baseline", str(path)])
+
+    out = capsys.readouterr().out
+    assert (code, "1 worse" in out) == (1, True)
+
+
+def test_the_command_line_lets_a_rise_within_the_tolerance_pass(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    path = tmp_path / "baseline.json"
+    main(["bench", "tiny", "--solvers", "direct", "--count", "1", "--report", str(path)])
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["records"][0]["objective"] /= 2
+    path.write_text(json.dumps(document), encoding="utf-8")
+    arguments = ["bench", "tiny", "--solvers", "direct", "--count", "1", "--baseline", str(path)]
+
+    code = main([*arguments, "--tolerance", "1.5"])
+
+    capsys.readouterr()
+    assert code == 0
+
+
+def test_the_command_line_rejects_a_negative_tolerance(capsys: pytest.CaptureFixture[str]) -> None:
+    code = main(["bench", "tiny", "--solvers", "direct", "--tolerance", "-1"])
+
+    err = capsys.readouterr().err
+    assert (code, "--tolerance must not be negative" in err) == (1, True)
