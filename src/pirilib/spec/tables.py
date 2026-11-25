@@ -76,25 +76,28 @@ class _Layout:
     numbers: tuple[str, ...] = ()
     dates: tuple[str, ...] = ()
     times: tuple[str, ...] = ()
+    moments: tuple[str, ...] = ()
     lists: tuple[str, ...] = ()
     required: tuple[str, ...] = ()
     has_quantity: bool = False
 
     @property
     def fields(self) -> tuple[str, ...]:
-        return self.text + self.numbers + self.dates + self.times + self.lists
+        return self.text + self.numbers + self.dates + self.times + self.moments + self.lists
 
 
 _LAYOUTS: Final[Mapping[Loc, _Layout]] = {
     ("centers",): _Layout(
         text=("id", "name"),
-        numbers=("lat", "lon"),
+        numbers=("lat", "lon", "handling_capacity"),
         lists=("banned_vehicle_types",),
         required=("id",),
     ),
     ("demand",): _Layout(
         text=("id", "origin", "destination"),
         dates=("date",),
+        times=("ready",),
+        moments=("due",),
         required=("origin", "destination", "date"),
         has_quantity=True,
     ),
@@ -286,6 +289,8 @@ def _convert(
                 row[target] = _date(text, source.date_format)
             elif target in layout.times:
                 row[target] = _time(text)
+            elif target in layout.moments:
+                row[target] = _moment(text, source.date_format)
             elif target in layout.lists:
                 row[target] = [item.strip() for item in text.split(LIST_SEPARATOR) if item.strip()]
             else:
@@ -333,6 +338,24 @@ def _date(text: str, date_format: str | None) -> dt.date:
         return dt.datetime.strptime(text, date_format).date()
     except ValueError:
         raise ValueError(f"'{text}' does not match the date format '{date_format}'") from None
+
+
+def _moment(text: str, date_format: str | None) -> dt.datetime:
+    """A local date and time: a date as :func:`_date` reads it, then a time of day.
+
+    Without a time the moment is 00:00 of the date.
+    """
+    if date_format is None:
+        try:
+            return dt.datetime.fromisoformat(text)
+        except ValueError:
+            raise ValueError(
+                f"'{text}' is not an ISO date and time (YYYY-MM-DD HH:MM); set 'date_format'"
+            ) from None
+    date_text, _, time_text = text.rpartition(" ")
+    if date_text and _TIME.fullmatch(time_text):
+        return dt.datetime.combine(_date(date_text, date_format), _time(time_text))
+    return dt.datetime.combine(_date(text, date_format), dt.time())
 
 
 def _time(text: str) -> dt.time:
