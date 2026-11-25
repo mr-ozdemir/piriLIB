@@ -180,6 +180,100 @@ def test_problem_file_whose_top_level_is_not_a_mapping_is_rejected(
     assert str(info.value) == f"{path}: the top level must be a mapping of fields"
 
 
+def with_speeds(document: dict[str, Any]) -> dict[str, Any]:
+    """``document`` with a speed for every vehicle type, which due times need."""
+    for vehicle in document["vehicle_types"]:
+        vehicle["speed_kmh"] = 60.0
+    return document
+
+
+def test_demand_file_gives_ready_and_due_times(tmp_path: Path, document: dict[str, Any]) -> None:
+    """The first row is ready at 17:00 and due the next day at 12:30; the others give neither."""
+    text = (
+        "origin,destination,date,desi,ready,due\n"
+        "A,B,2026-01-05,900,17:00,2026-01-06 12:30\n"
+        "A,C,2026-01-05,250,,\n"
+        "B,A,2026-01-06,120,,\n"
+    )
+    path = with_demand_file(tmp_path, with_speeds(document), text)
+
+    spec = load_spec(path)
+
+    assert [(row.ready, row.due) for row in spec.demand] == [
+        (dt.time(17, 0), dt.datetime(2026, 1, 6, 12, 30)),
+        (None, None),
+        (None, None),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("due", "moment"),
+    [
+        pytest.param("06.01.2026 12:30", dt.datetime(2026, 1, 6, 12, 30), id="date-and-time"),
+        pytest.param("06.01.2026 9", dt.datetime(2026, 1, 6, 9, 0), id="date-and-hour"),
+        pytest.param("06.01.2026", dt.datetime(2026, 1, 6, 0, 0), id="date-alone"),
+    ],
+)
+def test_due_column_follows_the_date_format(
+    due: str, moment: dt.datetime, tmp_path: Path, document: dict[str, Any]
+) -> None:
+    text = f"origin,destination,date,desi,due\nA,B,05.01.2026,900,{due}\n"
+    path = with_demand_file(tmp_path, with_speeds(document), text, date_format="%d.%m.%Y")
+
+    spec = load_spec(path)
+
+    assert spec.demand[0].due == moment
+
+
+@pytest.mark.parametrize(
+    ("options", "due", "problem"),
+    [
+        pytest.param(
+            {},
+            "tomorrow",
+            "'due': 'tomorrow' is not an ISO date and time (YYYY-MM-DD HH:MM); set 'date_format'",
+            id="iso",
+        ),
+        pytest.param(
+            {"date_format": "%d.%m.%Y"},
+            "2026-01-06 12:30",
+            "'due': '2026-01-06' does not match the date format '%d.%m.%Y'",
+            id="date-format",
+        ),
+    ],
+)
+def test_a_wrong_due_cell_names_file_and_line(
+    options: dict[str, Any],
+    due: str,
+    problem: str,
+    tmp_path: Path,
+    document: dict[str, Any],
+) -> None:
+    date = "05.01.2026" if options else "2026-01-05"
+    text = f"origin,destination,date,desi,due\nA,B,{date},900,{due}\n"
+    path = with_demand_file(tmp_path, document, text, **options)
+
+    with pytest.raises(SpecError) as info:
+        load_spec(path)
+
+    assert str(info.value).splitlines()[1:] == [f"- demand.csv:2: {problem}"]
+
+
+def test_centers_file_gives_handling_capacity(tmp_path: Path, document: dict[str, Any]) -> None:
+    """``A`` handles 1500 desi a day; the empty cells of ``B`` and ``C`` mean no limit."""
+    write_table(
+        tmp_path,
+        "centers.csv",
+        "id,lat,lon,handling_capacity\nA,0,0,1500\nB,0,1,\nC,0,2,\n",
+    )
+    document["centers"] = {"file": "centers.csv"}
+    path = write_problem(tmp_path, document)
+
+    spec = load_spec(path)
+
+    assert [center.handling_capacity for center in spec.centers] == [1500.0, None, None]
+
+
 def test_cell_problems_name_file_and_line(tmp_path: Path, document: dict[str, Any]) -> None:
     """Line 3 has a quantity that is not a number and line 4 an empty date; both are reported."""
     text = "origin,destination,date,desi\nA,B,2026-01-05,900\nA,C,2026-01-05,abc\nB,A,,120\n"

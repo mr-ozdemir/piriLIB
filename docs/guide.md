@@ -267,6 +267,11 @@ demand:
 - `date_format` defaults to ISO dates.
 - `columns` maps fields to column names. `quantity`, for demand only, maps
   each dimension to its column.
+- A demand file may have `ready` (a time of day such as `17:00`) and `due`
+  columns. `due` is a date and a time, `2026-05-12 17:00`, with the date
+  written as `date_format` says; a date alone means 00:00 of that day. A
+  centers file may have `handling_capacity`. Empty cells are left to the
+  defaults. `vehicle_limits` of a center are written in the YAML file.
 
 Lists inside a cell, such as banned vehicle types, are separated by `|`.
 

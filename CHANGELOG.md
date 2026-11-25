@@ -27,6 +27,8 @@ uses [Semantic Versioning](https://semver.org/).
   every dispatch, the summary, the objective by term and every demand that is
   not carried in full with a reason (`no_vehicle`, `center_limit` or
   `by_choice`).
+- A demand CSV file may have `ready` and `due` columns and a centers CSV file
+  `handling_capacity`; they were not read from files before.
 
 ### Changed
 
