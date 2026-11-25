@@ -783,6 +783,16 @@ print(report.summary())
   median to the best known objective. `to_json` writes all of it to one
   file and `Report.from_json` reads it back, so a later run can be compared
   with it.
+- **Comparison.** `compare(baseline, report)` puts a new run next to a saved
+  one, pair by pair: one solver on one instance, by the median objective over
+  its seeds. `worse(tolerance)` and `better(tolerance)` give the pairs that
+  moved by more than a relative tolerance, and `differences` says what is not
+  the same in the two runs: the version, the machine, the objective, the
+  seeds, the settings of a solver or an instance. Objectives compare across
+  machines, times do not. On the command line, `pirilib bench ... --baseline
+  report.json --tolerance 0.01` prints the comparison and exits with status 1
+  when a pair got worse, which makes a saved report a regression test for
+  your own settings and data.
 - **Baselines.**
   - `pirilib.solvers.direct.DirectShipping` sends every line straight: full
     vehicles first, then the cheapest vehicle that fits. It keeps bans, owned
@@ -798,6 +808,7 @@ print(report.summary())
 ```bash
 pirilib bench small --solvers direct,aco,aco-exact,exact -o results.csv --summary summary.csv
 pirilib bench small --solvers direct,aco --seeds 5 --report report.json
+pirilib bench small --solvers direct,aco --seeds 5 --baseline report.json --tolerance 0.01
 ```
 
 ## Library structure
