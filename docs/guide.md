@@ -654,9 +654,25 @@ the same one.
 Plan files have one row per load. The columns are `dispatch`, `date`, `kind`,
 `start` (loading start, `HH:MM` after 00:00 of the date, hours may pass 24),
 `vehicle_type`, `source` (for example `fleet.spot[1]`), `origin`, `stops`
-(separated by `|`), `route_km`, `dispatch_cost`, `demand`, `destination` and one
-column per quantity dimension. `pirilib check` reads them back, so plans made
-elsewhere can be audited too.
+(separated by `|`), `demand`, `destination` and one column per quantity
+dimension. `pirilib check` reads them back, so plans made elsewhere can be
+audited too.
+
+`solve` also fills in what it computed; `check` does not need these columns:
+
+| Column | Meaning |
+|---|---|
+| `route_km` | length of the route |
+| `dispatch_cost` | cost of the dispatch, the sum of the next four |
+| `cost_fixed`, `cost_km`, `cost_hours`, `cost_units` | its fixed, per km, per hour and per unit parts |
+| `end` | when the last unloading ends, written like `start` |
+| `unloaded` | when the unloading at the load's stop ends |
+| `late_hours` | started hours after the due time of the load's demand, 0 when in time |
+
+`solve` and `check` print four indicators of the primary dimension under the
+costs, and `--summary` holds them: `served` (carried over demanded), `fill`
+(carried over the capacity of the dispatches), `on_time` (the share of what
+is carried that is unloaded by its due time) and `cost_per_unit`.
 
 ## 8. Benchmarks
 
