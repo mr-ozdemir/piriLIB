@@ -54,7 +54,8 @@ def test_table_layout(tmp_path: Path, solved: pirilib.SolveResult) -> None:
     header, first, *_ = path.read_text(encoding="utf-8-sig").splitlines()
     assert header == (
         "dispatch,date,start,kind,vehicle_type,source,origin,stops,route_km,dispatch_cost,"
-        "demand,destination,desi"
+        "cost_fixed,cost_km,cost_hours,cost_units,end,demand,destination,desi,"
+        "unloaded,late_hours"
     )
     assert first.startswith("1,2026-05-11,")
 

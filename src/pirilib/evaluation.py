@@ -45,9 +45,15 @@ class Evaluation:
         load: Per dispatch and dimension
         capacity: Per dispatch and dimension
         fill: Per dispatch: load / capacity, primary dimension
-        dispatch_cost: Per dispatch, including hourly cost
+        dispatch_cost: Per dispatch: the sum of the four parts below
+        cost_fixed: Per dispatch: the fixed cost (0 for a mandatory owned group)
+        cost_km: Per dispatch: per km times the route length
+        cost_hours: Per dispatch: per hour times its hours
+        cost_units: Per dispatch: per unit times what it carries
         start_minute: Per dispatch: loading starts (minutes, see the instance)
         end_minute: Per dispatch: unloading at the last stop ends
+        stop_arrival: Per stop: the vehicle reaches it
+        stop_finish: Per stop: unloading there ends
         load_finish: Per load: its unloading ends, NaN off the route
         load_late_hours: Per load: started hours after the due time
         served: Per demand and dimension
@@ -68,8 +74,14 @@ class Evaluation:
     capacity: NDArray[np.float64]
     fill: NDArray[np.float64]
     dispatch_cost: NDArray[np.float64]
+    cost_fixed: NDArray[np.float64]
+    cost_km: NDArray[np.float64]
+    cost_hours: NDArray[np.float64]
+    cost_units: NDArray[np.float64]
     start_minute: NDArray[np.float64]
     end_minute: NDArray[np.float64]
+    stop_arrival: NDArray[np.float64]
+    stop_finish: NDArray[np.float64]
     load_finish: NDArray[np.float64]
     load_late_hours: NDArray[np.float64]
     served: NDArray[np.float64]
@@ -143,6 +155,7 @@ def evaluate(
     """
     plan.check(instance)
     context = _Context(instance, plan)
+    fixed, per_km, per_hour, per_unit = context.cost_parts()
     evaluation = Evaluation(
         instance=instance,
         plan=plan,
@@ -152,9 +165,17 @@ def evaluate(
         load=_read_only(context.load),
         capacity=_read_only(context.capacity),
         fill=_read_only(context.load[:, instance.primary_dimension] / context.capacity_primary),
-        dispatch_cost=_read_only(context.dispatch_cost()),
+        dispatch_cost=_read_only(
+            np.asarray(fixed + per_km + per_hour + per_unit, dtype=np.float64)
+        ),
+        cost_fixed=_read_only(fixed),
+        cost_km=_read_only(per_km),
+        cost_hours=_read_only(per_hour),
+        cost_units=_read_only(per_unit),
         start_minute=_read_only(context.start_minute),
         end_minute=_read_only(context.end_minute),
+        stop_arrival=_read_only(context.stop_arrival),
+        stop_finish=_read_only(context.stop_finish),
         load_finish=_read_only(context.load_finish),
         load_late_hours=_read_only(context.load_late_hours),
         served=_read_only(context.served),
@@ -284,7 +305,10 @@ class _Context:
         values[self.spot_rows] = spot[self.spot_source]
         return values
 
-    def dispatch_cost(self) -> NDArray[np.float64]:
+    def cost_parts(
+        self,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+        """Per dispatch: the fixed, per km, per hour and per unit parts of its cost."""
         instance = self.instance
         owned_fixed = np.where(instance.owned_mandatory, 0.0, instance.owned_fixed)
         fixed = self._per_kind(owned_fixed, instance.spot_fixed, np.float64)
@@ -295,8 +319,11 @@ class _Context:
         per_unit[self.owned_rows] = instance.owned_per_unit[self.owned_source]
         per_unit[self.spot_rows] = instance.spot_per_unit[self.spot_source]
         carried = (per_unit * self.load).sum(axis=1)
-        return np.asarray(
-            fixed + per_km * self.route_km + per_hour * hours + carried, dtype=np.float64
+        return (
+            np.asarray(fixed, dtype=np.float64),
+            np.asarray(per_km * self.route_km, dtype=np.float64),
+            np.asarray(per_hour * hours, dtype=np.float64),
+            np.asarray(carried, dtype=np.float64),
         )
 
     def violations(self) -> dict[str, float]:

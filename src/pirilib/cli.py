@@ -387,6 +387,15 @@ def _print_summary(numbers: dict[str, Any]) -> None:
         f"total cost {numbers['total_cost']:,.2f}  dispatches {numbers['dispatches']} "
         f"({numbers['spot_dispatches']} spot)  km {numbers['total_km']:,.1f}  {state}"
     )
+    shares = [
+        f"{label} {numbers[key]:.1%}"
+        for label, key in (("served", "served"), ("fill", "fill"), ("on time", "on_time"))
+        if numbers[key] is not None
+    ]
+    if numbers["cost_per_unit"] is not None:
+        shares.append(f"cost per unit {numbers['cost_per_unit']:,.2f}")
+    if shares:
+        print("  ".join(shares))
 
 
 def _validate(arguments: argparse.Namespace) -> int:

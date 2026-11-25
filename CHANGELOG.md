@@ -12,6 +12,16 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Plan files carry what the evaluator computed: the parts of the dispatch cost
+  (`cost_fixed`, `cost_km`, `cost_hours`, `cost_units`), the `end` of the
+  dispatch and, per load, `unloaded` and `late_hours`. The same numbers are
+  on `Evaluation` (`cost_fixed` to `cost_units`, `stop_arrival`,
+  `stop_finish`). `read_plan` ignores the new columns.
+- The plan summary (`planio.summary`, `pirilib solve --summary`) has `served`,
+  `fill`, `on_time` and `cost_per_unit`; `solve` and `check` print them.
+
 ## [0.3.0] - 2026-11-23
 
 ### Added
