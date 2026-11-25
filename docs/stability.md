@@ -32,6 +32,9 @@ library stays open to problems outside fleet optimization.
   options are part of the API.
 - Every error caused by user input is a `PirilibError` (`SpecError`,
   `PlanError`).
+- With the same pirilib version, problem, solver settings and seed, a solver
+  returns the same plan, unless `ACOConfig.time_limit` is set. A new release
+  may give the same seed another plan.
 - Supported Python versions: the three newest minor versions at release time,
   at least 3.12.
 

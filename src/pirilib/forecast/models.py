@@ -190,7 +190,9 @@ class Regression:
     With ``scale=True`` quantities and level features are divided by the line's
     recent level (mean of the 28 known days ending a week before the target), so
     the regressor learns shapes rather than levels and can follow a line whose
-    volume moves beyond what it saw in training.
+    volume moves beyond what it saw in training. ``scale=True`` is experimental:
+    in walk-forward tests it removed the downward bias of the forecast but cost
+    accuracy, so it is off by default and may change in a minor release.
 
     Training uses the cleaned (imputed, winsorized) values of usual, observed
     days from ``train_from`` (a date) on.

@@ -139,9 +139,37 @@ What the fields mean:
   validating and checking, but solving and tuning need it (see section 3 and
   [Building the objective](objective.md)).
 
+### Defaults
+
+What a field means when you leave it out:
+
+| Field | Default | To change it |
+|---|---|---|
+| owned `mandatory` | `true`: the fixed cost is paid every day, used or not | `mandatory: false` for vehicles paid per dispatch |
+| owned and spot `stopovers` | `true`: several destinations on one route | `stopovers: false` on the group or the offer |
+| spot `available` | no daily limit | a number of vehicles per day |
+| `rules.min_fill` | 0: no minimum | a share, or one per dimension |
+| `rules.stopover.enabled` | `true` | `false` for direct trips only |
+| `rules.stopover.max_stretch` | no bound: only the cost per km limits a detour | a factor such as 1.3, as in the example |
+| `rules.stopover.forward_only` | `true`: every stop is farther from the origin than the one before | `false` to let a route turn back |
+| `rules.stopover.max_stops` | no bound | a number of destinations per vehicle |
+| `rules.split_demand` | `true`: a demand may travel in several vehicles | `false` for whole demands |
+| `rules.service` | no due times, lateness costs 0, demand leaves on its date | `due_hours`, `penalty`, `max_deferral_days` |
+| `rules.handling.minutes_per_unit` | 0: loading and unloading take no time | minutes per primary unit |
+| center `handling_capacity`, `vehicle_limits` | no limit | a quantity per day, vehicles per type and day |
+| `speed_kmh`, `matrix.durations` | travel takes no time | a speed per vehicle type, or times per line |
+
+A vehicle you have committed to, such as one rented by the month, is an owned
+group with `mandatory: true`: its fixed cost is paid every day, and the solvers
+use it before a spot vehicle because a dispatch of it only costs per km. No
+rule forces a vehicle to leave when there is nothing for it to carry.
+
 ### Times and service (schema 0.2)
 
-All of these are optional; without them a problem behaves as in 0.1.
+All of these are optional; without them a problem behaves as in 0.1. The
+evaluator and the checker measure them like every other rule. Planning with
+them in the solvers is experimental (see [API stability](stability.md)): it
+has been measured on synthetic problems only.
 
 ```yaml
 vehicle_types:
@@ -395,6 +423,12 @@ example, it leaves a small demand uncarried rather than send a vehicle below
 its minimum fill if the `coverage` penalty is the smaller one, and the other
 way round if it is larger. `examples/objectives` shows both on the same data.
 
+If every demand has to travel, give `coverage` a weight far above the other
+rules, or write `coverage: hard`. A plan whose `unserved` is above 0 is the cue
+to look at the weights: `pirilib solve --report` says for every such demand
+whether a vehicle was missing, a center was full or the solver left it by
+choice.
+
 ## 4. Solve
 
 `solve` takes the instance and the objective, which has no default:
@@ -590,6 +624,14 @@ become features. Holidays are usually unusual as well, so list them in both.
   `factors=buffer_factors(backtest, 0.8, lines)`, each line is lifted to the
   80 % quantile of its past actual/forecast ratio. In tests the buffer covered
   the actual demand on about 80 % of unseen days.
+- **What the buffer costs.** Without a buffer the plan is made for the expected
+  demand, and about half of the days bring more than that. In the same tests
+  the 80 % buffer planned 25 to 32 % more volume than the expected forecast, and
+  the vehicles for it. Choose the quantile by what a load left behind costs you
+  against what an emptier vehicle costs.
+- **Unusual weeks.** Around holidays and campaigns single weeks ran far off
+  the forecast in both directions. Give those dates with `--unusual` so the
+  models do not learn from them, and plan such weeks with a higher quantile.
 
 **Time waves.** When demand becomes ready in waves (for example at 09:00 and
 17:00), `WaveSplitter` learns the share of each wave per line and weekday from
