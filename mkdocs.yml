@@ -43,6 +43,7 @@ nav:
       - pirilib.tuning: api/tuning.md
       - pirilib.forecast: api/forecast.md
       - pirilib.planio: api/planio.md
+      - pirilib.report: api/report.md
       - pirilib.synthetic: api/synthetic.md
       - pirilib.bench: api/bench.md
       - pirilib.cli: api/cli.md

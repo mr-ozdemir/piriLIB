@@ -94,6 +94,33 @@ def test_solve_with_settings(
     assert "unknown ACO settings ['bees']" in err
 
 
+def test_solve_writes_a_report(
+    capsys: pytest.CaptureFixture[str], example_path: Path, tmp_path: Path
+) -> None:
+    report = tmp_path / "report.json"
+
+    run(capsys, "solve", str(example_path), "--seed", "1", "--report", str(report))
+
+    document = json.loads(report.read_text(encoding="utf-8"))
+    assert (document["format"], document["stats"]["mode"], document["unserved"]) == (
+        "pirilib/plan-report@1",
+        "linear",
+        [],
+    )
+
+
+def test_check_writes_a_report_of_a_plan_made_elsewhere(
+    capsys: pytest.CaptureFixture[str], example_path: Path, tmp_path: Path
+) -> None:
+    plan, report = tmp_path / "plan.csv", tmp_path / "report.json"
+    run(capsys, "solve", str(example_path), "--seed", "1", "-o", str(plan))
+
+    run(capsys, "check", str(example_path), str(plan), "--report", str(report))
+
+    document = json.loads(report.read_text(encoding="utf-8"))
+    assert (len(document["dispatches"]), "stats" in document) == (16, False)
+
+
 def test_solve_takes_a_time_limit(
     capsys: pytest.CaptureFixture[str], example_path: Path, tmp_path: Path
 ) -> None:

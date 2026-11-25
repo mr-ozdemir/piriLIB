@@ -21,6 +21,12 @@ uses [Semantic Versioning](https://semver.org/).
   `stop_finish`). `read_plan` ignores the new columns.
 - The plan summary (`planio.summary`, `pirilib solve --summary`) has `served`,
   `fill`, `on_time` and `cost_per_unit`; `solve` and `check` print them.
+- `pirilib.report` and `--report` on `pirilib solve` and `pirilib check`: the
+  plan and its evaluation as one JSON document (format
+  `pirilib/plan-report@1`), with the times, cost parts, stops and loads of
+  every dispatch, the summary, the objective by term and every demand that is
+  not carried in full with a reason (`no_vehicle`, `center_limit` or
+  `by_choice`).
 
 ## [0.3.0] - 2026-11-23
 
