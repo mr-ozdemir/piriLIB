@@ -3,7 +3,7 @@
 Commands::
 
     pirilib validate problem.yaml
-    pirilib solve problem.yaml -o plan.csv
+    pirilib solve problem.yaml -o plan.csv --report report.json
     pirilib check problem.yaml plan.csv
     pirilib tune train1.yaml train2.yaml --budget 60 -o config.json
     pirilib generate folder --centers 20 --days 5
@@ -13,12 +13,14 @@ Commands::
     pirilib schema linehaul.schema.json
     pirilib bench small --solvers direct,aco,exact -o results.csv --summary summary.csv
     pirilib bench small --solvers direct,aco --seeds 5 --report report.json
+    pirilib bench small --solvers direct,aco --seeds 5 --baseline report.json --tolerance 0.01
 
 ``solve``, ``tune`` and ``bench`` minimize the objective that the problem
 documents define in their ``objective:`` section; there is no default one.
 
-Exit status: 0 on success, 1 when an input is invalid or a plan is not feasible
-(``check``), 2 for wrong usage, including solving or tuning a problem whose
+Exit status: 0 on success, 1 when an input is invalid, a plan is not feasible
+(``check``) or a benchmark is worse than its baseline (``bench --baseline``), 2
+for wrong usage, including solving or tuning a problem whose
 document has no ``objective:`` section, and 3 when ``solve`` wrote a plan that
 breaks a rule the objective declares hard.
 """
@@ -87,6 +89,9 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("problem")
     command.add_argument("-o", "--output", help="plan file (.csv, or .xlsx with openpyxl)")
     command.add_argument("--summary", help="write the headline numbers as JSON")
+    command.add_argument(
+        "--report", help="write the plan, its times, costs and uncarried demand as JSON"
+    )
     command.add_argument("--config", help="ACO settings as JSON, for example from 'tune'")
     command.add_argument("--seed", type=int, default=0)
     command.add_argument("--ants", type=int)
@@ -104,6 +109,9 @@ def _parser() -> argparse.ArgumentParser:
     command = commands.add_parser("check", help="check a plan file against a problem")
     command.add_argument("problem")
     command.add_argument("plan", help="plan file (.csv, or .xlsx with openpyxl)")
+    command.add_argument(
+        "--report", help="write the plan, its times, costs and uncarried demand as JSON"
+    )
     _table_options(command)
     command.set_defaults(run=_check)
 
@@ -178,6 +186,15 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("-o", "--output", help="write one row per run as CSV")
     command.add_argument("--summary", help="write the summary per solver as CSV")
     command.add_argument("--report", help="write the run conditions, spread and records as JSON")
+    command.add_argument(
+        "--baseline", help="a report of an earlier run to compare with; exit 1 if worse"
+    )
+    command.add_argument(
+        "--tolerance",
+        type=float,
+        default=0.0,
+        help="relative rise of a median objective that --baseline lets pass (default 0)",
+    )
     command.set_defaults(run=_bench)
     return parser
 
@@ -387,6 +404,15 @@ def _print_summary(numbers: dict[str, Any]) -> None:
         f"total cost {numbers['total_cost']:,.2f}  dispatches {numbers['dispatches']} "
         f"({numbers['spot_dispatches']} spot)  km {numbers['total_km']:,.1f}  {state}"
     )
+    shares = [
+        f"{label} {numbers[key]:.1%}"
+        for label, key in (("served", "served"), ("fill", "fill"), ("on time", "on_time"))
+        if numbers[key] is not None
+    ]
+    if numbers["cost_per_unit"] is not None:
+        shares.append(f"cost per unit {numbers['cost_per_unit']:,.2f}")
+    if shares:
+        print("  ".join(shares))
 
 
 def _validate(arguments: argparse.Namespace) -> int:
@@ -432,6 +458,11 @@ def _solve(arguments: argparse.Namespace) -> int:
         print(f"plan written to {arguments.output}")
     if arguments.summary:
         Path(arguments.summary).write_text(json.dumps(numbers, indent=2) + "\n", encoding="utf-8")
+    if arguments.report:
+        from pirilib.report import write_report
+
+        write_report(result.evaluation, arguments.report, objective=goal, stats=result.stats)
+        print(f"report written to {arguments.report}")
     reached = result.stats.get("spot_limits_reached", 0)
     if reached:
         print(
@@ -458,7 +489,14 @@ def _check(arguments: argparse.Namespace) -> int:
         instance, arguments.plan, delimiter=arguments.delimiter, decimal=arguments.decimal
     )
     report = check_plan(instance, plan, hard)
-    _print_summary(summary(evaluate(instance, plan, hard=hard)))
+    evaluation = evaluate(instance, plan, hard=hard)
+    _print_summary(summary(evaluation))
+    if arguments.report:
+        from pirilib.report import write_report
+
+        goal = spec.build_objective() if spec.objective is not None else None
+        write_report(evaluation, arguments.report, objective=goal)
+        print(f"report written to {arguments.report}")
     for item in report.violations[:50]:
         print(f"- {item.constraint}: {item.message}")
     if len(report.violations) > 50:
@@ -508,7 +546,7 @@ def _generate(arguments: argparse.Namespace) -> int:
 
 
 def _bench(arguments: argparse.Namespace) -> int:
-    from pirilib.bench import FAMILIES, SOLVERS, Benchmark, Record
+    from pirilib.bench import FAMILIES, SOLVERS, Benchmark, Record, Report, compare
 
     if not arguments.family:
         print("families:")
@@ -520,6 +558,9 @@ def _bench(arguments: argparse.Namespace) -> int:
         return 0
     if arguments.seeds < 1:
         raise ValueError("--seeds must be at least 1")
+    if arguments.tolerance < 0:
+        raise ValueError("--tolerance must not be negative")
+    baseline = Report.from_json(arguments.baseline) if arguments.baseline else None
     family = FAMILIES.get(arguments.family)
     names = [name.strip() for name in arguments.solvers.split(",") if name.strip()]
     instances = family.instances(arguments.count, start=arguments.start)
@@ -548,7 +589,13 @@ def _bench(arguments: argparse.Namespace) -> int:
         print(f"summary written to {summary.to_csv(arguments.summary)}")
     if arguments.report:
         print(f"report written to {report.to_json(arguments.report)}")
-    return 0
+    if baseline is None:
+        return 0
+    comparison = compare(baseline, report)
+    print()
+    print(f"compared with {arguments.baseline}")
+    print(comparison.describe(arguments.tolerance))
+    return 1 if comparison.worse(arguments.tolerance) else 0
 
 
 def _schema(arguments: argparse.Namespace) -> int:

@@ -32,6 +32,9 @@ library stays open to problems outside fleet optimization.
   options are part of the API.
 - Every error caused by user input is a `PirilibError` (`SpecError`,
   `PlanError`).
+- With the same pirilib version, problem, solver settings and seed, a solver
+  returns the same plan, unless `ACOConfig.time_limit` is set. A new release
+  may give the same seed another plan.
 - Supported Python versions: the three newest minor versions at release time,
   at least 3.12.
 
@@ -64,6 +67,8 @@ in their docstrings.
   `lightgbm_space`, `tune_forecaster`, `tune_lightgbm`, `ForecastTuning`.
 - The forecast-to-plan bridge: `buffer_factors`, `planning_document`,
   `demand_rows`.
+- `pirilib.report`: the fields of the report document may still grow, and the
+  reasons of uncarried demand may be refined.
 - `pirilib.synthetic`: generated problems may change between releases; only the
   function signatures are kept.
 - `pirilib.bench`, `pirilib bench`, `pirilib.solvers.direct.DirectShipping` and the

@@ -15,13 +15,22 @@ without loads has one row with the load columns empty. Columns:
 ``stops``
     The stops in visiting order, separated by ``|``.
 ``route_km``, ``dispatch_cost``
-    Filled in by :func:`write_plan`; ignored by :func:`read_plan`.
+    Filled in by :func:`write_plan`; ignored by :func:`read_plan`, like every
+    column below that it does not need.
+``cost_fixed``, ``cost_km``, ``cost_hours``, ``cost_units``
+    The parts of ``dispatch_cost``: fixed, per km, per hour and per unit carried.
+``end``
+    When the last unloading ends, written like ``start``.
 ``demand``, ``destination``, then one column per quantity dimension
     The load.
+``unloaded``, ``late_hours``
+    When the unloading of the load's stop ends, written like ``start``, and the
+    started hours after the due time of its demand (0 when in time).
 """
 
 import csv
 import datetime
+import math
 import os
 import re
 import zipfile
@@ -49,25 +58,35 @@ __all__ = [
 _FIXED = ("dispatch", "date", "start", "kind", "vehicle_type", "source", "origin", "stops")
 _OPTIONAL = ("start",)
 _CLOCK = re.compile(r"(\d+):(\d{2})(?::(\d{2}(?:\.\d+)?))?")
-_COMPUTED = ("route_km", "dispatch_cost")
+_COMPUTED = (
+    "route_km",
+    "dispatch_cost",
+    "cost_fixed",
+    "cost_km",
+    "cost_hours",
+    "cost_units",
+    "end",
+)
+_TIMED = ("unloaded", "late_hours")
 _LOAD = ("demand", "destination")
 _SOURCE = re.compile(r"fleet\.(owned|spot)\[(\d+)\]")
 
 
 def columns(instance: LineHaulInstance) -> tuple[str, ...]:
-    """The column names of the plan table, ending with the dimensions of ``instance``."""
-    return (*_FIXED, *_COMPUTED, *_LOAD, *instance.dimensions)
+    """The column names of the plan table: the dispatch, the load and its timing."""
+    return (*_FIXED, *_COMPUTED, *_LOAD, *instance.dimensions, *_TIMED)
 
 
 def rows(evaluation: Evaluation) -> Iterator[dict[str, Any]]:
     """The rows of the plan table, as values (numbers are floats)."""
     instance, plan = evaluation.instance, evaluation.plan
     for position, dispatch in enumerate(plan.dispatches()):
+        midnight = 1440.0 * dispatch.day
         kind_types = instance.owned_type if dispatch.kind == "owned" else instance.spot_type
         common: dict[str, Any] = {
             "dispatch": position + 1,
             "date": instance.days[dispatch.day].isoformat(),
-            "start": _clock(float(evaluation.start_minute[position]) - 1440.0 * dispatch.day),
+            "start": _clock(float(evaluation.start_minute[position]) - midnight),
             "kind": dispatch.kind,
             "vehicle_type": instance.vehicle_types[int(kind_types[dispatch.source])],
             "source": f"fleet.{dispatch.kind}[{dispatch.source}]",
@@ -75,15 +94,24 @@ def rows(evaluation: Evaluation) -> Iterator[dict[str, Any]]:
             "stops": LIST_SEPARATOR.join(instance.centers[stop] for stop in dispatch.stops),
             "route_km": float(evaluation.route_km[position]),
             "dispatch_cost": float(evaluation.dispatch_cost[position]),
+            "cost_fixed": float(evaluation.cost_fixed[position]),
+            "cost_km": float(evaluation.cost_km[position]),
+            "cost_hours": float(evaluation.cost_hours[position]),
+            "cost_units": float(evaluation.cost_units[position]),
+            "end": _clock(float(evaluation.end_minute[position]) - midnight),
         }
         if not dispatch.loads:
-            yield {**common, **dict.fromkeys((*_LOAD, *instance.dimensions), "")}
-        for load in dispatch.loads:
+            yield {**common, **dict.fromkeys((*_LOAD, *instance.dimensions, *_TIMED), "")}
+        load_rows = np.flatnonzero(plan.load_dispatch == position)
+        for row, load in zip(load_rows, dispatch.loads, strict=True):
+            finish = float(evaluation.load_finish[row])
             yield {
                 **common,
                 "demand": instance.demand_ids[load.demand],
                 "destination": instance.centers[int(instance.demand_destination[load.demand])],
                 **dict(zip(instance.dimensions, load.quantity, strict=True)),
+                "unloaded": "" if math.isnan(finish) else _clock(finish - midnight),
+                "late_hours": int(evaluation.load_late_hours[row]),
             }
 
 
@@ -350,8 +378,28 @@ def _read_row(
 
 
 def summary(evaluation: Evaluation) -> dict[str, Any]:
-    """Headline numbers of an evaluation, for reports."""
+    """Headline numbers of an evaluation, for reports.
+
+    Besides the costs and the violations, four indicators of the primary
+    dimension, each None when there is nothing to divide by:
+
+    ``served``
+        The share of the demand that is carried.
+    ``fill``
+        What the dispatches carry over what they could carry.
+    ``on_time``
+        The share of what is carried that is unloaded by its due time; loads
+        without a due time count as in time.
+    ``cost_per_unit``
+        The total cost over what is carried.
+    """
     plan = evaluation.plan
+    primary = evaluation.instance.primary_dimension
+    demanded = float(evaluation.instance.demand_quantity[:, primary].sum())
+    carried = float(evaluation.served[:, primary].sum())
+    loaded = plan.load_quantity[:, primary]
+    in_time = float(loaded[evaluation.load_late_hours == 0].sum())
+    room = float(evaluation.capacity[:, primary].sum())
     return {
         "total_cost": evaluation.total_cost,
         "owned_fixed_cost": evaluation.owned_fixed_cost,
@@ -360,7 +408,16 @@ def summary(evaluation: Evaluation) -> dict[str, Any]:
         "spot_dispatches": int(np.count_nonzero(plan.kind == SPOT)),
         "total_km": evaluation.total_km,
         "unserved": float(evaluation.unserved.sum()),
+        "served": _ratio(carried, demanded),
+        "fill": _ratio(float(evaluation.load[:, primary].sum()), room),
+        "on_time": _ratio(in_time, float(loaded.sum())),
+        "cost_per_unit": _ratio(evaluation.total_cost, carried),
         "feasible": evaluation.feasible,
         "violations": evaluation.violated(),
         "hard_violations": evaluation.broken() if evaluation.hard else {},
     }
+
+
+def _ratio(part: float, whole: float) -> float | None:
+    """``part`` over ``whole``, or None when ``whole`` is not above 0."""
+    return part / whole if whole > 0 else None

@@ -4,13 +4,46 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses [Semantic Versioning](https://semver.org/).
 
-[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mr-ozdemir/piriLIB/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mr-ozdemir/piriLIB/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mr-ozdemir/piriLIB/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/mr-ozdemir/piriLIB/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mr-ozdemir/piriLIB/releases/tag/v0.1.0
 
 ## [Unreleased]
+
+## [0.4.0] - 2026-11-25
+
+### Added
+
+- Plan files carry what the evaluator computed: the parts of the dispatch cost
+  (`cost_fixed`, `cost_km`, `cost_hours`, `cost_units`), the `end` of the
+  dispatch and, per load, `unloaded` and `late_hours`. The same numbers are
+  on `Evaluation` (`cost_fixed` to `cost_units`, `stop_arrival`,
+  `stop_finish`). `read_plan` ignores the new columns.
+- The plan summary (`planio.summary`, `pirilib solve --summary`) has `served`,
+  `fill`, `on_time` and `cost_per_unit`; `solve` and `check` print them.
+- `pirilib.report` and `--report` on `pirilib solve` and `pirilib check`: the
+  plan and its evaluation as one JSON document (format
+  `pirilib/plan-report@1`), with the times, cost parts, stops and loads of
+  every dispatch, the summary, the objective by term and every demand that is
+  not carried in full with a reason (`no_vehicle`, `center_limit` or
+  `by_choice`).
+- A demand CSV file may have `ready` and `due` columns and a centers CSV file
+  `handling_capacity`; they were not read from files before.
+- `pirilib.bench.compare` and `pirilib bench --baseline report.json`: a
+  benchmark run next to a saved report, pair by pair, with the pairs that got
+  worse or better by more than `--tolerance` and the conditions that differ
+  between the two runs. The command exits with status 1 when a pair got
+  worse.
+
+### Changed
+
+- The guide lists the default of every optional field and how to change it,
+  says how to make every demand travel, what a forecast buffer costs and how
+  to write a committed vehicle; the stability page says when the same seed
+  gives the same plan.
 
 ## [0.3.0] - 2026-11-23
 

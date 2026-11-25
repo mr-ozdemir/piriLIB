@@ -17,3 +17,7 @@
 ::: pirilib.bench.report
     options:
       heading_level: 2
+
+::: pirilib.bench.compare
+    options:
+      heading_level: 2

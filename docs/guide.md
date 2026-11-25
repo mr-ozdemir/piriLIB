@@ -139,9 +139,37 @@ What the fields mean:
   validating and checking, but solving and tuning need it (see section 3 and
   [Building the objective](objective.md)).
 
+### Defaults
+
+What a field means when you leave it out:
+
+| Field | Default | To change it |
+|---|---|---|
+| owned `mandatory` | `true`: the fixed cost is paid every day, used or not | `mandatory: false` for vehicles paid per dispatch |
+| owned and spot `stopovers` | `true`: several destinations on one route | `stopovers: false` on the group or the offer |
+| spot `available` | no daily limit | a number of vehicles per day |
+| `rules.min_fill` | 0: no minimum | a share, or one per dimension |
+| `rules.stopover.enabled` | `true` | `false` for direct trips only |
+| `rules.stopover.max_stretch` | no bound: only the cost per km limits a detour | a factor such as 1.3, as in the example |
+| `rules.stopover.forward_only` | `true`: every stop is farther from the origin than the one before | `false` to let a route turn back |
+| `rules.stopover.max_stops` | no bound | a number of destinations per vehicle |
+| `rules.split_demand` | `true`: a demand may travel in several vehicles | `false` for whole demands |
+| `rules.service` | no due times, lateness costs 0, demand leaves on its date | `due_hours`, `penalty`, `max_deferral_days` |
+| `rules.handling.minutes_per_unit` | 0: loading and unloading take no time | minutes per primary unit |
+| center `handling_capacity`, `vehicle_limits` | no limit | a quantity per day, vehicles per type and day |
+| `speed_kmh`, `matrix.durations` | travel takes no time | a speed per vehicle type, or times per line |
+
+A vehicle you have committed to, such as one rented by the month, is an owned
+group with `mandatory: true`: its fixed cost is paid every day, and the solvers
+use it before a spot vehicle because a dispatch of it only costs per km. No
+rule forces a vehicle to leave when there is nothing for it to carry.
+
 ### Times and service (schema 0.2)
 
-All of these are optional; without them a problem behaves as in 0.1.
+All of these are optional; without them a problem behaves as in 0.1. The
+evaluator and the checker measure them like every other rule. Planning with
+them in the solvers is experimental (see [API stability](stability.md)): it
+has been measured on synthetic problems only.
 
 ```yaml
 vehicle_types:
@@ -239,6 +267,11 @@ demand:
 - `date_format` defaults to ISO dates.
 - `columns` maps fields to column names. `quantity`, for demand only, maps
   each dimension to its column.
+- A demand file may have `ready` (a time of day such as `17:00`) and `due`
+  columns. `due` is a date and a time, `2026-05-12 17:00`, with the date
+  written as `date_format` says; a date alone means 00:00 of that day. A
+  centers file may have `handling_capacity`. Empty cells are left to the
+  defaults. `vehicle_limits` of a center are written in the YAML file.
 
 Lists inside a cell, such as banned vehicle types, are separated by `|`.
 
@@ -394,6 +427,12 @@ When not every rule can hold, the solver does what the objective prefers. For
 example, it leaves a small demand uncarried rather than send a vehicle below
 its minimum fill if the `coverage` penalty is the smaller one, and the other
 way round if it is larger. `examples/objectives` shows both on the same data.
+
+If every demand has to travel, give `coverage` a weight far above the other
+rules, or write `coverage: hard`. A plan whose `unserved` is above 0 is the cue
+to look at the weights: `pirilib solve --report` says for every such demand
+whether a vehicle was missing, a center was full or the solver left it by
+choice.
 
 ## 4. Solve
 
@@ -590,6 +629,14 @@ become features. Holidays are usually unusual as well, so list them in both.
   `factors=buffer_factors(backtest, 0.8, lines)`, each line is lifted to the
   80 % quantile of its past actual/forecast ratio. In tests the buffer covered
   the actual demand on about 80 % of unseen days.
+- **What the buffer costs.** Without a buffer the plan is made for the expected
+  demand, and about half of the days bring more than that. In the same tests
+  the 80 % buffer planned 25 to 32 % more volume than the expected forecast, and
+  the vehicles for it. Choose the quantile by what a load left behind costs you
+  against what an emptier vehicle costs.
+- **Unusual weeks.** Around holidays and campaigns single weeks ran far off
+  the forecast in both directions. Give those dates with `--unusual` so the
+  models do not learn from them, and plan such weeks with a higher quantile.
 
 **Time waves.** When demand becomes ready in waves (for example at 09:00 and
 17:00), `WaveSplitter` learns the share of each wave per line and weekday from
@@ -654,9 +701,48 @@ the same one.
 Plan files have one row per load. The columns are `dispatch`, `date`, `kind`,
 `start` (loading start, `HH:MM` after 00:00 of the date, hours may pass 24),
 `vehicle_type`, `source` (for example `fleet.spot[1]`), `origin`, `stops`
-(separated by `|`), `route_km`, `dispatch_cost`, `demand`, `destination` and one
-column per quantity dimension. `pirilib check` reads them back, so plans made
-elsewhere can be audited too.
+(separated by `|`), `demand`, `destination` and one column per quantity
+dimension. `pirilib check` reads them back, so plans made elsewhere can be
+audited too.
+
+`solve` also fills in what it computed; `check` does not need these columns:
+
+| Column | Meaning |
+|---|---|
+| `route_km` | length of the route |
+| `dispatch_cost` | cost of the dispatch, the sum of the next four |
+| `cost_fixed`, `cost_km`, `cost_hours`, `cost_units` | its fixed, per km, per hour and per unit parts |
+| `end` | when the last unloading ends, written like `start` |
+| `unloaded` | when the unloading at the load's stop ends |
+| `late_hours` | started hours after the due time of the load's demand, 0 when in time |
+
+`--report report.json`, on `solve` and on `check`, writes the whole plan as one
+JSON document for other systems (format `pirilib/plan-report@1`; from Python,
+`pirilib.report.plan_report(evaluation)`):
+
+- `summary`, the numbers of `--summary`; `objective`, its value and the value of
+  each of its terms; `stats` of the solver; the `hard` rules.
+- `dispatches`: date, vehicle, `start` and `end`, `hours`, `route_km`, the `cost`
+  and its parts, `load`, `capacity` and `fill`. Each has its `stops` (`arrival`,
+  `finish`, what is `unloaded` there and what stays `onboard`) and its `loads`
+  (`demand`, `quantity`, `unloaded`, `due`, `late_hours`).
+- `unserved`: every demand that is not carried in full, what is missing and a
+  `reason`.
+
+| Reason | Meaning |
+|---|---|
+| `no_vehicle` | on every day the demand could have left, every vehicle that may serve its line was in use |
+| `center_limit` | a vehicle was left, but the origin or the destination had no handling capacity or vehicle slot left |
+| `by_choice` | a vehicle and room were left; carrying it scored worse than leaving it: a trip dearer than the penalty, a vehicle below its minimum fill or a late arrival |
+
+The reason is read off the plan: it says what was left over on the days the
+demand could have left, not what the solver tried. Times in the report are
+local dates and times, such as `2026-05-11T13:52`.
+
+`solve` and `check` print four indicators of the primary dimension under the
+costs, and `--summary` holds them: `served` (carried over demanded), `fill`
+(carried over the capacity of the dispatches), `on_time` (the share of what
+is carried that is unloaded by its due time) and `cost_per_unit`.
 
 ## 8. Benchmarks
 
@@ -697,6 +783,16 @@ print(report.summary())
   median to the best known objective. `to_json` writes all of it to one
   file and `Report.from_json` reads it back, so a later run can be compared
   with it.
+- **Comparison.** `compare(baseline, report)` puts a new run next to a saved
+  one, pair by pair: one solver on one instance, by the median objective over
+  its seeds. `worse(tolerance)` and `better(tolerance)` give the pairs that
+  moved by more than a relative tolerance, and `differences` says what is not
+  the same in the two runs: the version, the machine, the objective, the
+  seeds, the settings of a solver or an instance. Objectives compare across
+  machines, times do not. On the command line, `pirilib bench ... --baseline
+  report.json --tolerance 0.01` prints the comparison and exits with status 1
+  when a pair got worse, which makes a saved report a regression test for
+  your own settings and data.
 - **Baselines.**
   - `pirilib.solvers.direct.DirectShipping` sends every line straight: full
     vehicles first, then the cheapest vehicle that fits. It keeps bans, owned
@@ -712,6 +808,7 @@ print(report.summary())
 ```bash
 pirilib bench small --solvers direct,aco,aco-exact,exact -o results.csv --summary summary.csv
 pirilib bench small --solvers direct,aco --seeds 5 --report report.json
+pirilib bench small --solvers direct,aco --seeds 5 --baseline report.json --tolerance 0.01
 ```
 
 ## Library structure
