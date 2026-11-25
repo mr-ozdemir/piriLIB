@@ -3,7 +3,7 @@
 Commands::
 
     pirilib validate problem.yaml
-    pirilib solve problem.yaml -o plan.csv
+    pirilib solve problem.yaml -o plan.csv --report report.json
     pirilib check problem.yaml plan.csv
     pirilib tune train1.yaml train2.yaml --budget 60 -o config.json
     pirilib generate folder --centers 20 --days 5
@@ -87,6 +87,9 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("problem")
     command.add_argument("-o", "--output", help="plan file (.csv, or .xlsx with openpyxl)")
     command.add_argument("--summary", help="write the headline numbers as JSON")
+    command.add_argument(
+        "--report", help="write the plan, its times, costs and uncarried demand as JSON"
+    )
     command.add_argument("--config", help="ACO settings as JSON, for example from 'tune'")
     command.add_argument("--seed", type=int, default=0)
     command.add_argument("--ants", type=int)
@@ -104,6 +107,9 @@ def _parser() -> argparse.ArgumentParser:
     command = commands.add_parser("check", help="check a plan file against a problem")
     command.add_argument("problem")
     command.add_argument("plan", help="plan file (.csv, or .xlsx with openpyxl)")
+    command.add_argument(
+        "--report", help="write the plan, its times, costs and uncarried demand as JSON"
+    )
     _table_options(command)
     command.set_defaults(run=_check)
 
@@ -441,6 +447,11 @@ def _solve(arguments: argparse.Namespace) -> int:
         print(f"plan written to {arguments.output}")
     if arguments.summary:
         Path(arguments.summary).write_text(json.dumps(numbers, indent=2) + "\n", encoding="utf-8")
+    if arguments.report:
+        from pirilib.report import write_report
+
+        write_report(result.evaluation, arguments.report, objective=goal, stats=result.stats)
+        print(f"report written to {arguments.report}")
     reached = result.stats.get("spot_limits_reached", 0)
     if reached:
         print(
@@ -467,7 +478,14 @@ def _check(arguments: argparse.Namespace) -> int:
         instance, arguments.plan, delimiter=arguments.delimiter, decimal=arguments.decimal
     )
     report = check_plan(instance, plan, hard)
-    _print_summary(summary(evaluate(instance, plan, hard=hard)))
+    evaluation = evaluate(instance, plan, hard=hard)
+    _print_summary(summary(evaluation))
+    if arguments.report:
+        from pirilib.report import write_report
+
+        goal = spec.build_objective() if spec.objective is not None else None
+        write_report(evaluation, arguments.report, objective=goal)
+        print(f"report written to {arguments.report}")
     for item in report.violations[:50]:
         print(f"- {item.constraint}: {item.message}")
     if len(report.violations) > 50:

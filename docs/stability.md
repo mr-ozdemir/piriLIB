@@ -64,6 +64,8 @@ in their docstrings.
   `lightgbm_space`, `tune_forecaster`, `tune_lightgbm`, `ForecastTuning`.
 - The forecast-to-plan bridge: `buffer_factors`, `planning_document`,
   `demand_rows`.
+- `pirilib.report`: the fields of the report document may still grow, and the
+  reasons of uncarried demand may be refined.
 - `pirilib.synthetic`: generated problems may change between releases; only the
   function signatures are kept.
 - `pirilib.bench`, `pirilib bench`, `pirilib.solvers.direct.DirectShipping` and the

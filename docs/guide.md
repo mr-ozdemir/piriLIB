@@ -669,6 +669,29 @@ audited too.
 | `unloaded` | when the unloading at the load's stop ends |
 | `late_hours` | started hours after the due time of the load's demand, 0 when in time |
 
+`--report report.json`, on `solve` and on `check`, writes the whole plan as one
+JSON document for other systems (format `pirilib/plan-report@1`; from Python,
+`pirilib.report.plan_report(evaluation)`):
+
+- `summary`, the numbers of `--summary`; `objective`, its value and the value of
+  each of its terms; `stats` of the solver; the `hard` rules.
+- `dispatches`: date, vehicle, `start` and `end`, `hours`, `route_km`, the `cost`
+  and its parts, `load`, `capacity` and `fill`. Each has its `stops` (`arrival`,
+  `finish`, what is `unloaded` there and what stays `onboard`) and its `loads`
+  (`demand`, `quantity`, `unloaded`, `due`, `late_hours`).
+- `unserved`: every demand that is not carried in full, what is missing and a
+  `reason`.
+
+| Reason | Meaning |
+|---|---|
+| `no_vehicle` | on every day the demand could have left, every vehicle that may serve its line was in use |
+| `center_limit` | a vehicle was left, but the origin or the destination had no handling capacity or vehicle slot left |
+| `by_choice` | a vehicle and room were left; carrying it scored worse than leaving it: a trip dearer than the penalty, a vehicle below its minimum fill or a late arrival |
+
+The reason is read off the plan: it says what was left over on the days the
+demand could have left, not what the solver tried. Times in the report are
+local dates and times, such as `2026-05-11T13:52`.
+
 `solve` and `check` print four indicators of the primary dimension under the
 costs, and `--summary` holds them: `served` (carried over demanded), `fill`
 (carried over the capacity of the dispatches), `on_time` (the share of what
