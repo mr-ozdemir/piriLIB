@@ -28,6 +28,13 @@ uses [Semantic Versioning](https://semver.org/).
   not carried in full with a reason (`no_vehicle`, `center_limit` or
   `by_choice`).
 
+### Changed
+
+- The guide lists the default of every optional field and how to change it,
+  says how to make every demand travel, what a forecast buffer costs and how
+  to write a committed vehicle; the stability page says when the same seed
+  gives the same plan.
+
 ## [0.3.0] - 2026-11-23
 
 ### Added
